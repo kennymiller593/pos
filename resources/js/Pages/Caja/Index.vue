@@ -34,6 +34,10 @@ const fechaHora = (iso) => {
         f.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 }
 
+const NOMBRES_MEDIO_PAGO = { yape: 'Yape', tarjeta: 'Tarjeta', transferencia: 'Transferencia', plin: 'Plin' }
+const nombreMedioPago = (codigo) =>
+    NOMBRES_MEDIO_PAGO[codigo] ?? (codigo ? codigo.charAt(0).toUpperCase() + codigo.slice(1) : '')
+
 function estadoDiferencia(diferencia) {
     if (Math.abs(diferencia) < 0.005)
         return { texto: 'Cuadrada', clase: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' }
@@ -217,6 +221,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <ArrowDownCircle class="size-4 text-red-500" />
                     </div>
                     <p class="mt-2 text-xl font-bold tracking-tight text-red-600 dark:text-red-400">{{ soles(apertura.resumen.egresos) }}</p>
+                    <p v-if="apertura.resumen.egresos_otros_medios > 0" class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        + {{ soles(apertura.resumen.egresos_otros_medios) }} devueltos por otros medios (no afectan el efectivo)
+                    </p>
                 </div>
                 <div class="rounded-2xl bg-emerald-600 p-4 text-white">
                     <div class="flex items-center justify-between">
@@ -248,7 +255,15 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <ArrowDownCircle v-else class="size-5" />
                             </div>
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-medium">{{ m.concepto }}</p>
+                                <p class="flex items-center gap-1.5">
+                                    <span class="truncate text-sm font-medium">{{ m.concepto }}</span>
+                                    <span
+                                        v-if="m.medio_pago_codigo && m.medio_pago_codigo !== 'efectivo'"
+                                        class="inline-flex shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                                    >
+                                        {{ nombreMedioPago(m.medio_pago_codigo) }}<template v-if="m.referencia"> ({{ m.referencia }})</template>
+                                    </span>
+                                </p>
                                 <p class="text-xs text-neutral-500 dark:text-neutral-400">
                                     {{ hora(m.creado_en) }}<template v-if="m.usuario"> · {{ m.usuario.nombre_completo }}</template>
                                 </p>

@@ -7,6 +7,7 @@ use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\Empresa;
+use App\Models\MedioPago;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
 use App\Services\VentaService;
@@ -71,6 +72,7 @@ class ComprobanteController extends Controller
         return Inertia::render('Comprobantes/Index', [
             'comprobantes' => $comprobantes,
             'filtros' => $filtros,
+            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
         ]);
     }
 
@@ -322,8 +324,11 @@ class ComprobanteController extends Controller
             'items' => [$esParcial ? 'required' : 'nullable', 'array'],
             'items.*.detalle_id' => ['required', 'uuid'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
+            'medio_pago_codigo' => ['nullable', Rule::exists('medios_pago', 'codigo')],
+            'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'items.required' => 'Elige los productos a devolver.',
+            'medio_pago_codigo.exists' => 'Elige un medio de devolución válido.',
         ]);
 
         try {

@@ -24,8 +24,7 @@ class NotaCreditoService
     public function __construct(
         private readonly InventarioService $inventario,
         private readonly CajaService $caja,
-    ) {
-    }
+    ) {}
 
     /**
      * Emite una nota de crédito sobre una boleta o factura aceptada por SUNAT.
@@ -78,21 +77,37 @@ class NotaCreditoService
             ? round((float) $cuenta->monto_total - (float) $cuenta->monto_pagado, 2)
             : 0.0;
         $reduccionDeuda = round(min($montoNota, max(0, $saldoDeuda)), 2);
-        $efectivoADevolver = round($montoNota - $reduccionDeuda, 2);
+        $aDevolver = round($montoNota - $reduccionDeuda, 2);
 
+        // el dinero vuelve por el medio elegido (por defecto, el de la venta);
+        // solo el efectivo sale del cajon y por eso solo el efectivo se comprueba
+        $medio = $datos['medio_pago_codigo'] ?? $this->medioDeLaVenta($original);
+        $referencia = $datos['referencia'] ?? null;
         $apertura = null;
 
-        if ($efectivoADevolver > 0) {
+        if ($aDevolver > 0) {
             $apertura = $this->caja->aperturaDe($usuario);
 
             if (! $apertura) {
-                $monto = number_format($efectivoADevolver, 2);
+                $monto = number_format($aDevolver, 2);
 
                 throw new ErrorDeNegocio("Para devolver S/ {$monto} al cliente necesitas tener una caja abierta.");
             }
+
+            if ($medio === 'efectivo') {
+                $disponible = $this->caja->resumen($apertura)['esperado'];
+
+                if ($aDevolver > $disponible + 0.001) {
+                    throw new ErrorDeNegocio(sprintf(
+                        'No hay suficiente efectivo en caja para devolver S/ %s (disponible: S/ %s). Devuelve por otro medio o registra un ingreso.',
+                        number_format($aDevolver, 2),
+                        number_format($disponible, 2),
+                    ));
+                }
+            }
         }
 
-        return DB::transaction(function () use ($original, $usuario, $motivo, $lineas, $totales, $montoNota, $cuenta, $reduccionDeuda, $efectivoADevolver, $apertura) {
+        return DB::transaction(function () use ($original, $usuario, $motivo, $lineas, $totales, $montoNota, $cuenta, $reduccionDeuda, $aDevolver, $apertura, $medio, $referencia) {
             $serie = $this->tomarSerie($original);
 
             $nota = Comprobante::create([
@@ -143,14 +158,16 @@ class NotaCreditoService
             $numeroNota = "{$nota->serie}-{$nota->correlativo}";
             $numeroOriginal = "{$original->serie}-{$original->correlativo}";
 
-            if ($efectivoADevolver > 0) {
+            if ($aDevolver > 0) {
                 MovimientoCaja::create([
                     'empresa_id' => $original->empresa_id,
                     'apertura_id' => $apertura->id,
                     'usuario_id' => $usuario->id,
                     'tipo' => 'egreso',
                     'concepto' => "Devolución por nota de crédito {$numeroNota} ({$numeroOriginal})",
-                    'monto' => $efectivoADevolver,
+                    'monto' => $aDevolver,
+                    'medio_pago_codigo' => $medio,
+                    'referencia' => $referencia,
                 ]);
             }
 
@@ -159,7 +176,8 @@ class NotaCreditoService
                 'modifica' => $numeroOriginal,
                 'motivo' => self::MOTIVOS[$motivo] ?? $motivo,
                 'total' => $montoNota,
-                'devuelto_efectivo' => $efectivoADevolver,
+                'devuelto' => $aDevolver,
+                'medio' => $aDevolver > 0 ? $medio : null,
                 'reduccion_deuda' => $reduccionDeuda,
             ]);
 
@@ -168,6 +186,16 @@ class NotaCreditoService
     }
 
     // ---------------------------------------------------------------
+
+    /** Medio con el que se cobro la venta (el de mayor importe si hubo varios); efectivo si fue al credito. */
+    private function medioDeLaVenta(Comprobante $original): string
+    {
+        return (string) ($original->pagos()
+            ->selectRaw('medio_pago_codigo, SUM(monto) as total')
+            ->groupBy('medio_pago_codigo')
+            ->orderByDesc('total')
+            ->value('medio_pago_codigo') ?? 'efectivo');
+    }
 
     /** Nota total: replica todas las líneas del comprobante original. */
     private function lineasTotales(Comprobante $original): array
@@ -194,7 +222,7 @@ class NotaCreditoService
             }
 
             $cantidad = (float) $item['cantidad'];
-            $clave = $detalle->producto_id . '|' . $detalle->presentacion_id;
+            $clave = $detalle->producto_id.'|'.$detalle->presentacion_id;
             $disponible = round((float) $detalle->cantidad - ($acreditadas[$clave] ?? 0), 3);
 
             if ($cantidad <= 0 || $cantidad > $disponible + 0.001) {
@@ -218,7 +246,7 @@ class NotaCreditoService
                 ->where('estado', 'emitido')
                 ->select('id'))
             ->get()
-            ->groupBy(fn ($d) => $d->producto_id . '|' . $d->presentacion_id)
+            ->groupBy(fn ($d) => $d->producto_id.'|'.$d->presentacion_id)
             ->map(fn ($grupo) => (float) $grupo->sum('cantidad'))
             ->all();
     }
@@ -348,7 +376,7 @@ class NotaCreditoService
                 'empresa_id' => $original->empresa_id,
                 'sucursal_id' => $original->sucursal_id,
                 'tipo_comprobante_codigo' => '07',
-                'serie' => $prefijo . str_pad((string) ($mayorUsada + 1), 2, '0', STR_PAD_LEFT),
+                'serie' => $prefijo.str_pad((string) ($mayorUsada + 1), 2, '0', STR_PAD_LEFT),
                 'correlativo' => 0,
             ]);
         }

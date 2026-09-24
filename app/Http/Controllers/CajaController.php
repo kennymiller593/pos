@@ -39,8 +39,8 @@ class CajaController extends Controller
             ->whereNotNull('cerrada_en')
             ->when(! $veTodas, fn ($q) => $q->where('usuario_id', $usuario->id))
             ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo'])
-            ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')], 'monto')
-            ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')], 'monto')
+            ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
+            ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['pagos as ventas_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['cobros as cobros_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['pagosProveedor as pagos_proveedor_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
@@ -83,7 +83,7 @@ class CajaController extends Controller
                     ->with('usuario:id,nombre_completo')
                     ->latest('creado_en')
                     ->limit(50)
-                    ->get(['id', 'tipo', 'concepto', 'monto', 'usuario_id', 'creado_en']),
+                    ->get(['id', 'tipo', 'concepto', 'monto', 'medio_pago_codigo', 'referencia', 'usuario_id', 'creado_en']),
             ] : null,
         ]);
     }

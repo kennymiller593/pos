@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\AperturaCaja;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\CuentaPorCobrar;
 use App\Models\MovimientoCaja;
 use App\Models\Producto;
 use App\Models\SerieCorrelativo;
+use App\Services\CajaService;
 use App\Services\Sunat\EnviadorSunat;
 use App\Services\Sunat\RespuestaSunat;
 use Greenter\Model\Sale\Note;
@@ -48,7 +50,7 @@ class NotaCreditoTest extends TestCase
             'correlativo' => 0,
         ]);
 
-        $this->enviador = new EnviadorSunatFalso();
+        $this->enviador = new EnviadorSunatFalso;
         $this->app->instance(EnviadorSunat::class, $this->enviador);
         $this->enviador->respuesta = new RespuestaSunat(
             aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<xml/>', hash: 'HASH',
@@ -111,6 +113,64 @@ class NotaCreditoTest extends TestCase
         $this->assertSame("B001-{$original->correlativo}", $documento->getNumDocfectado());
         $this->assertSame('06', $documento->getCodMotivo());
         $this->assertSame('aceptado', ComprobanteSunat::find($nota->id)->estado);
+    }
+
+    public function test_la_devolucion_sale_por_el_medio_de_la_venta_y_no_toca_el_efectivo_si_fue_yape(): void
+    {
+        $this->actingAs($this->admin)->post('/pos/ventas', [
+            'tipo_comprobante_codigo' => '03',
+            'cliente_id' => null,
+            'es_credito' => false,
+            'items' => [['presentacion_id' => $this->producto->presentaciones->first()->id, 'cantidad' => 2]],
+            'pagos' => [['medio_pago_codigo' => 'yape', 'monto' => 20.00, 'referencia' => 'OP-123']],
+        ])->assertSessionHas('success');
+        $original = Comprobante::where('empresa_id', $this->empresa->id)->where('tipo_comprobante_codigo', '03')->latest('creado_en')->firstOrFail();
+
+        $apertura = AperturaCaja::where('caja_id', $this->caja->id)->whereNull('cerrada_en')->firstOrFail();
+        $esperadoAntes = app(CajaService::class)->resumen($apertura)['esperado'];
+
+        // sin indicar medio: se devuelve por Yape, como se cobro
+        $this->emitirNota($original, ['motivo' => '06'])->assertSessionHas('success');
+
+        $egreso = MovimientoCaja::where('empresa_id', $this->empresa->id)->where('tipo', 'egreso')->firstOrFail();
+        $this->assertSame('yape', $egreso->medio_pago_codigo);
+        $this->assertEqualsWithDelta(20.00, (float) $egreso->monto, 0.001);
+
+        $resumen = app(CajaService::class)->resumen($apertura);
+        $this->assertEqualsWithDelta($esperadoAntes, $resumen['esperado'], 0.001);
+        $this->assertEqualsWithDelta(20.00, $resumen['egresos_otros_medios'], 0.001);
+        $this->assertEqualsWithDelta(0.0, $resumen['egresos'], 0.001);
+    }
+
+    public function test_se_puede_elegir_otro_medio_de_devolucion_con_referencia(): void
+    {
+        $original = $this->venderBoleta(cantidad: 1); // cobrada en efectivo
+
+        $this->emitirNota($original, ['motivo' => '06', 'medio_pago_codigo' => 'transferencia', 'referencia' => 'BCP-778'])
+            ->assertSessionHas('success');
+
+        $egreso = MovimientoCaja::where('empresa_id', $this->empresa->id)->where('tipo', 'egreso')->firstOrFail();
+        $this->assertSame('transferencia', $egreso->medio_pago_codigo);
+        $this->assertSame('BCP-778', $egreso->referencia);
+
+        $this->emitirNota($original, ['motivo' => '06', 'medio_pago_codigo' => 'bitcoin'])->assertSessionHasErrors('medio_pago_codigo');
+    }
+
+    public function test_sin_efectivo_suficiente_la_devolucion_en_efectivo_se_bloquea(): void
+    {
+        // la caja abrio con S/ 100; una venta de S/ 10 en efectivo deja 110
+        $original = $this->venderBoleta(cantidad: 1);
+
+        // se retira casi todo el efectivo
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'retiro', 'monto' => 105])
+            ->assertSessionHas('success');
+
+        $this->emitirNota($original, ['motivo' => '06', 'medio_pago_codigo' => 'efectivo'])
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'suficiente efectivo'));
+        $this->assertSame(0, Comprobante::where('comprobante_ref_id', $original->id)->count());
+
+        // por Yape si procede aunque no haya efectivo
+        $this->emitirNota($original, ['motivo' => '06', 'medio_pago_codigo' => 'yape'])->assertSessionHas('success');
     }
 
     public function test_una_nota_pendiente_se_puede_reenviar_a_sunat(): void

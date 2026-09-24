@@ -23,6 +23,7 @@ import { usePermisos } from '@/composables/permisos'
 const props = defineProps({
     comprobantes: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
+    mediosPago: { type: Array, default: () => [] },
 })
 
 const { puede } = usePermisos()
@@ -184,16 +185,25 @@ const MOTIVOS_NC = [
 const nombreMotivo = (codigo) =>
     MOTIVOS_NC.find((m) => m.codigo === codigo?.trim())?.nombre ?? 'Nota de crédito'
 const comprobanteNota = ref(null)
-const formNota = useForm({ motivo: '06', items: [] })
+const formNota = useForm({ motivo: '06', items: [], medio_pago_codigo: 'efectivo', referencia: '' })
 const cantidadesNota = ref({}) // detalle_id -> cantidad a devolver
 
 const puedeNotaCredito = (c) =>
     puede('comprobantes.nota_credito') && esElectronico(c) && c.estado === 'emitido' && ['aceptado', 'observado'].includes(c.sunat?.estado)
 
+function medioPagoPorDefecto(c) {
+    if (!c.pagos?.length) return 'efectivo'
+    return c.pagos.reduce((mayor, p) => (Number(p.monto) > Number(mayor.monto) ? p : mayor), c.pagos[0]).medio_pago_codigo
+}
+
+const medioSeleccionadoNota = computed(() => props.mediosPago.find((m) => m.codigo === formNota.medio_pago_codigo))
+
 function abrirNotaCredito(c) {
     comprobanteNota.value = c
     formNota.clearErrors()
     formNota.motivo = '06'
+    formNota.referencia = ''
+    formNota.medio_pago_codigo = medioPagoPorDefecto(c)
     cantidadesNota.value = Object.fromEntries(c.detalles.map((d) => [d.id, '']))
 }
 
@@ -658,14 +668,39 @@ const claseInput =
                         <p v-if="formNota.errors.items" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formNota.errors.items }}</p>
                     </div>
 
+                    <div class="mt-4">
+                        <label class="mb-1 block text-sm font-medium" for="medio-nc">Devolver por *</label>
+                        <select
+                            id="medio-nc"
+                            v-model="formNota.medio_pago_codigo"
+                            class="h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                        >
+                            <option v-for="mp in mediosPago" :key="mp.codigo" :value="mp.codigo">{{ mp.nombre }}</option>
+                        </select>
+                        <p v-if="formNota.errors.medio_pago_codigo" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formNota.errors.medio_pago_codigo }}</p>
+                    </div>
+
+                    <div v-if="medioSeleccionadoNota?.requiere_referencia" class="mt-4">
+                        <label class="mb-1 block text-sm font-medium" for="referencia-nc">Referencia</label>
+                        <input
+                            id="referencia-nc"
+                            v-model="formNota.referencia"
+                            type="text"
+                            placeholder="Nº de operación"
+                            class="h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                        />
+                        <p v-if="formNota.errors.referencia" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formNota.errors.referencia }}</p>
+                    </div>
+
                     <div class="mt-4 flex items-center justify-between rounded-xl bg-stone-100 px-4 py-2.5 text-sm dark:bg-neutral-800">
                         <span class="text-neutral-500 dark:text-neutral-400">Total a acreditar</span>
                         <span class="font-semibold">{{ soles(totalNota) }}</span>
                     </div>
 
                     <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
-                        Se repone el stock de lo devuelto. Si la venta fue al contado, el dinero sale de tu caja abierta;
-                        si fue al crédito, se descuenta de la deuda del cliente. La nota se envía a SUNAT automáticamente.
+                        Se repone el stock de lo devuelto. Si la venta fue al crédito, se descuenta primero de la deuda del cliente;
+                        el resto se devuelve por el medio elegido (solo el efectivo sale de tu caja abierta).
+                        La nota se envía a SUNAT automáticamente.
                     </p>
 
                     <div class="mt-5 flex justify-end gap-2">

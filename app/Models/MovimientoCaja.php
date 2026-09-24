@@ -13,6 +13,7 @@ class MovimientoCaja extends Model
     protected $table = 'movimientos_caja';
 
     public const CREATED_AT = 'creado_en';
+
     public const UPDATED_AT = null;
 
     protected $fillable = [
@@ -21,6 +22,8 @@ class MovimientoCaja extends Model
         'tipo',
         'concepto',
         'monto',
+        'medio_pago_codigo',
+        'referencia',
         'usuario_id',
     ];
 
@@ -45,5 +48,10 @@ class MovimientoCaja extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function medioPago(): BelongsTo
+    {
+        return $this->belongsTo(MedioPago::class, 'medio_pago_codigo', 'codigo');
     }
 }
