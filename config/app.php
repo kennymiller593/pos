@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Contacto de soporte
+    |--------------------------------------------------------------------------
+    |
+    | Mientras no haya pago en linea, la pantalla de suscripcion ofrece estos
+    | canales para activar o renovar planes. WhatsApp en formato internacional
+    | sin "+" (p. ej. 51987654321).
+    |
+    */
+
+    'soporte_whatsapp' => env('APP_SOPORTE_WHATSAPP'),
+    'soporte_email' => env('APP_SOPORTE_EMAIL', env('MAIL_FROM_ADDRESS')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

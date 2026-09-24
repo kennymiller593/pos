@@ -16,6 +16,8 @@ use App\Models\Sucursal;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
 use App\Models\Usuario;
+use App\Services\SuscripcionService;
+use Illuminate\Testing\TestResponse;
 
 /**
  * Crea una empresa aislada con sucursal, caja y usuario admin para cada test.
@@ -57,6 +59,9 @@ trait CreaEscenarioPos
             'activo' => true,
         ]);
 
+        // sin suscripcion vigente el middleware bloquea todo: cada escenario arranca en prueba
+        app(SuscripcionService::class)->iniciarPrueba($this->empresa);
+
         $this->admin = $this->crearUsuario('admin', "admin{$sufijo}@test.local");
     }
 
@@ -68,7 +73,7 @@ trait CreaEscenarioPos
             'rol_id' => Rol::where('codigo', $rolCodigo)->value('id'),
             'email' => $email,
             'password_hash' => 'secreto123',
-            'nombre_completo' => ucfirst($rolCodigo) . ' Test',
+            'nombre_completo' => ucfirst($rolCodigo).' Test',
             'activo' => true,
         ]);
     }
@@ -78,8 +83,8 @@ trait CreaEscenarioPos
     {
         $producto = Producto::create([
             'empresa_id' => $this->empresa->id,
-            'codigo_interno' => 'T-' . random_int(100000, 999999),
-            'nombre' => 'Producto Test ' . random_int(1000, 9999),
+            'codigo_interno' => 'T-'.random_int(100000, 999999),
+            'nombre' => 'Producto Test '.random_int(1000, 9999),
             'unidad_base_codigo' => UnidadMedida::query()->value('codigo'),
             'tipo_afectacion_codigo' => TipoAfectacionIgv::where('afecto', true)->value('codigo'),
             'permite_fraccion' => false,
@@ -150,13 +155,13 @@ trait CreaEscenarioPos
             'empresa_id' => $this->empresa->id,
             'tipo_documento_codigo' => '1',
             'numero_documento' => (string) random_int(10000000, 99999999),
-            'nombre' => 'Cliente Test ' . random_int(1000, 9999),
+            'nombre' => 'Cliente Test '.random_int(1000, 9999),
             'limite_credito' => $limiteCredito,
         ]);
     }
 
     /** Registra una venta al contado en efectivo por el total exacto. */
-    protected function venderContado(ProductoPresentacion $presentacion, float $cantidad): \Illuminate\Testing\TestResponse
+    protected function venderContado(ProductoPresentacion $presentacion, float $cantidad): TestResponse
     {
         $total = round($cantidad * (float) $presentacion->precio_venta, 2);
 

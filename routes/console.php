@@ -7,3 +7,6 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('sunat:sincronizar')
     ->everyTenMinutes()
     ->withoutOverlapping();
+
+// Deja el historial de suscripciones al dia (el bloqueo por vencimiento no depende de esto).
+Schedule::command('suscripciones:vencer')->dailyAt('00:10');

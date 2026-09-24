@@ -9,6 +9,7 @@ use App\Models\Rol;
 use App\Models\Rubro;
 use App\Models\Sucursal;
 use App\Models\Usuario;
+use App\Services\SuscripcionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,7 +28,7 @@ class RegistroController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
     {
         $datos = $request->validate([
             'ruc' => ['required', 'digits:11', Rule::unique('empresas', 'ruc')],
@@ -56,7 +57,7 @@ class RegistroController extends Controller
             'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
         ]);
 
-        $usuario = DB::transaction(function () use ($datos) {
+        $usuario = DB::transaction(function () use ($datos, $suscripciones) {
             $empresa = Empresa::create([
                 'ruc' => $datos['ruc'],
                 'razon_social' => $datos['razon_social'],
@@ -65,6 +66,9 @@ class RegistroController extends Controller
                 'rubro_codigo' => $datos['rubro_codigo'],
                 'activo' => true,
             ]);
+
+            // toda empresa nueva arranca con la prueba gratuita
+            $suscripciones->iniciarPrueba($empresa);
 
             $sucursal = Sucursal::create([
                 'empresa_id' => $empresa->id,

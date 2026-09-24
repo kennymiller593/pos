@@ -33,6 +33,7 @@ class VentaService
     public function __construct(
         private readonly InventarioService $inventario,
         private readonly SunatService $sunat,
+        private readonly SuscripcionService $suscripciones,
     ) {}
 
     /**
@@ -64,6 +65,7 @@ class VentaService
         }
 
         $this->validarStock($lineas, $sucursalId);
+        $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
         return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito) {
             $serie = $this->tomarCorrelativo($empresaId, $sucursalId, $apertura->caja_id, $datos['tipo_comprobante_codigo']);

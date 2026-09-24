@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\Auditoria;
 use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\Usuario;
+use App\Services\SuscripcionService;
 use App\Support\Permisos;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,10 +34,16 @@ class UsuarioController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
     {
         $datos = $this->validar($request);
         $sucursales = $datos['sucursal_ids'] ?? [];
+
+        try {
+            $suscripciones->verificarLimite($request->user()->empresa, 'usuarios');
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         $usuario = Usuario::create([
             'empresa_id' => $request->user()->empresa_id,

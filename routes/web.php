@@ -23,6 +23,7 @@ use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\SucursalController;
+use App\Http\Controllers\SuscripcionController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use Illuminate\Support\Facades\Route;
@@ -64,6 +65,9 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
     Route::get('/notificaciones', [NotificacionController::class, 'index'])->name('notificaciones');
+
+    // accesible aunque la suscripcion haya vencido (ver SuscripcionVigente)
+    Route::get('/suscripcion', [SuscripcionController::class, 'index'])->name('suscripcion.index');
 
     // ---- configuracion (solo admin) ----
     Route::middleware('can:empresa.gestionar')->group(function () {

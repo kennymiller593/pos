@@ -14,6 +14,7 @@ import {
     ChartColumnBig,
     CheckCircle2,
     ChevronDown,
+    CreditCard,
     ChevronsLeft,
     ChevronsRight,
     HandCoins,
@@ -27,6 +28,8 @@ import {
     ScrollText,
     Settings,
     ShoppingCart,
+    Sparkles,
+    TriangleAlert,
     Store,
     Sun,
     Tags,
@@ -97,6 +100,7 @@ const menuBase = [
             { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
             { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
             { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
+            { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
         ],
     },
 ]
@@ -180,6 +184,52 @@ onMounted(() => {
 function esActivo(item) {
     const url = page.url
     return item.exact ? url === item.href : url.startsWith(item.href)
+}
+
+// ---- aviso de suscripcion (prueba por vencer, plan por vencer o en gracia) ----
+const suscripcion = computed(() => usuario.value?.suscripcion ?? null)
+
+// 'YYYY-MM-DD' se interpreta como fecha local (new Date('YYYY-MM-DD') seria UTC y podria restar un dia)
+function fechaLarga(iso) {
+    if (!iso) return ''
+    const [a, m, d] = iso.split('-').map(Number)
+    return new Date(a, m - 1, d).toLocaleDateString('es-PE', { day: '2-digit', month: 'long' })
+}
+
+const avisoSuscripcion = computed(() => {
+    const s = suscripcion.value
+    if (!s) return null
+    const dias = s.dias_restantes ?? 0
+    if (s.estado === 'en_gracia') {
+        return {
+            tono: 'rojo',
+            texto: `Tu plan venció el ${fechaLarga(s.fecha_fin)}. Tienes hasta 3 días para renovarlo.`,
+            enlace: 'Renovar',
+        }
+    }
+    if (s.es_prueba && s.vigente) {
+        return {
+            tono: dias <= 3 ? 'fuerte' : 'suave',
+            texto: dias <= 0
+                ? 'Tu prueba vence hoy.'
+                : `Prueba gratuita: te ${dias === 1 ? 'queda 1 día' : `quedan ${dias} días`}.`,
+            enlace: 'Ver planes',
+        }
+    }
+    if (!s.es_prueba && s.vigente && dias <= 7) {
+        return {
+            tono: 'suave',
+            texto: `Tu plan${s.plan ? ` ${s.plan}` : ''} vence el ${fechaLarga(s.fecha_fin)}.`,
+            enlace: 'Renovar',
+        }
+    }
+    return null
+})
+
+const CLASES_AVISO = {
+    suave: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300',
+    fuerte: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-200',
+    rojo: 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300',
 }
 
 // toast para mensajes flash (exito o error)
@@ -424,6 +474,18 @@ watch(
 
             <!-- Página -->
             <main class="flex-1 p-4 sm:p-6">
+                <!-- Aviso de suscripción -->
+                <div v-if="avisoSuscripcion"
+                    class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-2.5 text-sm"
+                    :class="CLASES_AVISO[avisoSuscripcion.tono]">
+                    <Sparkles v-if="avisoSuscripcion.tono === 'suave' && suscripcion?.es_prueba" class="size-4 shrink-0" />
+                    <TriangleAlert v-else class="size-4 shrink-0" />
+                    <span class="font-medium">{{ avisoSuscripcion.texto }}</span>
+                    <Link v-if="!page.url.startsWith('/suscripcion')" href="/suscripcion"
+                        class="ml-auto font-semibold underline underline-offset-2 hover:no-underline">
+                        {{ avisoSuscripcion.enlace }}
+                    </Link>
+                </div>
                 <slot />
             </main>
         </div>

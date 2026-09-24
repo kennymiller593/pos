@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\Caja;
 use App\Models\SerieCorrelativo;
 use App\Models\Sucursal;
+use App\Services\SuscripcionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,9 +32,15 @@ class SucursalController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
     {
         $datos = $this->validar($request);
+
+        try {
+            $suscripciones->verificarLimite($request->user()->empresa, 'sucursales');
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         $sucursal = Sucursal::create([
             ...$datos,
@@ -231,7 +239,7 @@ class SucursalController extends Controller
             'correlativo' => $datos['correlativo'],
         ]);
 
-        return back()->with('success', "Serie {$datos['serie']} creada. El próximo comprobante será {$datos['serie']}-" . ($datos['correlativo'] + 1) . '.');
+        return back()->with('success', "Serie {$datos['serie']} creada. El próximo comprobante será {$datos['serie']}-".($datos['correlativo'] + 1).'.');
     }
 
     public function eliminarSerie(Request $request, Sucursal $sucursal, SerieCorrelativo $serie): RedirectResponse

@@ -15,17 +15,22 @@ class Plan extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'codigo',
         'nombre',
+        'descripcion',
         'precio_mensual',
         'max_sucursales',
         'max_usuarios',
         'max_comprobantes_mes',
+        'activo',
+        'orden',
     ];
 
     protected function casts(): array
     {
         return [
             'precio_mensual' => 'decimal:2',
+            'activo' => 'boolean',
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\AperturaCaja;
 use App\Models\Sucursal;
+use App\Services\SuscripcionService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -105,6 +106,8 @@ class HandleInertiaRequests extends Middleware
                         'sucursales_accesibles' => $accesibles,
                         'sucursal_consulta_id' => $consultaId,
                         'puede_ver_todas' => $permitidas === null,
+                        // estado del plan para el aviso de vencimiento en el layout
+                        'suscripcion' => app(SuscripcionService::class)->resumen($usuario->empresa),
                     ];
                 },
             ],

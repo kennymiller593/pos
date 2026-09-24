@@ -20,6 +20,8 @@ class Suscripcion extends Model
         'fecha_inicio',
         'fecha_fin',
         'estado',
+        'es_prueba',
+        'nota',
     ];
 
     protected function casts(): array
@@ -27,6 +29,8 @@ class Suscripcion extends Model
         return [
             'fecha_inicio' => 'date',
             'fecha_fin' => 'date',
+            'es_prueba' => 'boolean',
+            'creado_en' => 'datetime',
         ];
     }
 
