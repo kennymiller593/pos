@@ -1,0 +1,6 @@
+# crontab -u www-data -e
+# El scheduler reenvía comprobantes pendientes a SUNAT cada 10 min, confirma bajas y vence suscripciones.
+* * * * * cd /var/www/pos-app && php artisan schedule:run >> /dev/null 2>&1
+
+# Backup diario de la base y del storage a las 02:30 (ver deploy/backup.sh)
+30 2 * * * /var/www/pos-app/deploy/backup.sh >> /var/log/pos-app-backup.log 2>&1

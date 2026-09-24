@@ -1,0 +1,41 @@
+# /etc/nginx/sites-available/pos-app
+# Certificado: certbot --nginx -d tudominio.pe
+
+server {
+    listen 80;
+    server_name tudominio.pe;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name tudominio.pe;
+
+    root /var/www/pos-app/public;
+    index index.php;
+
+    ssl_certificate     /etc/letsencrypt/live/tudominio.pe/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tudominio.pe/privkey.pem;
+
+    client_max_body_size 10m;   # logos e imágenes de productos (2 MB) con margen
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_read_timeout 120;   # reportes en PDF
+    }
+
+    # nunca servir archivos ocultos ni el storage privado
+    location ~ /\.(?!well-known) { deny all; }
+    location ^~ /storage/app { deny all; }
+
+    location ~* \.(css|js|svg|png|jpg|jpeg|webp|woff2)$ {
+        expires 30d;
+        access_log off;
+    }
+}

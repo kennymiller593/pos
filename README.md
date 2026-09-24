@@ -1,58 +1,79 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# POS App
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Punto de venta SaaS multiempresa para Perú: facturación electrónica SUNAT (boletas, facturas, notas de crédito, bajas), inventario con costeo FIFO por capas y lotes, multi-sucursal, caja con arqueo, cuentas por cobrar y pagar, compras, transferencias, reportes y suscripciones por plan.
 
-## About Laravel
+Stack: Laravel 13 · Inertia + Vue 3 + Tailwind 4 · PostgreSQL 17 · Greenter (SUNAT) · wkhtmltopdf.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Requisitos
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- PHP 8.3+ con extensiones `pdo_pgsql`, `openssl`, `soap`, `zip`, `mbstring`, `gd`
+- PostgreSQL 15+ con extensiones `pgcrypto` y `pg_trgm`
+- Node 20+
+- wkhtmltopdf (tickets, A4 y reportes en PDF)
+- Cuenta en Decolecta para consultar RUC/DNI (opcional)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Instalación local
 
 ```bash
-composer require laravel/boost --dev
+cp .env.example .env            # revisa DB_*, WKHTML_PDF_BINARY, API_TOKEN_SUNAT
+composer install
+npm install
+php artisan key:generate
 
-php artisan boost:install
+# Base de datos (el esquema NO se gestiona con migraciones de Laravel)
+createdb pos_db
+psql -d pos_db -f database/schema/pgsql-schema.sql   # tablas, triggers, funciones, extensiones
+psql -d pos_db -f database/schema/catalogos.sql      # roles, rubros, tipos, medios de pago, unidades, planes
+psql -d pos_db -f database/catalogos/ubigeos.sql     # ubigeos
+for f in database/sql/*.sql; do psql -d pos_db -f "$f"; done   # cambios posteriores al dump (idempotentes)
+
+php artisan db:seed                # empresa de demo (admin@pos.test / admin123); solo fuera de producción
+php artisan serve & npm run dev
+php artisan schedule:work          # en desarrollo: reintentos SUNAT y vencimientos
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Cambios de esquema
 
-## Contributing
+`database/schema/pgsql-schema.sql` es un `pg_dump --schema-only` de referencia. Cada cambio posterior va en `database/sql/NNN_descripcion.sql`, idempotente (`IF NOT EXISTS`, `ON CONFLICT`), y se aplica con `psql` en cada despliegue (`deploy/deploy.sh` lo hace). Cuando se acumulen varios, regenera el dump:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+pg_dump -d pos_db --schema-only --no-owner --no-privileges -f database/schema/pgsql-schema.sql
+```
 
-## Code of Conduct
+## Tests
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan test
+```
 
-## Security Vulnerabilities
+Corren contra la base de `.env` dentro de una transacción por test (`DatabaseTransactions`); no usan migraciones. No apuntes `.env` a producción al correrlos.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Comandos de operación
 
-## License
+| Comando | Para qué |
+|---|---|
+| `php artisan sunat:sincronizar` | Reenvía comprobantes pendientes y confirma bajas (el scheduler lo corre cada 10 min) |
+| `php artisan suscripcion:activar RUC plan --meses=N --nota="..."` | Activa o renueva un plan tras el pago (`emprendedor`, `negocio`, `empresa`) |
+| `php artisan suscripciones:vencer` | Marca vencidas las suscripciones pasadas (diario) |
+| `php artisan empresa:cifrar-certificados` | Cifra certificados guardados en claro y registra su vencimiento |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Despliegue (VPS Linux)
+
+1. `git clone` en `/var/www/pos-app`, `.env` con los valores de producción (ver comentarios en `.env.example`: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` https, `SESSION_SECURE_COOKIE=true`, `LOG_STACK=daily`, SMTP real, `TRUSTED_PROXIES` si hay proxy).
+2. Base de datos como en la instalación local. Guarda `APP_KEY` en un lugar seguro: cifra las claves SOL y los certificados; si se pierde, se pierden.
+3. `deploy/nginx.conf.example` → nginx apuntando a `public/`; `deploy/supervisor-pos.conf.example` → worker de colas; `deploy/crontab.example` → scheduler y backups.
+4. `sudo -u www-data ./deploy/deploy.sh` en cada actualización (dependencias, build, scripts SQL, caches, `queue:restart`).
+5. Backups: `deploy/backup.sh` (pg_dump + `storage/app` + `.env`) y cópialos fuera del servidor. Los XML/CDR viven en `storage/app/private/sunat/{empresa}/{entorno}`.
+6. Salud: `GET /up`.
+
+### Facturación electrónica
+
+Cada empresa carga su certificado (.pem o .pfx en base64) y sus credenciales SOL en **Empresa**; el certificado se valida al cargarlo y se cifra. Se empieza en `beta` (los comprobantes se imprimen con "AMBIENTE DE PRUEBAS · SIN VALOR TRIBUTARIO"); el cambio a `produccion` exige desactivar antes la facturación y queda auditado.
+
+## Estructura
+
+- `app/Services/` — lógica de negocio (`VentaService`, `InventarioService`, `NotaCreditoService`, `SunatService`, `SuscripcionService`, ...). Los controladores validan y orquestan.
+- `app/Support/Permisos.php` — matriz de permisos por rol (`admin`, `cajero`, `vendedor`, `almacenero`), aplicada con `can:` en rutas y en el frontend.
+- `app/Console/Commands/` — comandos programados y de operación.
+- `database/schema/`, `database/sql/` — esquema y sus cambios.
+- `deploy/` — ejemplos de nginx, supervisor, cron y scripts de despliegue/backup.
