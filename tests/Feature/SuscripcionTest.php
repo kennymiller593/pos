@@ -8,6 +8,7 @@ use App\Models\Rubro;
 use App\Models\Suscripcion;
 use App\Models\Usuario;
 use App\Services\SuscripcionService;
+use App\Support\DocumentoIdentidad;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -32,7 +33,7 @@ class SuscripcionTest extends TestCase
 
     public function test_el_registro_crea_una_prueba_gratuita_de_14_dias(): void
     {
-        $ruc = '20'.random_int(100000000, 999999999);
+        $ruc = DocumentoIdentidad::completarRuc('20'.random_int(10000000, 99999999));
 
         $this->post('/registro', [
             'ruc' => $ruc,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CabecerasSeguridad;
+use App\Http\Middleware\CorreoVerificado;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SuscripcionVigente;
 use App\Http\Middleware\UsuarioActivo;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             CabecerasSeguridad::class,
             UsuarioActivo::class,
             SuscripcionVigente::class,
+            CorreoVerificado::class,
             HandleInertiaRequests::class,
         ]);
     })

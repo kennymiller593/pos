@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Models\AperturaCaja;
 use App\Models\Sucursal;
 use App\Services\SuscripcionService;
@@ -108,6 +109,11 @@ class HandleInertiaRequests extends Middleware
                         'puede_ver_todas' => $permitidas === null,
                         // estado del plan para el aviso de vencimiento en el layout
                         'suscripcion' => app(SuscripcionService::class)->resumen($usuario->empresa),
+                        // aviso de "confirma tu correo" mientras dura la gracia
+                        'correo_verificado' => (bool) $usuario->email_verificado_en,
+                        'dias_para_verificar' => $usuario->email_verificado_en || ! $usuario->creado_en
+                            ? null
+                            : max(0, (int) now()->startOfDay()->diffInDays($usuario->creado_en->copy()->addDays(VerificacionCorreoController::DIAS_GRACIA)->startOfDay(), false)),
                     ];
                 },
             ],

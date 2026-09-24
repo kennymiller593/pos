@@ -80,16 +80,26 @@ final class DocumentoIdentidad
             return false;
         }
 
+        return (int) $ruc[10] === self::digitoVerificadorRuc(substr($ruc, 0, 10));
+    }
+
+    /** Completa los 10 primeros dígitos de un RUC con su dígito verificador. */
+    public static function completarRuc(string $diezDigitos): string
+    {
+        return $diezDigitos.self::digitoVerificadorRuc($diezDigitos);
+    }
+
+    private static function digitoVerificadorRuc(string $diezDigitos): int
+    {
         $pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
         $suma = 0;
 
         foreach ($pesos as $i => $peso) {
-            $suma += (int) $ruc[$i] * $peso;
+            $suma += (int) $diezDigitos[$i] * $peso;
         }
 
         $resto = 11 - ($suma % 11);
-        $verificador = $resto >= 10 ? $resto - 10 : $resto;
 
-        return (int) $ruc[10] === $verificador;
+        return $resto >= 10 ? $resto - 10 : $resto;
     }
 }

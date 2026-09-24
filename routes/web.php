@@ -4,6 +4,7 @@ use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
+use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Http\Controllers\CajaController;
 use App\Http\Controllers\CatalogoController;
 use App\Http\Controllers\CategoriaController;
@@ -57,9 +58,17 @@ Route::middleware('guest')->group(function () {
     Route::post('/restablecer-password', [RecuperacionPasswordController::class, 'guardar'])->middleware('throttle:5,1');
 });
 
+// confirmacion del correo: el enlace firmado llega por correo (no exige sesion iniciada)
+Route::get('/verificar-correo/{usuario}/{hash}', [VerificacionCorreoController::class, 'verificar'])
+    ->middleware('throttle:10,1')
+    ->name('verificacion.verificar');
+
 // Cada ruta que muta datos lleva el permiso que exige (ver App\Support\Permisos).
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
+
+    Route::get('/verificar-correo', [VerificacionCorreoController::class, 'aviso'])->name('verificacion.aviso');
+    Route::post('/verificar-correo/reenviar', [VerificacionCorreoController::class, 'reenviar'])->middleware('throttle:3,1')->name('verificacion.reenviar');
 
     Route::get('/', [InicioController::class, 'index'])->name('inicio');
 

@@ -28,6 +28,7 @@ class Usuario extends Authenticatable
         'password_hash',
         'nombre_completo',
         'activo',
+        'email_verificado_en',
     ];
 
     protected $hidden = [
@@ -39,6 +40,8 @@ class Usuario extends Authenticatable
         return [
             'activo' => 'boolean',
             'password_hash' => 'hashed',
+            'email_verificado_en' => 'datetime',
+            'creado_en' => 'datetime',
         ];
     }
 

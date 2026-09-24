@@ -20,6 +20,7 @@ import {
     HandCoins,
     LayoutDashboard,
     LogOut,
+    Mail,
     MapPin,
     Menu,
     Moon,
@@ -230,6 +231,25 @@ const CLASES_AVISO = {
     suave: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300',
     fuerte: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-200',
     rojo: 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300',
+}
+
+// ---- aviso de correo por confirmar (gracia de 3 dias) ----
+const avisoCorreo = computed(() => {
+    const u = usuario.value
+    if (!u || u.correo_verificado || u.dias_para_verificar === null || u.dias_para_verificar === undefined) return null
+    const dias = u.dias_para_verificar
+    return {
+        texto: `Confirma tu correo: te enviamos un enlace a tu bandeja. ${dias <= 0 ? 'Hoy es el último día.' : `Te quedan ${dias} días.`}`,
+    }
+})
+
+const reenviandoCorreo = ref(false)
+function reenviarCorreo() {
+    reenviandoCorreo.value = true
+    router.post('/verificar-correo/reenviar', {}, {
+        preserveScroll: true,
+        onFinish: () => { reenviandoCorreo.value = false },
+    })
 }
 
 // toast para mensajes flash (exito o error)
@@ -485,6 +505,19 @@ watch(
                         class="ml-auto font-semibold underline underline-offset-2 hover:no-underline">
                         {{ avisoSuscripcion.enlace }}
                     </Link>
+                </div>
+
+                <!-- Aviso de correo por confirmar -->
+                <div v-if="avisoCorreo"
+                    class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-2.5 text-sm"
+                    :class="CLASES_AVISO.suave">
+                    <Mail class="size-4 shrink-0" />
+                    <span class="font-medium">{{ avisoCorreo.texto }}</span>
+                    <button type="button" :disabled="reenviandoCorreo"
+                        class="ml-auto font-semibold underline underline-offset-2 hover:no-underline disabled:cursor-not-allowed disabled:opacity-60"
+                        @click="reenviarCorreo">
+                        {{ reenviandoCorreo ? 'Enviando...' : 'Reenviar' }}
+                    </button>
                 </div>
                 <slot />
             </main>

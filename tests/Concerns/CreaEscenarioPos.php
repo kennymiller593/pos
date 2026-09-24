@@ -75,6 +75,7 @@ trait CreaEscenarioPos
             'password_hash' => 'secreto123',
             'nombre_completo' => ucfirst($rolCodigo).' Test',
             'activo' => true,
+            'email_verificado_en' => now(),
         ]);
     }
 

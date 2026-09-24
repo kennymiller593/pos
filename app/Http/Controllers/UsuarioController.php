@@ -51,6 +51,8 @@ class UsuarioController extends Controller
             'rol_id' => $datos['rol_id'],
             'email' => $datos['email'],
             'password_hash' => $datos['password'],
+            // lo crea un administrador ya verificado: no hace falta confirmar el correo
+            'email_verificado_en' => now(),
             'nombre_completo' => $datos['nombre_completo'],
             'activo' => $datos['activo'],
         ]);

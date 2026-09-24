@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Rubro;
 use App\Models\Usuario;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
@@ -46,7 +47,7 @@ class SeguridadTest extends TestCase
 
     public function test_la_contrasena_exige_letras_y_numeros_y_el_correo_se_guarda_en_minusculas(): void
     {
-        $ruc = '20'.random_int(100000000, 999999999);
+        $ruc = DocumentoIdentidad::completarRuc('20'.random_int(10000000, 99999999));
         $base = [
             'ruc' => $ruc, 'razon_social' => 'Nueva SAC', 'nombre_comercial' => null,
             'rubro_codigo' => Rubro::query()->value('codigo'), 'regimen_tributario' => 'RUS',
