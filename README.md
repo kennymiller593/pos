@@ -6,7 +6,7 @@ Stack: Laravel 13 · Inertia + Vue 3 + Tailwind 4 · PostgreSQL 17 · Greenter (
 
 ## Requisitos
 
-- PHP 8.3+ con extensiones `pdo_pgsql`, `openssl`, `soap`, `zip`, `mbstring`, `gd`
+- PHP 8.4+ con extensiones `pdo_pgsql`, `openssl`, `soap`, `zip`, `mbstring`, `gd`
 - PostgreSQL 15+ con extensiones `pgcrypto` y `pg_trgm`
 - Node 20+
 - wkhtmltopdf (tickets, A4 y reportes en PDF)
