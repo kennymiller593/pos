@@ -1,0 +1,105 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Cliente;
+use App\Models\CuentaPorCobrar;
+use App\Models\TipoDocumentoIdentidad;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ClienteController extends Controller
+{
+    public function index(Request $request): Response
+    {
+        $empresaId = $request->user()->empresa_id;
+        $filtros = $request->only(['buscar']);
+
+        $clientes = Cliente::query()
+            ->where('empresa_id', $empresaId)
+            ->addSelect(['deuda' => CuentaPorCobrar::query()
+                ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0)')
+                ->whereColumn('cliente_id', 'clientes.id')
+                ->where('estado', '!=', 'pagado'),
+            ])
+            ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where(fn ($w) => $w
+                ->where('nombre', 'ilike', "%{$buscar}%")
+                ->orWhere('numero_documento', 'ilike', "{$buscar}%")))
+            ->orderBy('nombre')
+            ->paginate(10)
+            ->withQueryString();
+
+        return Inertia::render('Clientes/Index', [
+            'clientes' => $clientes,
+            'filtros' => $filtros,
+            'tiposDocumento' => TipoDocumentoIdentidad::orderBy('codigo')->get(['codigo', 'nombre', 'longitud']),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        Cliente::create([
+            ...$this->validar($request),
+            'empresa_id' => $request->user()->empresa_id,
+        ]);
+
+        return back()->with('success', 'Cliente creado.');
+    }
+
+    public function update(Request $request, Cliente $cliente): RedirectResponse
+    {
+        abort_unless($cliente->empresa_id === $request->user()->empresa_id, 403);
+
+        $cliente->update($this->validar($request, $cliente));
+
+        return back()->with('success', 'Cliente actualizado.');
+    }
+
+    public function destroy(Request $request, Cliente $cliente): RedirectResponse
+    {
+        abort_unless($cliente->empresa_id === $request->user()->empresa_id, 403);
+
+        $tieneDeuda = CuentaPorCobrar::query()
+            ->where('cliente_id', $cliente->id)
+            ->where('estado', '!=', 'pagado')
+            ->exists();
+
+        if ($tieneDeuda) {
+            return back()->with('error', 'No se puede eliminar: el cliente tiene deudas pendientes.');
+        }
+
+        $cliente->delete();
+
+        return back()->with('success', 'Cliente eliminado.');
+    }
+
+    private function validar(Request $request, ?Cliente $cliente = null): array
+    {
+        $empresaId = $request->user()->empresa_id;
+
+        return $request->validate([
+            'tipo_documento_codigo' => ['required', Rule::exists('tipos_documento_identidad', 'codigo')],
+            'numero_documento' => [
+                'nullable', 'string', 'max:15',
+                Rule::unique('clientes', 'numero_documento')
+                    ->where('empresa_id', $empresaId)
+                    ->where('tipo_documento_codigo', $request->input('tipo_documento_codigo'))
+                    ->whereNull('eliminado_en')
+                    ->ignore($cliente?->id),
+            ],
+            'nombre' => ['required', 'string', 'max:200'],
+            'direccion' => ['nullable', 'string', 'max:250'],
+            'telefono' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'email', 'max:150'],
+            'limite_credito' => ['required', 'numeric', 'min:0'],
+        ], [
+            'nombre.required' => 'Ingresa el nombre.',
+            'numero_documento.unique' => 'Ya tienes un cliente con este documento.',
+            'limite_credito.min' => 'El límite no puede ser negativo.',
+            'email.email' => 'El correo no es válido.',
+        ]);
+    }
+}

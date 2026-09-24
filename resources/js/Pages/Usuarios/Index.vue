@@ -1,0 +1,311 @@
+<script setup>
+import { computed, ref } from 'vue'
+import { Link, useForm, usePage } from '@inertiajs/vue3'
+import { Eye, EyeOff, Pencil, Plus, UserCog, X } from '@lucide/vue'
+import AppLayout from '@/Layouts/AppLayout.vue'
+
+const props = defineProps({
+    usuarios: { type: Object, required: true },
+    roles: { type: Array, required: true },
+    sucursales: { type: Array, required: true },
+})
+
+const page = usePage()
+const miId = computed(() => page.props.auth?.user?.id)
+
+const COLORES_ROL = {
+    admin: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+    cajero: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300',
+    vendedor: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
+    almacenero: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+}
+
+// ---- modal ----
+const modalAbierto = ref(false)
+const usuarioEditar = ref(null)
+const verPassword = ref(false)
+
+const form = useForm({
+    nombre_completo: '',
+    email: '',
+    rol_id: '',
+    sucursal_ids: [],
+    password: '',
+    password_confirmation: '',
+    activo: true,
+})
+
+function abrir(usuario = null) {
+    usuarioEditar.value = usuario
+    form.clearErrors()
+    verPassword.value = false
+    form.nombre_completo = usuario?.nombre_completo ?? ''
+    form.email = usuario?.email ?? ''
+    form.rol_id = usuario?.rol_id ?? props.roles.find((r) => r.codigo === 'cajero')?.id ?? ''
+    form.sucursal_ids = usuario?.sucursales?.map((s) => s.id) ?? []
+    form.password = ''
+    form.password_confirmation = ''
+    form.activo = usuario?.activo ?? true
+    modalAbierto.value = true
+}
+
+function guardar() {
+    const opciones = {
+        preserveScroll: true,
+        onSuccess: () => (modalAbierto.value = false),
+    }
+    const transformar = (data) => ({
+        ...data,
+        password: data.password || null,
+        password_confirmation: data.password_confirmation || null,
+    })
+
+    if (usuarioEditar.value) {
+        form.transform(transformar).put(`/usuarios/${usuarioEditar.value.id}`, opciones)
+    } else {
+        form.transform(transformar).post('/usuarios', opciones)
+    }
+}
+
+const claseInput =
+    'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
+const claseLabel = 'mb-1 block text-sm font-medium'
+const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
+</script>
+
+<template>
+    <AppLayout titulo="Usuarios">
+        <div class="mb-4 flex items-center justify-between">
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                {{ usuarios.total }} usuario{{ usuarios.total === 1 ? '' : 's' }} en tu negocio
+            </p>
+            <button
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                @click="abrir()"
+            >
+                <Plus class="size-4" />
+                Nuevo usuario
+            </button>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
+                        <tr>
+                            <th class="px-4 py-3.5 font-semibold tracking-wider">Usuario</th>
+                            <th class="px-4 py-3.5 font-semibold tracking-wider">Rol</th>
+                            <th class="px-4 py-3.5 font-semibold tracking-wider">Sucursales</th>
+                            <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
+                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
+                        <tr v-if="!usuarios.data.length">
+                            <td colspan="5" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                                <UserCog class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
+                                No hay usuarios que mostrar.
+                            </td>
+                        </tr>
+                        <tr v-for="u in usuarios.data" :key="u.id" class="transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50">
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="grid size-9 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                        {{ u.nombre_completo.charAt(0).toUpperCase() }}
+                                    </div>
+                                    <div>
+                                        <p class="font-medium">
+                                            {{ u.nombre_completo }}
+                                            <span
+                                                v-if="u.id === miId"
+                                                class="ml-1.5 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                                            >
+                                                Tú
+                                            </span>
+                                        </p>
+                                        <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ u.email }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
+                                    :class="COLORES_ROL[u.rol?.codigo] ?? 'bg-stone-100 text-neutral-500'"
+                                >
+                                    {{ u.rol?.nombre ?? '—' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-neutral-600 dark:text-neutral-300">
+                                {{ u.sucursales?.length ? u.sucursales.map((s) => s.nombre).join(', ') : 'Todas' }}
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
+                                    :class="u.activo
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+                                        : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'"
+                                >
+                                    {{ u.activo ? 'Activo' : 'Desactivado' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <button
+                                    class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                    title="Editar"
+                                    @click="abrir(u)"
+                                >
+                                    <Pencil class="size-4" />
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginación -->
+            <div
+                v-if="usuarios.data.length && usuarios.last_page > 1"
+                class="flex flex-wrap justify-end gap-1.5 border-t border-stone-200 px-4 py-3 dark:border-neutral-800"
+            >
+                <template v-for="(link, i) in usuarios.links" :key="i">
+                    <Link
+                        v-if="link.url"
+                        :href="link.url"
+                        preserve-scroll
+                        class="rounded-lg border px-3.5 py-1.5 text-sm"
+                        :class="link.active
+                            ? 'border-emerald-600 bg-emerald-600 font-semibold text-white'
+                            : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'"
+                        v-html="link.label"
+                    />
+                </template>
+            </div>
+        </div>
+
+        <!-- Modal crear/editar -->
+        <Teleport to="body">
+            <div v-if="modalAbierto" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="modalAbierto = false" />
+                <form
+                    class="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="guardar"
+                >
+                    <div class="mb-4 flex items-center justify-between">
+                        <h3 class="font-semibold tracking-tight">{{ usuarioEditar ? 'Editar usuario' : 'Nuevo usuario' }}</h3>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            @click="modalAbierto = false"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="sm:col-span-2">
+                            <label :class="claseLabel" for="u_nombre">Nombre completo *</label>
+                            <input id="u_nombre" v-model="form.nombre_completo" type="text" :class="claseInput" placeholder="María Torres" />
+                            <p v-if="form.errors.nombre_completo" :class="claseError">{{ form.errors.nombre_completo }}</p>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label :class="claseLabel" for="u_email">Correo *</label>
+                            <input id="u_email" v-model="form.email" type="email" :class="claseInput" placeholder="maria@negocio.com" />
+                            <p v-if="form.errors.email" :class="claseError">{{ form.errors.email }}</p>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label :class="claseLabel" for="u_rol">Rol *</label>
+                            <select id="u_rol" v-model="form.rol_id" :class="claseInput">
+                                <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.nombre }}</option>
+                            </select>
+                            <p v-if="form.errors.rol_id" :class="claseError">{{ form.errors.rol_id }}</p>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label :class="claseLabel">Sucursales donde trabaja</label>
+                            <div class="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-stone-300 px-3 py-2.5 dark:border-neutral-700">
+                                <label v-for="s in sucursales" :key="s.id" class="flex items-center gap-2 text-sm">
+                                    <input
+                                        v-model="form.sucursal_ids"
+                                        type="checkbox"
+                                        :value="s.id"
+                                        class="size-4 rounded accent-emerald-600"
+                                    />
+                                    {{ s.nombre }}
+                                </label>
+                            </div>
+                            <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                                Sin marcar ninguna, tendrá acceso a todas las sucursales.
+                            </p>
+                            <p v-if="form.errors.sucursal_ids" :class="claseError">{{ form.errors.sucursal_ids }}</p>
+                        </div>
+                        <div>
+                            <label :class="claseLabel" for="u_password">
+                                {{ usuarioEditar ? 'Nueva contraseña' : 'Contraseña *' }}
+                            </label>
+                            <div class="relative">
+                                <input
+                                    id="u_password"
+                                    v-model="form.password"
+                                    :type="verPassword ? 'text' : 'password'"
+                                    autocomplete="new-password"
+                                    :class="[claseInput, 'pr-10']"
+                                    :placeholder="usuarioEditar ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'"
+                                />
+                                <button
+                                    type="button"
+                                    class="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-md p-0.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+                                    @click="verPassword = !verPassword"
+                                >
+                                    <EyeOff v-if="verPassword" class="size-4" />
+                                    <Eye v-else class="size-4" />
+                                </button>
+                            </div>
+                            <p v-if="form.errors.password" :class="claseError">{{ form.errors.password }}</p>
+                        </div>
+                        <div>
+                            <label :class="claseLabel" for="u_password2">Repite la contraseña</label>
+                            <input
+                                id="u_password2"
+                                v-model="form.password_confirmation"
+                                :type="verPassword ? 'text' : 'password'"
+                                autocomplete="new-password"
+                                :class="claseInput"
+                                placeholder="••••••••"
+                            />
+                        </div>
+                        <div class="flex items-center sm:col-span-2">
+                            <label class="flex items-center gap-2 text-sm">
+                                <input
+                                    v-model="form.activo"
+                                    type="checkbox"
+                                    class="size-4 rounded accent-emerald-600"
+                                    :disabled="usuarioEditar?.id === miId"
+                                />
+                                Usuario activo
+                            </label>
+                            <span v-if="usuarioEditar?.id === miId" class="ml-2 text-xs text-neutral-400 dark:text-neutral-500">
+                                (no puedes desactivarte a ti mismo)
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="modalAbierto = false"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="form.processing"
+                            class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {{ form.processing ? 'Guardando...' : 'Guardar' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Teleport>
+    </AppLayout>
+</template>
