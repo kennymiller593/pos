@@ -13,13 +13,11 @@ class RecuperarPassword extends Mailable
     use Queueable;
     use SerializesModels;
 
-    public function __construct(public readonly string $url)
-    {
-    }
+    public function __construct(public readonly string $url) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Restablece tu contraseña · POS App');
+        return new Envelope(subject: 'Restablece tu contraseña · '.config('app.name'));
     }
 
     public function content(): Content

@@ -39,7 +39,7 @@ function enviar() {
                     <div class="grid size-10 place-items-center rounded-xl bg-neutral-900 text-lg font-bold text-emerald-400 dark:bg-emerald-500 dark:text-white">
                         P
                     </div>
-                    <span class="text-xl font-semibold tracking-tight">POS App</span>
+                    <span class="text-xl font-semibold tracking-tight">{{ $page.props.appName || 'inkaPos' }}</span>
                 </div>
 
                 <h1 class="text-3xl font-bold tracking-tight">Nueva contraseña</h1>

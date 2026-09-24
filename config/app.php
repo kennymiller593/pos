@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => env('APP_NAME', 'inkaPos'),
 
     /*
     |--------------------------------------------------------------------------
@@ -26,8 +26,8 @@ return [
     |
     */
 
-    'soporte_whatsapp' => env('APP_SOPORTE_WHATSAPP'),
-    'soporte_email' => env('APP_SOPORTE_EMAIL', env('MAIL_FROM_ADDRESS')),
+    'soporte_whatsapp' => env('APP_SOPORTE_WHATSAPP', '51977425905'),
+    'soporte_email' => env('APP_SOPORTE_EMAIL', env('MAIL_FROM_ADDRESS', 'calidad@inkanet.pro')),
 
     /*
     |--------------------------------------------------------------------------

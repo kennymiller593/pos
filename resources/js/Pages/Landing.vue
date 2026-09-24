@@ -14,7 +14,7 @@ const props = defineProps({
 })
 
 const page = usePage()
-const marca = computed(() => page.props.appName || 'POS App')
+const marca = computed(() => page.props.appName || 'inkaPos')
 
 const esOscuro = useDark()
 const alternarTema = useToggle(esOscuro)

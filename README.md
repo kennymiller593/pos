@@ -1,4 +1,4 @@
-# POS App
+# inkaPos
 
 Punto de venta SaaS multiempresa para Perú: facturación electrónica SUNAT (boletas, facturas, notas de crédito, bajas), inventario con costeo FIFO por capas y lotes, multi-sucursal, caja con arqueo, cuentas por cobrar y pagar, compras, transferencias, reportes y suscripciones por plan.
 

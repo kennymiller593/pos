@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { Link, router, usePage } from '@inertiajs/vue3'
+import { Head, Link, router, usePage } from '@inertiajs/vue3'
 import { onClickOutside, useDark, useStorage, useToggle } from '@vueuse/core'
 import DialogoConfirmacion from '@/Components/DialogoConfirmacion.vue'
 import { usePermisos } from '@/composables/permisos'
@@ -50,7 +50,7 @@ defineProps({
 const page = usePage()
 const usuario = computed(() => page.props.auth?.user ?? null)
 const empresa = computed(() => usuario.value?.empresa ?? null)
-const nombreEmpresa = computed(() => empresa.value?.nombre_comercial || empresa.value?.razon_social || 'POS App')
+const nombreEmpresa = computed(() => empresa.value?.nombre_comercial || empresa.value?.razon_social || page.props.appName || 'inkaPos')
 const inicialEmpresa = computed(() => nombreEmpresa.value.charAt(0).toUpperCase())
 const sucursalActiva = computed(() => usuario.value?.sucursal_activa ?? null)
 
@@ -270,6 +270,7 @@ watch(
 </script>
 
 <template>
+    <Head v-if="titulo" :title="titulo" />
     <div class="min-h-screen bg-stone-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <!-- Overlay móvil -->
         <div v-if="abiertoMovil" class="fixed inset-0 z-30 bg-neutral-950/60 lg:hidden" @click="abiertoMovil = false" />

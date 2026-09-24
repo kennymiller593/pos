@@ -10,7 +10,7 @@
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px; background:#ffffff; border-radius:16px; padding:32px; border:1px solid #e7e5e4;">
                     <tr>
                         <td style="padding-bottom:20px;">
-                            <span style="display:inline-block; background:#059669; color:#ffffff; font-weight:700; font-size:16px; border-radius:10px; padding:8px 12px;">POS App</span>
+                            <span style="display:inline-block; background:#059669; color:#ffffff; font-weight:700; font-size:16px; border-radius:10px; padding:8px 12px;">{{ config('app.name') }}</span>
                         </td>
                     </tr>
                     <tr>
