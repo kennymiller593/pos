@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\CuentaPorPagar;
 use App\Models\MedioPago;
 use App\Models\PagoProveedor;
@@ -14,9 +15,7 @@ use Inertia\Response;
 
 class CuentaPorPagarController extends Controller
 {
-    public function __construct(private readonly CajaService $caja)
-    {
-    }
+    public function __construct(private readonly CajaService $caja) {}
 
     public function index(Request $request): Response
     {
@@ -102,29 +101,40 @@ class CuentaPorPagarController extends Controller
 
             $disponible = $this->caja->resumen($apertura)['esperado'];
             if ((float) $datos['monto'] > $disponible) {
-                return back()->with('error', 'No hay suficiente efectivo en caja (disponible: S/ ' . number_format($disponible, 2) . ').');
+                return back()->with('error', 'No hay suficiente efectivo en caja (disponible: S/ '.number_format($disponible, 2).').');
             }
         }
 
         try {
             DB::transaction(function () use ($cuenta, $datos, $apertura, $usuario) {
+                // se relee con bloqueo: un doble clic no puede pagar la deuda dos veces
+                $bloqueada = CuentaPorPagar::lockForUpdate()->findOrFail($cuenta->id);
+                $monto = round((float) $datos['monto'], 2);
+                $saldo = round((float) $bloqueada->monto_total - (float) $bloqueada->monto_pagado, 2);
+
+                if ($bloqueada->estado === 'pagado' || $monto > $saldo + 0.001) {
+                    throw new ErrorDeNegocio('El saldo cambió mientras registrabas el pago (ahora es S/ '.number_format($saldo, 2).'). Revisa y vuelve a intentarlo.');
+                }
+
                 PagoProveedor::create([
-                    'empresa_id' => $cuenta->empresa_id,
-                    'cuenta_id' => $cuenta->id,
+                    'empresa_id' => $bloqueada->empresa_id,
+                    'cuenta_id' => $bloqueada->id,
                     'apertura_id' => $apertura?->id,
                     'usuario_id' => $usuario->id,
                     'medio_pago_codigo' => $datos['medio_pago_codigo'],
-                    'monto' => round((float) $datos['monto'], 2),
+                    'monto' => $monto,
                     'referencia' => $datos['referencia'] ?? null,
                 ]);
 
-                $nuevoPagado = round((float) $cuenta->monto_pagado + (float) $datos['monto'], 2);
+                $nuevoPagado = round((float) $bloqueada->monto_pagado + $monto, 2);
 
-                $cuenta->update([
+                $bloqueada->update([
                     'monto_pagado' => $nuevoPagado,
-                    'estado' => $nuevoPagado >= (float) $cuenta->monto_total ? 'pagado' : 'parcial',
+                    'estado' => $nuevoPagado >= (float) $bloqueada->monto_total - 0.001 ? 'pagado' : 'parcial',
                 ]);
             });
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
             report($e);
 
@@ -135,6 +145,6 @@ class CuentaPorPagarController extends Controller
 
         return back()->with('success', $cuenta->estado === 'pagado'
             ? 'Pago registrado. ¡Deuda saldada!'
-            : 'Pago registrado. Saldo restante: S/ ' . number_format((float) $cuenta->monto_total - (float) $cuenta->monto_pagado, 2) . '.');
+            : 'Pago registrado. Saldo restante: S/ '.number_format((float) $cuenta->monto_total - (float) $cuenta->monto_pagado, 2).'.');
     }
 }

@@ -16,6 +16,7 @@ use App\Models\SerieCorrelativo;
 use App\Models\TipoAfectacionIgv;
 use App\Models\Usuario;
 use App\Support\DocumentoIdentidad;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class VentaService
@@ -68,6 +69,19 @@ class VentaService
         $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
         return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito) {
+            // dentro de la transaccion se vuelve a validar con bloqueo: dos cajas vendiendo
+            // el mismo producto a la vez se serializan aqui y la segunda ve el stock real
+            $this->validarStock($lineas, $sucursalId, bloquear: true);
+
+            if ($esCredito) {
+                $this->validarLineaDeCredito($cliente, $totalVenta, bloquear: true);
+            }
+
+            $aperturaViva = AperturaCaja::lockForUpdate()->find($apertura->id);
+            if (! $aperturaViva || $aperturaViva->cerrada_en) {
+                throw new ErrorDeNegocio('Tu caja ya está cerrada. Ábrela de nuevo para seguir vendiendo.');
+            }
+
             $serie = $this->tomarCorrelativo($empresaId, $sucursalId, $apertura->caja_id, $datos['tipo_comprobante_codigo']);
 
             $comprobante = Comprobante::create([
@@ -558,8 +572,13 @@ class VentaService
         return (float) $presentacion->precio_venta;
     }
 
-    private function validarLineaDeCredito(Cliente $cliente, float $totalVenta): void
+    private function validarLineaDeCredito(Cliente $cliente, float $totalVenta, bool $bloquear = false): void
     {
+        if ($bloquear) {
+            // serializa dos ventas al credito simultaneas del mismo cliente
+            $cliente = Cliente::lockForUpdate()->find($cliente->id) ?? $cliente;
+        }
+
         $limite = (float) $cliente->limite_credito;
 
         if ($limite <= 0) {
@@ -588,14 +607,14 @@ class VentaService
         }
     }
 
-    private function validarStock(array $lineas, string $sucursalId): void
+    private function validarStock(array $lineas, string $sucursalId, bool $bloquear = false): void
     {
         foreach ($lineas as $linea) {
             if (! $linea['producto']->controla_stock) {
                 continue;
             }
 
-            $disponible = $this->inventario->stockDisponible($linea['producto']->id, $sucursalId);
+            $disponible = $this->inventario->stockDisponible($linea['producto']->id, $sucursalId, $bloquear);
             $requerido = collect($lineas)
                 ->filter(fn ($l) => $l['producto']->id === $linea['producto']->id)
                 ->sum('cantidad_base');
@@ -619,13 +638,23 @@ class VentaService
             ->first();
 
         if (! $serie) {
-            $serie = SerieCorrelativo::create([
-                'empresa_id' => $empresaId,
-                'sucursal_id' => $sucursalId,
-                'tipo_comprobante_codigo' => $tipoComprobante,
-                'serie' => $this->siguienteSerieLibre($empresaId, $tipoComprobante),
-                'correlativo' => 0,
-            ]);
+            // la primera venta de una sucursal crea su serie: el lock evita que dos
+            // primeras ventas simultaneas generen la misma (el FOR UPDATE de arriba no bloquea filas inexistentes)
+            $serie = Cache::lock("serie:{$empresaId}:{$tipoComprobante}", 10)->block(5, function () use ($empresaId, $sucursalId, $tipoComprobante) {
+                return SerieCorrelativo::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('sucursal_id', $sucursalId)
+                    ->where('tipo_comprobante_codigo', $tipoComprobante)
+                    ->whereNull('caja_id')
+                    ->lockForUpdate()
+                    ->first() ?? SerieCorrelativo::create([
+                        'empresa_id' => $empresaId,
+                        'sucursal_id' => $sucursalId,
+                        'tipo_comprobante_codigo' => $tipoComprobante,
+                        'serie' => $this->siguienteSerieLibre($empresaId, $tipoComprobante),
+                        'correlativo' => 0,
+                    ]);
+            });
         }
 
         $serie->increment('correlativo');

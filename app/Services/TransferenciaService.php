@@ -12,9 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 class TransferenciaService
 {
-    public function __construct(private readonly InventarioService $inventario)
-    {
-    }
+    public function __construct(private readonly InventarioService $inventario) {}
 
     /**
      * Envía mercadería: consume FIFO en el origen, descuenta stock y deja la
@@ -73,7 +71,7 @@ class TransferenciaService
             }
         }
 
-        return DB::transaction(function () use ($usuario, $empresaId, $sucursalOrigenId, $destino, $datos, $cantidades, $productos) {
+        return DB::transaction(function () use ($usuario, $empresaId, $sucursalOrigenId, $destino, $datos, $cantidades) {
             $transferencia = Transferencia::create([
                 'empresa_id' => $empresaId,
                 'sucursal_origen_id' => $sucursalOrigenId,
@@ -129,10 +127,17 @@ class TransferenciaService
     public function recibir(Transferencia $transferencia, Usuario $usuario): void
     {
         if (! in_array($transferencia->estado, ['pendiente', 'en_transito'], true)) {
-            throw new ErrorDeNegocio('Esta transferencia ya fue ' . ($transferencia->estado === 'recibida' ? 'recibida' : 'anulada') . '.');
+            throw new ErrorDeNegocio('Esta transferencia ya fue '.($transferencia->estado === 'recibida' ? 'recibida' : 'anulada').'.');
+        }
+
+        // solo quien trabaja en el destino confirma que la mercaderia llego
+        $permitidas = $usuario->sucursalesPermitidas();
+        if ($permitidas && ! in_array($transferencia->sucursal_destino_id, $permitidas, true)) {
+            throw new ErrorDeNegocio('Solo un usuario de la sucursal de destino puede confirmar la recepción.');
         }
 
         DB::transaction(function () use ($transferencia, $usuario) {
+            $this->bloquearEnTransito($transferencia);
             $transferencia->load(['detalles.producto', 'detalles.lote']);
 
             foreach ($transferencia->detalles as $detalle) {
@@ -181,6 +186,7 @@ class TransferenciaService
         }
 
         DB::transaction(function () use ($transferencia, $usuario) {
+            $this->bloquearEnTransito($transferencia);
             $transferencia->load('detalles.producto');
 
             foreach ($transferencia->detalles as $detalle) {
@@ -205,6 +211,21 @@ class TransferenciaService
 
             $transferencia->update(['estado' => 'anulada']);
         });
+    }
+
+    /**
+     * Relee la transferencia con FOR UPDATE y exige que siga en tránsito: dos
+     * recepciones simultáneas (o recibir y anular a la vez) no pueden duplicar stock.
+     *
+     * @throws ErrorDeNegocio
+     */
+    private function bloquearEnTransito(Transferencia $transferencia): void
+    {
+        $bloqueada = Transferencia::lockForUpdate()->find($transferencia->id);
+
+        if (! $bloqueada || ! in_array($bloqueada->estado, ['pendiente', 'en_transito'], true)) {
+            throw new ErrorDeNegocio('Esta transferencia ya fue procesada por otro usuario.');
+        }
     }
 
     /** Costo unitario con el que salió el producto (y lote) del origen, registrado en el kardex. */

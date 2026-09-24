@@ -108,6 +108,17 @@ class NotaCreditoService
         }
 
         return DB::transaction(function () use ($original, $usuario, $motivo, $lineas, $totales, $montoNota, $cuenta, $reduccionDeuda, $aDevolver, $apertura, $medio, $referencia) {
+            // con el original bloqueado se recalcula el tope: dos notas simultaneas no pueden acreditar de mas
+            $bloqueado = Comprobante::lockForUpdate()->find($original->id);
+            $acreditadoAhora = (float) Comprobante::query()
+                ->where('comprobante_ref_id', $original->id)
+                ->where('estado', 'emitido')
+                ->sum('total');
+
+            if (! $bloqueado || $bloqueado->estado !== 'emitido' || $acreditadoAhora + $montoNota > (float) $original->total + 0.01) {
+                throw new ErrorDeNegocio('El comprobante cambió mientras emitías la nota (otra nota o una anulación se adelantó). Revisa y vuelve a intentarlo.');
+            }
+
             $serie = $this->tomarSerie($original);
 
             $nota = Comprobante::create([

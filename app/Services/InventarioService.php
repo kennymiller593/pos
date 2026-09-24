@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\CapaCosto;
 use App\Models\Lote;
 use App\Models\MovimientoInventario;
@@ -15,11 +16,13 @@ use App\Models\Stock;
  */
 class InventarioService
 {
-    public function stockDisponible(string $productoId, string $sucursalId): float
+    /** Con $bloquear=true toma la fila de stock con FOR UPDATE (dentro de una transaccion) para serializar ventas simultaneas. */
+    public function stockDisponible(string $productoId, string $sucursalId, bool $bloquear = false): float
     {
         return (float) Stock::query()
             ->where('producto_id', $productoId)
             ->where('sucursal_id', $sucursalId)
+            ->when($bloquear, fn ($q) => $q->lockForUpdate())
             ->value('cantidad');
     }
 
@@ -111,6 +114,11 @@ class InventarioService
                 'lote_id' => $capa->lote_id,
             ];
             $porConsumir = round($porConsumir - $tomar, 3);
+        }
+
+        // si las capas no alcanzan (otra venta se adelanto), no se registra una salida a costo cero
+        if ($porConsumir > 0.0005) {
+            throw new ErrorDeNegocio('El stock cambió mientras registrabas la operación (otra venta se adelantó). Vuelve a intentarlo.');
         }
 
         return ['consumos' => $consumos, 'costo_total' => $costoTotal];

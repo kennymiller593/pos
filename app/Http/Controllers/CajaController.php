@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\AperturaCaja;
 use App\Models\Auditoria;
 use App\Models\Caja;
 use App\Models\MovimientoCaja;
 use App\Services\CajaService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -124,12 +126,17 @@ class CajaController extends Controller
             return back()->with('error', "La caja ya está abierta por {$ocupadaPor}.");
         }
 
-        AperturaCaja::create([
-            'empresa_id' => $usuario->empresa_id,
-            'caja_id' => $caja->id,
-            'usuario_id' => $usuario->id,
-            'monto_inicial' => $datos['monto_inicial'],
-        ]);
+        try {
+            AperturaCaja::create([
+                'empresa_id' => $usuario->empresa_id,
+                'caja_id' => $caja->id,
+                'usuario_id' => $usuario->id,
+                'monto_inicial' => $datos['monto_inicial'],
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // la BD garantiza una apertura por caja y una por usuario aunque lleguen dos clics a la vez
+            return back()->with('error', 'Esa caja (o tu usuario) ya tiene un turno abierto.');
+        }
 
         return back()->with('success', "Caja {$caja->nombre} abierta.");
     }
@@ -197,15 +204,28 @@ class CajaController extends Controller
             'monto_cierre.min' => 'El monto no puede ser negativo.',
         ]);
 
-        $esperado = $this->caja->resumen($apertura)['esperado'];
+        try {
+            $esperado = DB::transaction(function () use ($apertura, $datos) {
+                // con la apertura bloqueada, las ventas en curso esperan y el esperado es el real
+                $bloqueada = AperturaCaja::lockForUpdate()->findOrFail($apertura->id);
 
-        DB::transaction(function () use ($apertura, $datos, $esperado) {
-            $apertura->update([
-                'monto_cierre' => $datos['monto_cierre'],
-                'monto_sistema' => $esperado,
-                'cerrada_en' => now(),
-            ]);
-        });
+                if ($bloqueada->cerrada_en) {
+                    throw new ErrorDeNegocio('Esta caja ya fue cerrada.');
+                }
+
+                $esperado = $this->caja->resumen($bloqueada)['esperado'];
+
+                $bloqueada->update([
+                    'monto_cierre' => $datos['monto_cierre'],
+                    'monto_sistema' => $esperado,
+                    'cerrada_en' => now(),
+                ]);
+
+                return $esperado;
+            });
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         $diferencia = round($datos['monto_cierre'] - $esperado, 2);
 
