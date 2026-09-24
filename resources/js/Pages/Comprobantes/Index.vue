@@ -25,32 +25,34 @@ function fechaHora(c) {
 const buscar = ref(props.filtros.buscar ?? '')
 const tipo = ref(props.filtros.tipo ?? '')
 const estado = ref(props.filtros.estado ?? '')
+const sunat = ref(props.filtros.sunat ?? '')
 
 function aplicarFiltros() {
     router.get('/comprobantes', {
         buscar: buscar.value || undefined,
         tipo: tipo.value || undefined,
         estado: estado.value || undefined,
+        sunat: sunat.value || undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([tipo, estado], aplicarFiltros)
+watch([tipo, estado, sunat], aplicarFiltros)
 
 // ---- detalle expandible ----
 const expandido = ref(null)
 
 // ---- envio a SUNAT ----
-const esElectronico = (c) => ['01', '03'].includes(c.tipo_comprobante_codigo)
+const esElectronico = (c) => ['01', '03', '07'].includes(c.tipo_comprobante_codigo)
 const SUNAT_BADGES = {
     aceptado: ['Aceptado', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'],
     observado: ['Observado', 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'],
     rechazado: ['Rechazado', 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'],
     pendiente: ['Pendiente', 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'],
+    baja_pendiente: ['Baja en proceso', 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'],
     baja: ['Dada de baja', 'bg-stone-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'],
 }
-const bajaPendiente = (c) =>
-    c.estado === 'anulado' && c.sunat?.ticket && c.sunat.estado !== 'baja'
+const bajaPendiente = (c) => c.sunat?.estado === 'baja_pendiente'
 const badgeSunat = (c) => SUNAT_BADGES[c.sunat?.estado ?? 'pendiente'] ?? SUNAT_BADGES.pendiente
 const puedeReenviar = (c) =>
     esElectronico(c) && c.estado === 'emitido' && ['pendiente', 'rechazado', undefined].includes(c.sunat?.estado)
@@ -155,6 +157,15 @@ const claseInput =
                 <option value="">Todos los estados</option>
                 <option value="emitido">Emitidos</option>
                 <option value="anulado">Anulados</option>
+            </select>
+            <select v-model="sunat" :class="claseInput">
+                <option value="">SUNAT: todos</option>
+                <option value="pendiente">Sin aceptar (pendientes y rechazados)</option>
+                <option value="aceptado">Aceptados</option>
+                <option value="observado">Observados</option>
+                <option value="rechazado">Rechazados</option>
+                <option value="baja_pendiente">Baja en proceso</option>
+                <option value="baja">Dados de baja</option>
             </select>
         </div>
 
@@ -268,7 +279,7 @@ const claseInput =
                                             N. crédito
                                         </button>
                                         <button
-                                            v-if="esAdmin && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07'"
+                                            v-if="esAdmin && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                                             @click.stop="abrirAnulacion(c)"
                                         >
@@ -341,6 +352,16 @@ const claseInput =
                                                     </div>
                                                     <div class="flex items-center gap-2">
                                                         <span class="font-semibold text-amber-700 dark:text-amber-400">-{{ soles(n.total) }}</span>
+                                                        <button
+                                                            v-if="['pendiente', 'rechazado', undefined].includes(n.sunat?.estado)"
+                                                            :disabled="enviandoSunat === n.id"
+                                                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                                            title="Reenviar la nota de crédito a SUNAT"
+                                                            @click.stop="enviarSunat(n)"
+                                                        >
+                                                            <CloudUpload class="size-3.5" />
+                                                            {{ enviandoSunat === n.id ? 'Enviando...' : 'SUNAT' }}
+                                                        </button>
                                                         <a :href="`/comprobantes/${n.id}/ticket`" target="_blank" rel="noopener" title="Ticket" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
                                                             <Printer class="size-3.5" />
                                                         </a>

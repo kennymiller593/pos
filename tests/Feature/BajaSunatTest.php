@@ -139,9 +139,11 @@ class BajaSunatTest extends TestCase
         $this->assertSame('anulado', $comprobante->fresh()->estado);
     }
 
-    public function test_baja_en_proceso_se_confirma_despues_con_el_boton_de_consulta(): void
+    public function test_baja_en_proceso_no_anula_hasta_que_sunat_la_confirme(): void
     {
         $comprobante = $this->vender('03');
+        $producto = $comprobante->detalles()->first()->producto;
+        $this->assertSame(9.0, $this->stockDe($producto));
 
         $this->enviador->respuestaBaja = new RespuestaSunat(
             aceptado: false, codigo: '98', mensaje: 'En proceso', ticket: 'TICKET-2', enProceso: true,
@@ -151,23 +153,93 @@ class BajaSunatTest extends TestCase
             aceptado: false, codigo: '98', mensaje: 'Procesando', ticket: 'TICKET-2', enProceso: true,
         );
 
-        $this->anular($comprobante)->assertSessionHas('success');
+        $this->anular($comprobante)->assertSessionHas('success', fn ($m) => str_contains($m, 'procesando'));
 
+        // el comprobante sigue vigente: ni stock repuesto ni pagos retirados
         $registro = ComprobanteSunat::find($comprobante->id);
-        $this->assertSame('aceptado', $registro->estado); // sigue aceptado hasta confirmar
+        $this->assertSame('baja_pendiente', $registro->estado);
         $this->assertSame('TICKET-2', $registro->ticket);
-        $this->assertSame('anulado', $comprobante->fresh()->estado);
+        $this->assertSame('emitido', $comprobante->fresh()->estado);
+        $this->assertSame(9.0, $this->stockDe($producto));
+        $this->assertSame(1, $comprobante->pagos()->count());
 
-        // mas tarde SUNAT confirma y la consulta manual lo refleja
+        // un segundo intento de anular no manda otra baja: solo vuelve a consultar
+        $this->anular($comprobante);
+        $this->assertSame(2, $this->enviador->consultasTicket);
+
+        // mas tarde SUNAT confirma y la consulta manual completa la anulacion
         $this->enviador->respuestaTicket = new RespuestaSunat(
             aceptado: true, codigo: '0', mensaje: 'Baja aceptada', ticket: 'TICKET-2',
         );
 
         $this->actingAs($this->admin)
             ->post("/comprobantes/{$comprobante->id}/sunat")
-            ->assertSessionHas('success');
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'confirmó'));
 
         $this->assertSame('baja', $registro->fresh()->estado);
+        $comprobante->refresh();
+        $this->assertSame('anulado', $comprobante->estado);
+        $this->assertSame('error de digitación', $comprobante->motivo_anulacion);
+        $this->assertSame($this->admin->id, $comprobante->anulado_por);
+        $this->assertSame(10.0, $this->stockDe($producto));
+        $this->assertSame(0, $comprobante->pagos()->count());
+    }
+
+    public function test_si_sunat_rechaza_la_baja_el_comprobante_sigue_vigente(): void
+    {
+        $comprobante = $this->vender('03');
+
+        $this->enviador->respuestaBaja = new RespuestaSunat(
+            aceptado: false, codigo: '98', mensaje: 'En proceso', ticket: 'TICKET-3', enProceso: true,
+        );
+        // el ticket vuelve procesado con errores (statusCode 99 + CDR de rechazo)
+        $this->enviador->respuestaTicket = new RespuestaSunat(
+            aceptado: false, codigo: '2320', mensaje: 'El comprobante no existe', ticket: 'TICKET-3',
+        );
+
+        $this->anular($comprobante)->assertSessionHas('error', fn ($m) => str_contains($m, '2320'));
+
+        $registro = ComprobanteSunat::find($comprobante->id);
+        $this->assertSame('aceptado', $registro->estado);
+        $this->assertNull($registro->ticket);
+        $this->assertSame('emitido', $comprobante->fresh()->estado);
+    }
+
+    public function test_el_comando_programado_confirma_las_bajas_en_proceso(): void
+    {
+        $comprobante = $this->vender('03');
+
+        $this->enviador->respuestaBaja = new RespuestaSunat(
+            aceptado: false, codigo: '98', mensaje: 'En proceso', ticket: 'TICKET-4', enProceso: true,
+        );
+        $this->enviador->respuestaTicket = new RespuestaSunat(
+            aceptado: false, codigo: '98', mensaje: 'Procesando', ticket: 'TICKET-4', enProceso: true,
+        );
+        $this->anular($comprobante);
+        $this->assertSame('emitido', $comprobante->fresh()->estado);
+
+        $this->enviador->respuestaTicket = new RespuestaSunat(
+            aceptado: true, codigo: '0', mensaje: 'Baja aceptada', ticket: 'TICKET-4',
+        );
+
+        $this->artisan('sunat:sincronizar')->assertSuccessful();
+
+        $this->assertSame('baja', ComprobanteSunat::find($comprobante->id)->estado);
+        $this->assertSame('anulado', $comprobante->fresh()->estado);
+    }
+
+    public function test_no_se_anula_un_comprobante_con_notas_de_credito(): void
+    {
+        $comprobante = $this->vender('03');
+
+        $this->actingAs($this->admin)
+            ->post("/comprobantes/{$comprobante->id}/nota-credito", ['motivo' => '06'])
+            ->assertSessionHas('success');
+
+        $this->anular($comprobante)->assertSessionHas('error', fn ($m) => str_contains($m, 'notas de crédito'));
+
+        $this->assertSame('emitido', $comprobante->fresh()->estado);
+        $this->assertNull($this->enviador->ultimaBaja);
     }
 
     public function test_pasados_siete_dias_la_anulacion_se_bloquea(): void

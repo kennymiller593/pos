@@ -24,6 +24,8 @@ use Greenter\Model\Summary\Summary;
 use Greenter\Model\Summary\SummaryDetail;
 use Greenter\Model\Voided\Voided;
 use Greenter\Model\Voided\VoidedDetail;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class SunatService
@@ -39,37 +41,49 @@ class SunatService
      */
     public function emitir(Comprobante $comprobante): ComprobanteSunat
     {
-        $registro = ComprobanteSunat::firstOrNew(['comprobante_id' => $comprobante->id]);
+        // el envio tras la venta, el boton de reenvio y el comando programado
+        // no deben mandar el mismo comprobante a la vez
+        $lock = Cache::lock("sunat:emitir:{$comprobante->id}", 120);
 
-        // un comprobante ya aceptado no debe reenviarse
-        if (in_array($registro->estado, ['aceptado', 'observado'], true)) {
-            return $registro;
+        if (! $lock->get()) {
+            return ComprobanteSunat::firstOrNew(['comprobante_id' => $comprobante->id]);
         }
-
-        $registro->intentos = (int) ($registro->intentos ?? 0) + 1;
-        $registro->enviado_en = now();
 
         try {
-            $documento = $comprobante->tipo_comprobante_codigo === '07'
-                ? $this->construirNote($comprobante)
-                : $this->construirInvoice($comprobante);
+            $registro = ComprobanteSunat::firstOrNew(['comprobante_id' => $comprobante->id]);
 
-            $respuesta = $this->enviador->enviar($comprobante->empresa, $documento);
-        } catch (\Throwable $e) {
-            report($e);
+            // un comprobante ya aceptado (o en baja) no debe reenviarse
+            if (in_array($registro->estado, ['aceptado', 'observado', 'baja_pendiente', 'baja'], true)) {
+                return $registro;
+            }
 
-            $registro->estado = 'pendiente';
-            $registro->mensaje_sunat = 'No se pudo enviar: ' . $e->getMessage();
-            $registro->save();
+            $registro->intentos = (int) ($registro->intentos ?? 0) + 1;
+            $registro->enviado_en = now();
 
-            $this->reflejarEnComprobante($comprobante, $registro, null);
+            try {
+                $documento = $comprobante->tipo_comprobante_codigo === '07'
+                    ? $this->construirNote($comprobante)
+                    : $this->construirInvoice($comprobante);
+
+                $respuesta = $this->enviador->enviar($comprobante->empresa, $documento);
+            } catch (\Throwable $e) {
+                report($e);
+
+                $registro->estado = 'pendiente';
+                $registro->mensaje_sunat = 'No se pudo enviar: ' . $e->getMessage();
+                $registro->save();
+
+                $this->reflejarEnComprobante($comprobante, $registro, null);
+
+                return $registro;
+            }
+
+            $this->guardarResultado($comprobante, $registro, $respuesta);
 
             return $registro;
+        } finally {
+            $lock->release();
         }
-
-        $this->guardarResultado($comprobante, $registro, $respuesta);
-
-        return $registro;
     }
 
     /** Arma el documento UBL (boleta 03 / factura 01) desde el comprobante guardado. */
@@ -196,14 +210,23 @@ class SunatService
     /**
      * Comunica a SUNAT la baja de un comprobante ya aceptado: RA para
      * facturas, resumen diario con condición 3 para boletas. Lanza
-     * ErrorDeNegocio si la baja no procede o SUNAT no la recibe, para que
-     * la anulación interna no continúe.
+     * ErrorDeNegocio si la baja no procede, SUNAT no la recibe o la rechaza,
+     * para que la anulación interna no continúe.
+     *
+     * Si SUNAT la recibe pero aún la procesa, el registro queda en
+     * 'baja_pendiente' y la anulación interna se completa al confirmarla
+     * (ver VentaService::confirmarBajaPendiente).
      *
      * @throws ErrorDeNegocio
      */
-    public function solicitarBaja(Comprobante $comprobante, string $motivo): ComprobanteSunat
+    public function solicitarBaja(Comprobante $comprobante, string $motivo, ?string $usuarioId = null): ComprobanteSunat
     {
         $registro = ComprobanteSunat::firstOrNew(['comprobante_id' => $comprobante->id]);
+
+        // ya hay una baja en camino: solo cabe volver a consultarla
+        if ($registro->estado === 'baja_pendiente') {
+            return $this->consultarBaja($comprobante);
+        }
 
         // sin aceptacion previa no hay nada que comunicar (y una baja no se repite)
         if (! in_array($registro->estado, ['aceptado', 'observado'], true)) {
@@ -219,54 +242,78 @@ class SunatService
         }
 
         $comprobante->loadMissing(['empresa', 'sucursal']);
-        $esFactura = $comprobante->tipo_comprobante_codigo === '01';
-        $correlativo = $this->correlativoDeBajaDelDia($comprobante->empresa_id);
 
-        $documento = $esFactura
-            ? $this->construirComunicacionDeBaja($comprobante, $correlativo, $motivo)
-            : $this->construirResumenDeBaja($comprobante, $correlativo);
+        // el correlativo diario de RA/RC se toma bajo lock para que dos bajas
+        // simultaneas de la misma empresa no repitan numero
+        $lock = Cache::lock("sunat:baja:{$comprobante->empresa_id}", 60);
 
         try {
-            $respuesta = $this->enviador->enviarBaja($comprobante->empresa, $documento);
-        } catch (\Throwable $e) {
-            report($e);
-
-            throw new ErrorDeNegocio('No se pudo comunicar la baja a SUNAT: ' . $e->getMessage());
+            $lock->block(15);
+        } catch (LockTimeoutException) {
+            throw new ErrorDeNegocio('Hay otra baja en curso para esta empresa. Intenta de nuevo en unos segundos.');
         }
 
-        if (! $respuesta->enProceso) {
-            throw new ErrorDeNegocio("SUNAT no aceptó la comunicación de baja: [{$respuesta->codigo}] {$respuesta->mensaje}");
+        try {
+            $esFactura = $comprobante->tipo_comprobante_codigo === '01';
+            $correlativo = $this->correlativoDeBajaDelDia($comprobante->empresa_id);
+
+            $documento = $esFactura
+                ? $this->construirComunicacionDeBaja($comprobante, $correlativo, $motivo)
+                : $this->construirResumenDeBaja($comprobante, $correlativo);
+
+            try {
+                $respuesta = $this->enviador->enviarBaja($comprobante->empresa, $documento);
+            } catch (\Throwable $e) {
+                report($e);
+
+                throw new ErrorDeNegocio('No se pudo comunicar la baja a SUNAT: ' . $e->getMessage());
+            }
+
+            if (! $respuesta->enProceso) {
+                throw new ErrorDeNegocio("SUNAT no aceptó la comunicación de baja: [{$respuesta->codigo}] {$respuesta->mensaje}");
+            }
+
+            $registro->estado = 'baja_pendiente';
+            $registro->ticket = $respuesta->ticket;
+            $registro->mensaje_sunat = 'Baja en proceso (ticket ' . $respuesta->ticket . ').';
+            $registro->save();
+
+            $comprobante->forceFill([
+                'sunat_ticket' => $respuesta->ticket,
+                'sunat_respuesta' => array_merge((array) $comprobante->sunat_respuesta, [
+                    'baja' => [
+                        'fecha' => now()->format('Y-m-d'),
+                        'correlativo' => $correlativo,
+                        'motivo' => $motivo,
+                        'ticket' => $respuesta->ticket,
+                        'usuario_id' => $usuarioId,
+                    ],
+                ]),
+            ])->save();
+        } finally {
+            $lock->release();
         }
-
-        $registro->ticket = $respuesta->ticket;
-        $registro->mensaje_sunat = 'Baja en proceso (ticket ' . $respuesta->ticket . ').';
-        $registro->save();
-
-        $comprobante->forceFill([
-            'sunat_ticket' => $respuesta->ticket,
-            'sunat_respuesta' => array_merge((array) $comprobante->sunat_respuesta, [
-                'baja' => [
-                    'fecha' => now()->format('Y-m-d'),
-                    'correlativo' => $correlativo,
-                    'motivo' => $motivo,
-                    'ticket' => $respuesta->ticket,
-                ],
-            ]),
-        ])->save();
 
         // SUNAT suele resolver el ticket en segundos: consultamos de una vez
-        return $this->consultarBaja($comprobante);
+        $registro = $this->consultarBaja($comprobante);
+
+        if ($registro->estado !== 'baja' && $registro->estado !== 'baja_pendiente') {
+            throw new ErrorDeNegocio($registro->mensaje_sunat ?: 'SUNAT rechazó la baja del comprobante.');
+        }
+
+        return $registro;
     }
 
     /**
-     * Consulta el ticket de una baja en proceso y actualiza el estado.
-     * Si SUNAT aún la procesa, el registro queda igual para reconsultar.
+     * Consulta el ticket de una baja en proceso y actualiza el estado:
+     * confirmada → 'baja'; rechazada → vuelve a 'aceptado' (sigue vigente
+     * ante SUNAT); aún en proceso o sin respuesta → sigue 'baja_pendiente'.
      */
     public function consultarBaja(Comprobante $comprobante): ComprobanteSunat
     {
         $registro = ComprobanteSunat::firstOrNew(['comprobante_id' => $comprobante->id]);
 
-        if ($registro->estado === 'baja' || blank($registro->ticket)) {
+        if ($registro->estado !== 'baja_pendiente' || blank($registro->ticket)) {
             return $registro;
         }
 
@@ -280,8 +327,10 @@ class SunatService
             return $registro;
         }
 
-        if ($respuesta->enProceso) {
-            $registro->mensaje_sunat = "Baja en proceso (ticket {$registro->ticket}).";
+        if ($respuesta->enProceso || $respuesta->errorComunicacion) {
+            $registro->mensaje_sunat = $respuesta->enProceso
+                ? "Baja en proceso (ticket {$registro->ticket})."
+                : "Baja en proceso (ticket {$registro->ticket}); no se pudo consultar: [{$respuesta->codigo}] {$respuesta->mensaje}";
             $registro->save();
 
             return $registro;
@@ -298,8 +347,10 @@ class SunatService
             $registro->estado = 'baja';
             $registro->mensaje_sunat = trim("[{$respuesta->codigo}] {$respuesta->mensaje}");
         } else {
-            // SUNAT rechazo la baja: el comprobante sigue vigente ante SUNAT
-            $registro->mensaje_sunat = "La baja fue rechazada: [{$respuesta->codigo}] {$respuesta->mensaje}";
+            // SUNAT rechazo la baja: el comprobante sigue vigente y aceptado ante SUNAT
+            $registro->estado = 'aceptado';
+            $registro->ticket = null;
+            $registro->mensaje_sunat = "SUNAT rechazó la baja: [{$respuesta->codigo}] {$respuesta->mensaje}";
         }
 
         $registro->save();
@@ -437,8 +488,8 @@ class SunatService
     private function reflejarEnComprobante(Comprobante $comprobante, ComprobanteSunat $registro, ?RespuestaSunat $respuesta): void
     {
         $comprobante->forceFill([
-            // el CHECK de comprobantes no admite 'baja'; los demas estados coinciden
-            'estado_sunat' => $registro->estado === 'baja' ? 'aceptado' : $registro->estado,
+            // el CHECK de comprobantes no admite los estados de baja; los demas coinciden
+            'estado_sunat' => in_array($registro->estado, ['baja', 'baja_pendiente'], true) ? 'aceptado' : $registro->estado,
             'hash_cpe' => $registro->hash_cpe,
             'sunat_respuesta' => $respuesta ? [
                 'codigo' => $respuesta->codigo,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CapaCosto;
+use App\Models\Comprobante;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
 use App\Models\Producto;
@@ -97,6 +98,30 @@ class NotificacionController extends Controller
                     . '.',
                 'cantidad' => (int) $porPagar->cuentas,
                 'url' => '/cuentas-por-pagar',
+            ];
+        }
+
+        // comprobantes electronicos que SUNAT no ha aceptado: los pendientes con mas de
+        // 24 h corren riesgo de vencer el plazo legal de envio; los rechazados exigen accion
+        $sunat = Comprobante::query()
+            ->where('empresa_id', $empresaId)
+            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->whereIn('tipo_comprobante_codigo', ['01', '03', '07'])
+            ->where('estado', 'emitido')
+            ->where('creado_en', '<', now()->subDay())
+            ->where(fn ($q) => $q
+                ->whereDoesntHave('sunat')
+                ->orWhereHas('sunat', fn ($s) => $s->whereIn('estado', ['pendiente', 'rechazado'])))
+            ->count();
+
+        if ($sunat > 0) {
+            $items[] = [
+                'clave' => 'sunat_pendientes',
+                'titulo' => 'Comprobantes sin aceptar en SUNAT',
+                'detalle' => ($sunat === 1 ? '1 comprobante lleva' : "{$sunat} comprobantes llevan")
+                    . ' más de un día sin ser aceptado' . ($sunat === 1 ? '' : 's') . ' por SUNAT.',
+                'cantidad' => $sunat,
+                'url' => '/comprobantes?sunat=pendiente',
             ];
         }
 

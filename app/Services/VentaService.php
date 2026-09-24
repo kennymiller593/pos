@@ -7,6 +7,7 @@ use App\Models\AperturaCaja;
 use App\Models\Auditoria;
 use App\Models\Cliente;
 use App\Models\Comprobante;
+use App\Models\ComprobanteSunat;
 use App\Models\CuentaPorCobrar;
 use App\Models\DetalleConsumoCapa;
 use App\Models\Pago;
@@ -143,9 +144,51 @@ class VentaService
     /**
      * Anula un comprobante: repone stock y capas, retira pagos y elimina la deuda si la hubiera.
      *
+     * Devuelve 'anulado' si la anulación se completó, o 'baja_pendiente' si SUNAT
+     * recibió la baja pero aún la procesa: en ese caso el comprobante sigue
+     * emitido y la anulación interna se completa al confirmarla.
+     *
      * @throws ErrorDeNegocio
      */
-    public function anular(Comprobante $comprobante, Usuario $usuario, string $motivo): void
+    public function anular(Comprobante $comprobante, Usuario $usuario, string $motivo): string
+    {
+        $this->validarAnulable($comprobante);
+
+        // un comprobante electronico ya aceptado exige comunicar la baja a SUNAT
+        // antes de anularlo internamente (si SUNAT no la recibe o la rechaza, se aborta)
+        if (in_array($comprobante->tipo_comprobante_codigo, ['01', '03'], true)) {
+            $registro = $this->sunat->solicitarBaja($comprobante, $motivo, $usuario->id);
+
+            if ($registro->estado === 'baja_pendiente') {
+                return 'baja_pendiente';
+            }
+        }
+
+        $this->completarAnulacion($comprobante, $usuario, $motivo);
+
+        return 'anulado';
+    }
+
+    /**
+     * Vuelve a consultar una baja en proceso y, si SUNAT la confirmó,
+     * completa la anulación interna con el motivo y el usuario que la pidieron.
+     */
+    public function confirmarBajaPendiente(Comprobante $comprobante): ComprobanteSunat
+    {
+        $registro = $this->sunat->consultarBaja($comprobante);
+
+        if ($registro->estado === 'baja' && $comprobante->fresh()->estado === 'emitido') {
+            $baja = (array) ($comprobante->sunat_respuesta['baja'] ?? []);
+            $usuario = Usuario::find($baja['usuario_id'] ?? null) ?? $comprobante->usuario;
+
+            $this->completarAnulacion($comprobante, $usuario, (string) ($baja['motivo'] ?? 'Baja confirmada por SUNAT'));
+        }
+
+        return $registro;
+    }
+
+    /** @throws ErrorDeNegocio */
+    private function validarAnulable(Comprobante $comprobante): void
     {
         if ($comprobante->estado !== 'emitido') {
             throw new ErrorDeNegocio('Este comprobante ya está anulado.');
@@ -160,13 +203,23 @@ class VentaService
             throw new ErrorDeNegocio('No se puede anular: la venta al crédito ya tiene cobros registrados.');
         }
 
-        // un comprobante electronico ya aceptado exige comunicar la baja a SUNAT
-        // antes de anularlo internamente (si SUNAT no la recibe, se aborta)
-        if (in_array($comprobante->tipo_comprobante_codigo, ['01', '03'], true)) {
-            $this->sunat->solicitarBaja($comprobante, $motivo);
+        // lo devuelto por una nota de credito ya repuso stock y dinero: anular encima lo duplicaria
+        if ($comprobante->notas()->where('estado', 'emitido')->exists()) {
+            throw new ErrorDeNegocio('No se puede anular: este comprobante ya tiene notas de crédito emitidas.');
         }
+    }
 
+    /** Parte interna de la anulación: stock, capas, pagos, deuda y estado. */
+    private function completarAnulacion(Comprobante $comprobante, Usuario $usuario, string $motivo): void
+    {
         DB::transaction(function () use ($comprobante, $usuario, $motivo) {
+            // se vuelve a leer con bloqueo: dos anulaciones simultaneas no deben reponer el stock dos veces
+            $bloqueado = Comprobante::lockForUpdate()->find($comprobante->id);
+
+            if (! $bloqueado || $bloqueado->estado !== 'emitido') {
+                throw new ErrorDeNegocio('Este comprobante ya está anulado.');
+            }
+
             $comprobante->load(['detalles.presentacion', 'detalles.producto']);
 
             foreach ($comprobante->detalles as $detalle) {

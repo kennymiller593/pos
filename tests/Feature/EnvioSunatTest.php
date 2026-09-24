@@ -186,6 +186,50 @@ class EnvioSunatTest extends TestCase
         $this->actingAs($this->admin)->get("/comprobantes/{$comprobante->id}/cdr")->assertNotFound();
     }
 
+    public function test_el_comando_programado_reenvia_los_pendientes_con_espera_entre_intentos(): void
+    {
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: false, codigo: '', mensaje: 'SUNAT caído', errorComunicacion: true,
+        );
+
+        $comprobante = $this->venderBoleta();
+        $this->assertSame(1, (int) ComprobanteSunat::find($comprobante->id)->intentos);
+
+        // recien enviado: el comando aun no lo reintenta (espera 5 min tras el primer intento)
+        // (se mira el registro propio porque la BD puede tener otros pendientes de desarrollo)
+        $this->artisan('sunat:sincronizar')->assertSuccessful();
+        $this->assertSame(1, (int) ComprobanteSunat::find($comprobante->id)->intentos);
+        $this->assertSame('pendiente', ComprobanteSunat::find($comprobante->id)->estado);
+
+        // pasada la espera, lo reenvia y queda aceptado
+        ComprobanteSunat::where('comprobante_id', $comprobante->id)->update(['enviado_en' => now()->subMinutes(6)]);
+        $this->enviador->respuesta = new RespuestaSunat(aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<x/>', hash: 'H');
+
+        $this->artisan('sunat:sincronizar')->assertSuccessful();
+
+        $registro = ComprobanteSunat::find($comprobante->id);
+        $this->assertSame(2, (int) $registro->intentos);
+        $this->assertSame('aceptado', $registro->estado);
+    }
+
+    public function test_el_reenvio_no_exige_tener_la_facturacion_activa(): void
+    {
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: false, codigo: '', mensaje: 'sin conexión', errorComunicacion: true,
+        );
+        $comprobante = $this->venderBoleta();
+
+        // la empresa desactiva la facturacion, pero lo ya emitido debe llegar a SUNAT igual
+        $this->empresa->update(['facturacion_electronica' => false]);
+        $this->enviador->respuesta = new RespuestaSunat(aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<x/>', hash: 'H');
+
+        $this->actingAs($this->admin)
+            ->post("/comprobantes/{$comprobante->id}/sunat")
+            ->assertSessionHas('success');
+
+        $this->assertSame('aceptado', ComprobanteSunat::find($comprobante->id)->estado);
+    }
+
     public function test_un_comprobante_aceptado_no_se_reenvia(): void
     {
         $this->enviador->respuesta = new RespuestaSunat(aceptado: true, codigo: '0', mensaje: 'ok', xml: '<x/>', hash: 'H');

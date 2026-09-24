@@ -28,7 +28,7 @@ class ComprobanteController extends Controller
 
     public function index(Request $request): Response
     {
-        $filtros = $request->only(['buscar', 'tipo', 'estado']);
+        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
 
         $comprobantes = Comprobante::query()
             ->where('empresa_id', $request->user()->empresa_id)
@@ -58,6 +58,11 @@ class ComprobanteController extends Controller
             })
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('tipo_comprobante_codigo', $tipo))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('estado', $estado))
+            // "pendiente" agrupa lo que SUNAT aun no acepto: sin envio, pendiente o rechazado
+            ->when($filtros['sunat'] ?? null, fn ($q, $sunat) => $sunat === 'pendiente'
+                ? $q->whereIn('tipo_comprobante_codigo', ['01', '03'])
+                    ->where(fn ($w) => $w->whereDoesntHave('sunat')->orWhereHas('sunat', fn ($s) => $s->whereIn('estado', ['pendiente', 'rechazado'])))
+                : $q->whereHas('sunat', fn ($s) => $s->where('estado', $sunat)))
             ->latest('creado_en')
             ->paginate(15)
             ->withQueryString();
@@ -208,37 +213,39 @@ class ComprobanteController extends Controller
         return Storage::download($ruta, basename($ruta));
     }
 
-    /** Envía (o reenvía) a SUNAT un comprobante pendiente o rechazado. */
+    /**
+     * Envía (o reenvía) a SUNAT un comprobante pendiente o rechazado, incluidas
+     * las notas de crédito. Sobre una baja en proceso, vuelve a consultarla.
+     */
     public function enviarSunat(Request $request, Comprobante $comprobante, SunatService $sunat): RedirectResponse
     {
         abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
 
-        if (! in_array($comprobante->tipo_comprobante_codigo, ['01', '03'], true)) {
+        if (! in_array($comprobante->tipo_comprobante_codigo, ['01', '03', '07'], true)) {
             return back()->with('error', 'Este tipo de comprobante no se envía a SUNAT.');
         }
 
-        // sobre un anulado lo unico que procede es consultar su baja pendiente
-        if ($comprobante->estado !== 'emitido') {
-            $registro = $comprobante->sunat;
-
-            if (! $registro?->ticket || $registro->estado === 'baja') {
-                return back()->with('error', 'No se puede enviar a SUNAT un comprobante anulado.');
-            }
-
-            $registro = $sunat->consultarBaja($comprobante);
-            $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
-
-            return $registro->estado === 'baja'
-                ? back()->with('success', "SUNAT confirmó la baja del comprobante {$numero}.")
-                : back()->with('error', "La baja de {$numero} aún no se confirma: {$registro->mensaje_sunat}");
-        }
-
-        if (! $request->user()->empresa->facturacion_electronica) {
-            return back()->with('error', 'Activa la facturación electrónica en Empresa antes de enviar.');
-        }
-
-        $registro = $sunat->emitir($comprobante);
         $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+
+        // con una baja en camino lo unico que procede es consultarla; si SUNAT la
+        // confirmo, aqui mismo se completa la anulacion interna
+        if ($comprobante->sunat?->estado === 'baja_pendiente') {
+            $registro = $this->ventas->confirmarBajaPendiente($comprobante);
+
+            return match ($registro->estado) {
+                'baja' => back()->with('success', "SUNAT confirmó la baja de {$numero}. Comprobante anulado y stock repuesto."),
+                'baja_pendiente' => back()->with('error', "La baja de {$numero} aún no se confirma: {$registro->mensaje_sunat}"),
+                default => back()->with('error', "{$registro->mensaje_sunat} El comprobante sigue vigente."),
+            };
+        }
+
+        if ($comprobante->estado !== 'emitido') {
+            return back()->with('error', 'No se puede enviar a SUNAT un comprobante anulado.');
+        }
+
+        // un comprobante electronico ya emitido debe llegar a SUNAT aunque la
+        // empresa haya desactivado la facturacion despues: la obligacion sigue
+        $registro = $sunat->emitir($comprobante);
 
         return match ($registro->estado) {
             'aceptado' => back()->with('success', "SUNAT aceptó el comprobante {$numero}."),
@@ -307,7 +314,7 @@ class ComprobanteController extends Controller
         ]);
 
         try {
-            $this->ventas->anular($comprobante, $usuario, $datos['motivo']);
+            $resultado = $this->ventas->anular($comprobante, $usuario, $datos['motivo']);
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
@@ -317,6 +324,10 @@ class ComprobanteController extends Controller
         }
 
         $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+
+        if ($resultado === 'baja_pendiente') {
+            return back()->with('success', "SUNAT recibió la baja de {$numero} y la está procesando. El comprobante se anulará solo cuando la confirme (o con el botón \"Consultar baja\").");
+        }
 
         return back()->with('success', "Comprobante {$numero} anulado. Stock repuesto.");
     }

@@ -113,6 +113,31 @@ class NotaCreditoTest extends TestCase
         $this->assertSame('aceptado', ComprobanteSunat::find($nota->id)->estado);
     }
 
+    public function test_una_nota_pendiente_se_puede_reenviar_a_sunat(): void
+    {
+        $original = $this->venderBoleta(cantidad: 2);
+
+        // la nota no llega a SUNAT en el momento
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: false, codigo: '', mensaje: 'sin conexión', errorComunicacion: true,
+        );
+        $this->emitirNota($original, ['motivo' => '06'])->assertSessionHas('success');
+
+        $nota = Comprobante::where('comprobante_ref_id', $original->id)->firstOrFail();
+        $this->assertSame('pendiente', ComprobanteSunat::find($nota->id)->estado);
+
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<xml/>', hash: 'HASH-NC',
+        );
+
+        $this->actingAs($this->admin)
+            ->post("/comprobantes/{$nota->id}/sunat")
+            ->assertSessionHas('success');
+
+        $this->assertSame('aceptado', ComprobanteSunat::find($nota->id)->estado);
+        $this->assertInstanceOf(Note::class, $this->enviador->ultimoInvoice);
+    }
+
     public function test_nota_parcial_acredita_solo_lo_devuelto_y_respeta_el_tope(): void
     {
         $original = $this->venderBoleta(cantidad: 2);
