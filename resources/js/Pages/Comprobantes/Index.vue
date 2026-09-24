@@ -20,6 +20,9 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useImpresion } from '@/composables/impresion'
+
+const { imprimirTicket } = useImpresion()
 
 const props = defineProps({
     comprobantes: { type: Object, required: true },
@@ -319,15 +322,14 @@ const claseInput =
                 <span>{{ ticketConversion.mensaje }}</span>
             </div>
             <div class="flex items-center gap-2">
-                <a
-                    :href="ticketConversion.ticket"
-                    target="_blank"
-                    rel="noopener"
+                <button
+                    type="button"
                     class="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                    @click="imprimirTicket(ticketConversion.ticket)"
                 >
                     <Printer class="size-4" />
                     Imprimir ticket
-                </a>
+                </button>
                 <button
                     class="rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                     title="Cerrar"
@@ -408,16 +410,14 @@ const claseInput =
                                 <td class="px-3 py-3 text-neutral-600 dark:text-neutral-300">{{ c.usuario?.nombre_completo ?? '—' }}</td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center justify-end gap-1">
-                                        <a
-                                            :href="`/comprobantes/${c.id}/ticket`"
-                                            target="_blank"
-                                            rel="noopener"
+                                        <button
+                                            type="button"
                                             class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                                             title="Imprimir ticket"
-                                            @click.stop
+                                            @click.stop="imprimirTicket(`/comprobantes/${c.id}/ticket`)"
                                         >
                                             <Printer class="size-4" />
-                                        </a>
+                                        </button>
                                         <a
                                             :href="`/comprobantes/${c.id}/a4`"
                                             target="_blank"
@@ -575,9 +575,9 @@ const claseInput =
                                                             <CloudUpload class="size-3.5" />
                                                             {{ enviandoSunat === n.id ? 'Enviando...' : 'SUNAT' }}
                                                         </button>
-                                                        <a :href="`/comprobantes/${n.id}/ticket`" target="_blank" rel="noopener" title="Ticket" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
+                                                        <button type="button" title="Ticket" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400" @click.stop="imprimirTicket(`/comprobantes/${n.id}/ticket`)">
                                                             <Printer class="size-3.5" />
-                                                        </a>
+                                                        </button>
                                                         <a :href="`/comprobantes/${n.id}/a4`" target="_blank" rel="noopener" title="PDF A4" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
                                                             <FileText class="size-3.5" />
                                                         </a>

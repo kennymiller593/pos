@@ -5,6 +5,7 @@ import { StorageSerializers, useStorage, watchDebounced } from '@vueuse/core'
 import {
     Banknote,
     CheckCircle2,
+    CircleHelp,
     History,
     LoaderCircle,
     LockOpen,
@@ -23,6 +24,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useImpresion } from '@/composables/impresion'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
 
 const props = defineProps({
@@ -36,6 +38,8 @@ const props = defineProps({
 
 const page = usePage()
 const { puede } = usePermisos()
+const { modo: modoImpresion, imprimirTicket } = useImpresion()
+const ayudaImpresion = ref(false)
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
 // ================= catálogo =================
@@ -432,6 +436,15 @@ const ventaExitosa = ref(null) // { mensaje, ticket }
 const formCorreoVenta = useForm({ email: '', guardar_en_cliente: false })
 const mostrarCorreoVenta = ref(false)
 const correoVentaEnviado = ref(false)
+
+// En modo directa el ticket sale solo al registrar la venta (una vez por venta)
+let ticketAutoImpreso = null
+watch(ventaExitosa, (v) => {
+    if (!v?.ticket || modoImpresion.value !== 'directa') return
+    if (ticketAutoImpreso === v.ticket) return
+    ticketAutoImpreso = v.ticket
+    imprimirTicket(v.ticket)
+})
 
 function idComprobanteVenta() {
     // los ids son UUID
@@ -847,6 +860,39 @@ const claseInput =
                         <Banknote class="size-5" />
                         Cobrar
                     </button>
+
+                    <!-- Modo de impresión del ticket -->
+                    <div class="mt-3 flex items-center justify-between gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div
+                            class="flex items-center gap-2"
+                            title="Directa: imprime al instante en la impresora predeterminada (abre Chrome con --kiosk-printing para que no pida confirmación)"
+                        >
+                            <Printer class="size-3.5" />
+                            <span>Impresión</span>
+                            <div class="inline-flex rounded-lg border border-stone-200 p-0.5 dark:border-neutral-700">
+                                <button
+                                    v-for="op in [{ v: 'pdf', t: 'PDF' }, { v: 'directa', t: 'Directa' }]"
+                                    :key="op.v"
+                                    type="button"
+                                    class="rounded-md px-2 py-0.5 font-medium transition-colors"
+                                    :class="modoImpresion === op.v
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'text-neutral-600 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                    @click="modoImpresion = op.v"
+                                >
+                                    {{ op.t }}
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                            @click="ayudaImpresion = true"
+                        >
+                            <CircleHelp class="size-3.5" />
+                            ¿Cómo configurar?
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -863,16 +909,15 @@ const claseInput =
                     <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
 
                     <div class="mt-5 grid gap-2">
-                        <a
+                        <button
                             v-if="ventaExitosa.ticket"
-                            :href="ventaExitosa.ticket"
-                            target="_blank"
-                            rel="noopener"
+                            type="button"
                             class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                            @click="imprimirTicket(ventaExitosa.ticket)"
                         >
                             <Printer class="size-4" />
-                            Imprimir ticket
-                        </a>
+                            {{ modoImpresion === 'directa' ? 'Reimprimir ticket' : 'Imprimir ticket' }}
+                        </button>
                         <button
                             v-if="!mostrarCorreoVenta && !correoVentaEnviado"
                             type="button"
@@ -910,6 +955,46 @@ const claseInput =
                             @click="ventaExitosa = null"
                         >
                             Nueva venta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
+
+        <!-- ============ Modal ayuda impresión directa ============ -->
+        <Teleport to="body">
+            <div v-if="ayudaImpresion" class="fixed inset-0 z-50 grid place-items-center p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="ayudaImpresion = false" />
+                <div class="relative w-full max-w-lg rounded-2xl border border-stone-200 bg-white text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                    <div class="flex items-center justify-between border-b border-stone-200 px-6 py-4 dark:border-neutral-800">
+                        <div class="flex items-center gap-2">
+                            <Printer class="size-5 text-emerald-600 dark:text-emerald-400" />
+                            <h3 class="font-semibold tracking-tight">Impresión directa</h3>
+                        </div>
+                        <button
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            @click="ayudaImpresion = false"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+                    <ol class="list-decimal space-y-3 px-6 py-5 pl-11 text-sm text-neutral-700 dark:text-neutral-300">
+                        <li>Instala el driver de tu impresora térmica y márcala como predeterminada en Windows.</li>
+                        <li>
+                            Crea un acceso directo de Google Chrome y agrega al final del destino:
+                            <code class="rounded bg-stone-100 px-1 py-0.5 text-xs dark:bg-neutral-800">--kiosk-printing</code>
+                            (ejemplo:
+                            <code class="rounded bg-stone-100 px-1 py-0.5 text-xs break-all dark:bg-neutral-800">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</code>).
+                        </li>
+                        <li>Abre el POS desde ese acceso directo y elige "Directa": cada venta se imprime sin preguntar.</li>
+                        <li>En Sucursales → Cajas puedes elegir el ancho del papel (58 u 80 mm).</li>
+                    </ol>
+                    <div class="flex justify-end border-t border-stone-200 px-6 py-4 dark:border-neutral-800">
+                        <button
+                            class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                            @click="ayudaImpresion = false"
+                        >
+                            Entendido
                         </button>
                     </div>
                 </div>
