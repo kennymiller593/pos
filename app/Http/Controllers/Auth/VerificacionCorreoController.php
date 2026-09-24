@@ -34,7 +34,7 @@ class VerificacionCorreoController extends Controller
     public function aviso(Request $request): Response|RedirectResponse
     {
         if ($request->user()->email_verificado_en) {
-            return redirect('/');
+            return redirect('/dashboard');
         }
 
         return Inertia::render('Auth/VerificarCorreo', [
@@ -52,7 +52,7 @@ class VerificacionCorreoController extends Controller
             $usuario->forceFill(['email_verificado_en' => now()])->save();
         }
 
-        return redirect('/')->with('success', 'Correo confirmado. ¡Gracias!');
+        return redirect('/dashboard')->with('success', 'Correo confirmado. ¡Gracias!');
     }
 
     public function reenviar(Request $request): RedirectResponse
@@ -60,7 +60,7 @@ class VerificacionCorreoController extends Controller
         $usuario = $request->user();
 
         if ($usuario->email_verificado_en) {
-            return redirect('/');
+            return redirect('/dashboard');
         }
 
         self::enviar($usuario);

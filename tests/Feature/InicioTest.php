@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Comprobante;
 use App\Models\Sucursal;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\CreaEscenarioPos;
@@ -25,7 +26,7 @@ class InicioTest extends TestCase
         $this->abrirCaja(100);
         $this->venderContado($producto->presentaciones->first(), 2);
 
-        $respuesta = $this->actingAs($this->admin)->get('/');
+        $respuesta = $this->actingAs($this->admin)->get('/dashboard');
 
         $respuesta->assertOk()->assertInertia(fn (Assert $pagina) => $pagina
             ->component('Inicio')
@@ -43,7 +44,7 @@ class InicioTest extends TestCase
 
     public function test_el_dashboard_carga_sin_datos(): void
     {
-        $respuesta = $this->actingAs($this->admin)->get('/');
+        $respuesta = $this->actingAs($this->admin)->get('/dashboard');
 
         $respuesta->assertOk()->assertInertia(fn (Assert $pagina) => $pagina
             ->component('Inicio')
@@ -74,21 +75,21 @@ class InicioTest extends TestCase
         $this->actingAs($this->admin)
             ->post('/sucursal-activa', ['sucursal_id' => $secundaria->id])
             ->assertRedirect();
-        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $pagina) => $pagina
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina
             ->where('hoy.total', 0)
             ->where('hoy.tickets', 0)
         );
 
         // viendo la principal: la venta aparece
         $this->actingAs($this->admin)->post('/sucursal-activa', ['sucursal_id' => $this->sucursal->id]);
-        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $pagina) => $pagina
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina
             ->where('hoy.total', fn ($v) => abs($v - 7.0) < 0.001)
             ->where('hoy.tickets', 1)
         );
 
         // de vuelta a todas: tambien aparece
         $this->actingAs($this->admin)->post('/sucursal-activa', ['sucursal_id' => null]);
-        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $pagina) => $pagina
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina
             ->where('hoy.tickets', 1)
         );
     }
@@ -118,10 +119,10 @@ class InicioTest extends TestCase
         $this->abrirCaja(100);
         $this->venderContado($producto->presentaciones->first(), 1);
 
-        $comprobante = \App\Models\Comprobante::where('empresa_id', $this->empresa->id)->firstOrFail();
+        $comprobante = Comprobante::where('empresa_id', $this->empresa->id)->firstOrFail();
         $this->actingAs($this->admin)->post("/comprobantes/{$comprobante->id}/anular", ['motivo' => 'Prueba']);
 
-        $this->actingAs($this->admin)->get('/')->assertInertia(fn (Assert $pagina) => $pagina
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina
             ->where('hoy.total', 0)
             ->where('hoy.tickets', 0)
             ->has('topProductos', 0)

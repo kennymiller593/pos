@@ -33,7 +33,7 @@ const texto = computed(() => TEXTOS[props.estado] ?? { titulo: 'Algo salió mal'
                     Volver
                 </button>
                 <Link
-                    href="/"
+                    href="/dashboard"
                     class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
                     Ir al inicio

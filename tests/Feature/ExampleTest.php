@@ -6,9 +6,10 @@ use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    public function test_un_invitado_es_redirigido_al_login(): void
+    public function test_la_landing_es_publica_y_el_dashboard_pide_sesion(): void
     {
-        $this->get('/')->assertRedirect('/login');
+        $this->get('/')->assertOk();
+        $this->get('/dashboard')->assertRedirect('/login');
     }
 
     public function test_el_login_carga(): void

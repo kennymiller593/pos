@@ -153,13 +153,13 @@ class UsuarioTest extends TestCase
         $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(10000, 99999).'@test.local');
 
         // sesion activa funciona
-        $this->actingAs($cajero)->get('/')->assertOk();
+        $this->actingAs($cajero)->get('/dashboard')->assertOk();
 
         // lo desactivan
         $cajero->update(['activo' => false]);
 
         // su siguiente peticion lo saca del sistema
-        $this->actingAs($cajero)->get('/')->assertRedirect('/login');
+        $this->actingAs($cajero)->get('/dashboard')->assertRedirect('/login');
         $this->assertGuest();
     }
 

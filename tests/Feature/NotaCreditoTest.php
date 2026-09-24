@@ -275,7 +275,7 @@ class NotaCreditoTest extends TestCase
         $this->emitirNota($original, ['motivo' => '06'])->assertSessionHas('success');
 
         // el dashboard netea la venta con su devolucion
-        $this->actingAs($this->admin)->get('/')->assertInertia(fn ($pagina) => $pagina
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn ($pagina) => $pagina
             ->component('Inicio')
             ->where('hoy.total', fn ($v) => abs($v) < 0.001)
             ->where('hoy.tickets', 1)

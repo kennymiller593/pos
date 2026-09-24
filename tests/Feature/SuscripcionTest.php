@@ -47,7 +47,7 @@ class SuscripcionTest extends TestCase
             'email' => "dueno{$ruc}@test.local",
             'password' => 'secreto123',
             'password_confirmation' => 'secreto123',
-        ])->assertRedirect('/');
+        ])->assertRedirect('/dashboard');
 
         $empresa = Empresa::where('ruc', $ruc)->firstOrFail();
         $suscripcion = Suscripcion::where('empresa_id', $empresa->id)->firstOrFail();
@@ -56,7 +56,7 @@ class SuscripcionTest extends TestCase
         $this->assertSame('prueba', $suscripcion->plan->codigo);
         $this->assertSame(now()->addDays(SuscripcionService::DIAS_PRUEBA)->toDateString(), $suscripcion->fecha_fin->toDateString());
 
-        $this->get('/')->assertInertia(fn ($p) => $p
+        $this->get('/dashboard')->assertInertia(fn ($p) => $p
             ->where('auth.user.suscripcion.es_prueba', true)
             ->where('auth.user.suscripcion.vigente', true)
             ->where('auth.user.suscripcion.dias_restantes', SuscripcionService::DIAS_PRUEBA));
@@ -66,7 +66,7 @@ class SuscripcionTest extends TestCase
     {
         $this->vencerSuscripcion();
 
-        $this->actingAs($this->admin)->get('/')->assertRedirect('/suscripcion');
+        $this->actingAs($this->admin)->get('/dashboard')->assertRedirect('/suscripcion');
         $this->actingAs($this->admin)->get('/pos')->assertRedirect('/suscripcion');
         $this->actingAs($this->admin)->get('/suscripcion')->assertOk()
             ->assertInertia(fn ($p) => $p->where('suscripcion.estado', 'vencida')->where('suscripcion.vigente', false));
@@ -78,7 +78,7 @@ class SuscripcionTest extends TestCase
     {
         $this->vencerSuscripcion(diasAtras: 2);
 
-        $this->actingAs($this->admin)->get('/')->assertOk()
+        $this->actingAs($this->admin)->get('/dashboard')->assertOk()
             ->assertInertia(fn ($p) => $p->where('auth.user.suscripcion.estado', 'en_gracia'));
     }
 
@@ -86,7 +86,7 @@ class SuscripcionTest extends TestCase
     {
         $this->empresa->update(['activo' => false]);
 
-        $this->actingAs($this->admin)->get('/')->assertRedirect('/login');
+        $this->actingAs($this->admin)->get('/dashboard')->assertRedirect('/login');
         $this->assertGuest();
     }
 

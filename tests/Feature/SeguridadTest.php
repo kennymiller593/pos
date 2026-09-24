@@ -42,7 +42,7 @@ class SeguridadTest extends TestCase
 
         // otro correo desde la misma IP sigue pudiendo entrar
         $otro = $this->crearUsuario('cajero', 'otro'.random_int(10000, 99999).'@test.local');
-        $this->post('/login', ['email' => $otro->email, 'password' => 'secreto123'])->assertRedirect('/');
+        $this->post('/login', ['email' => $otro->email, 'password' => 'secreto123'])->assertRedirect('/dashboard');
     }
 
     public function test_la_contrasena_exige_letras_y_numeros_y_el_correo_se_guarda_en_minusculas(): void
@@ -61,13 +61,13 @@ class SeguridadTest extends TestCase
             ->assertSessionHasErrors('password');
 
         $this->post('/registro', [...$base, 'password' => 'clave2026', 'password_confirmation' => 'clave2026'])
-            ->assertRedirect('/');
+            ->assertRedirect('/dashboard');
 
         $this->assertSame(mb_strtolower("Dueno{$ruc}@Test.Local"), Usuario::where('email', mb_strtolower("Dueno{$ruc}@Test.Local"))->value('email'));
 
         // y al entrar da igual como se escriba
         $this->post('/logout');
-        $this->post('/login', ['email' => "DUENO{$ruc}@TEST.LOCAL", 'password' => 'clave2026'])->assertRedirect('/');
+        $this->post('/login', ['email' => "DUENO{$ruc}@TEST.LOCAL", 'password' => 'clave2026'])->assertRedirect('/dashboard');
     }
 
     public function test_los_mensajes_de_validacion_estan_en_espanol(): void

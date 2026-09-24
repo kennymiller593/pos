@@ -127,6 +127,6 @@ class RegistroController extends Controller
         // el correo se confirma con un enlace; hay 3 dias de gracia para usar el sistema mientras tanto
         VerificacionCorreoController::enviar($usuario);
 
-        return redirect('/')->with('success', '¡Bienvenido! Tu negocio quedó registrado. Te enviamos un correo para confirmar tu cuenta.');
+        return redirect('/dashboard')->with('success', '¡Bienvenido! Tu negocio quedó registrado. Te enviamos un correo para confirmar tu cuenta.');
     }
 }

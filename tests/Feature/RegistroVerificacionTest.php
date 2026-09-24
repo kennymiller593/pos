@@ -82,13 +82,13 @@ class RegistroVerificacionTest extends TestCase
         $this->conDecolecta();
         Http::fake(['api.decolecta.test/*' => fn () => throw new ConnectionException('timeout')]);
 
-        $this->post('/registro', $this->datos())->assertRedirect('/');
+        $this->post('/registro', $this->datos())->assertRedirect('/dashboard');
     }
 
     public function test_al_registrarse_se_envia_el_enlace_y_confirmarlo_marca_el_correo(): void
     {
         $datos = $this->datos();
-        $this->post('/registro', $datos)->assertRedirect('/');
+        $this->post('/registro', $datos)->assertRedirect('/dashboard');
 
         $usuario = Usuario::where('email', $datos['email'])->firstOrFail();
         $this->assertNull($usuario->email_verificado_en);
@@ -96,7 +96,7 @@ class RegistroVerificacionTest extends TestCase
         Mail::assertSent(VerificarCorreo::class, fn (VerificarCorreo $m) => $m->hasTo($datos['email']));
 
         // aun en gracia: se puede usar el sistema y el layout lo avisa
-        $this->get('/')->assertOk()->assertInertia(fn ($p) => $p
+        $this->get('/dashboard')->assertOk()->assertInertia(fn ($p) => $p
             ->where('auth.user.correo_verificado', false)
             ->where('auth.user.dias_para_verificar', 3));
 
@@ -106,18 +106,18 @@ class RegistroVerificacionTest extends TestCase
         $this->assertNull($usuario->fresh()->email_verificado_en);
 
         $this->get(URL::temporarySignedRoute('verificacion.verificar', now()->addDay(), ['usuario' => $usuario->id, 'hash' => sha1($usuario->email)]))
-            ->assertRedirect('/');
+            ->assertRedirect('/dashboard');
         $this->assertNotNull($usuario->fresh()->email_verificado_en);
     }
 
     public function test_pasada_la_gracia_solo_queda_confirmar_o_reenviar(): void
     {
         $datos = $this->datos();
-        $this->post('/registro', $datos)->assertRedirect('/');
+        $this->post('/registro', $datos)->assertRedirect('/dashboard');
         $usuario = Usuario::where('email', $datos['email'])->firstOrFail();
         $usuario->forceFill(['creado_en' => now()->subDays(4)])->save();
 
-        $this->actingAs($usuario->fresh())->get('/')->assertRedirect('/verificar-correo');
+        $this->actingAs($usuario->fresh())->get('/dashboard')->assertRedirect('/verificar-correo');
         $this->actingAs($usuario->fresh())->get('/pos')->assertRedirect('/verificar-correo');
         $this->actingAs($usuario->fresh())->get('/verificar-correo')->assertOk();
 
@@ -125,13 +125,13 @@ class RegistroVerificacionTest extends TestCase
         Mail::assertSent(VerificarCorreo::class, 2);
 
         $usuario->forceFill(['email_verificado_en' => now()])->save();
-        $this->actingAs($usuario->fresh())->get('/')->assertOk();
+        $this->actingAs($usuario->fresh())->get('/dashboard')->assertOk();
     }
 
     public function test_los_usuarios_creados_por_un_admin_no_necesitan_confirmar(): void
     {
         $datos = $this->datos();
-        $this->post('/registro', $datos)->assertRedirect('/');
+        $this->post('/registro', $datos)->assertRedirect('/dashboard');
         $admin = Usuario::where('email', $datos['email'])->firstOrFail();
         $admin->forceFill(['email_verificado_en' => now()])->save();
 

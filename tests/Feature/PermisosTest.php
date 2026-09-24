@@ -95,7 +95,7 @@ class PermisosTest extends TestCase
 
     public function test_los_permisos_viajan_al_frontend(): void
     {
-        $this->actingAs($this->cajero)->get('/')
+        $this->actingAs($this->cajero)->get('/dashboard')
             ->assertInertia(fn ($pagina) => $pagina
                 ->where('auth.user.rol', 'cajero')
                 ->where('auth.user.permisos', fn ($permisos) => in_array('pos.vender', $permisos->all(), true)
@@ -223,13 +223,13 @@ class PermisosTest extends TestCase
                 ->where('resumen.valor_total', fn ($v) => (float) $v === 80.0)
                 ->where('productos.data.0.valor_inventario', fn ($v) => (float) $v === 80.0));
 
-        $this->actingAs($this->cajero)->get('/')
+        $this->actingAs($this->cajero)->get('/dashboard')
             ->assertInertia(fn ($pagina) => $pagina
                 ->where('hoy.margen', null)
                 ->where('mes', null)
                 ->where('pendientes.por_pagar', null));
 
-        $this->actingAs($this->admin)->get('/')
+        $this->actingAs($this->admin)->get('/dashboard')
             ->assertInertia(fn ($pagina) => $pagina->where('mes.total', fn ($v) => (float) $v === 0.0));
     }
 }

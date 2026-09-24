@@ -58,7 +58,7 @@ const menuBase = [
     {
         seccion: 'General',
         items: [
-            { label: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
+            { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
             { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
         ],
     },

@@ -83,7 +83,7 @@ class RecuperacionPasswordTest extends TestCase
         $this->assertNull(DB::table('recuperaciones_password')->where('email', $email)->first());
 
         // y puede loguearse con ella
-        $this->post('/login', ['email' => $email, 'password' => 'clavenueva123'])->assertRedirect('/');
+        $this->post('/login', ['email' => $email, 'password' => 'clavenueva123'])->assertRedirect('/dashboard');
     }
 
     public function test_rechaza_token_invalido_o_expirado(): void

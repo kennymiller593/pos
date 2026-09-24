@@ -16,6 +16,7 @@ use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\InicioController;
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\NotificacionController;
 use App\Http\Controllers\PosController;
@@ -28,6 +29,9 @@ use App\Http\Controllers\SuscripcionController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use Illuminate\Support\Facades\Route;
+
+// pagina publica del producto (un usuario con sesion va directo a su dashboard)
+Route::get('/', [LandingController::class, 'index'])->name('landing');
 
 // consulta RUC en SUNAT: disponible tambien para invitados (la usa el registro)
 Route::get('/consultas/ruc/{numero}', [ConsultaController::class, 'ruc'])
@@ -70,7 +74,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/verificar-correo', [VerificacionCorreoController::class, 'aviso'])->name('verificacion.aviso');
     Route::post('/verificar-correo/reenviar', [VerificacionCorreoController::class, 'reenviar'])->middleware('throttle:3,1')->name('verificacion.reenviar');
 
-    Route::get('/', [InicioController::class, 'index'])->name('inicio');
+    Route::get('/dashboard', [InicioController::class, 'index'])->name('inicio');
 
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
     Route::get('/notificaciones', [NotificacionController::class, 'index'])->name('notificaciones');
