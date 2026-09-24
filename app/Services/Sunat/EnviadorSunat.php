@@ -4,6 +4,7 @@ namespace App\Services\Sunat;
 
 use App\Exceptions\ErrorDeNegocio;
 use App\Models\Empresa;
+use App\Support\CertificadoDigital;
 use DOMDocument;
 use Greenter\Model\DocumentInterface;
 use Greenter\Model\Response\BillResult;
@@ -171,10 +172,10 @@ class EnviadorSunat
 
         try {
             $cliente = new SoapClient(WsdlProvider::getConsultPath());
-            $cliente->setCredentials($empresa->ruc . $empresa->usuario_sol, (string) $empresa->clave_sol);
+            $cliente->setCredentials($empresa->ruc.$empresa->usuario_sol, (string) $empresa->clave_sol);
             $cliente->setService(SunatEndpoints::FE_CONSULTA_CDR);
 
-            $servicio = new ConsultCdrService();
+            $servicio = new ConsultCdrService;
             $servicio->setClient($cliente);
 
             $resultado = $servicio->getStatusCdr($empresa->ruc, $tipo, $serie, $numero);
@@ -220,7 +221,7 @@ class EnviadorSunat
 
     protected function armarSee(Empresa $empresa): See
     {
-        $see = new See();
+        $see = new See;
         $see->setCertificate($this->certificadoPem($empresa));
         $see->setService($empresa->entorno_sunat === 'produccion'
             ? SunatEndpoints::FE_PRODUCCION
@@ -230,40 +231,20 @@ class EnviadorSunat
         return $see;
     }
 
-    /**
-     * Normaliza el certificado guardado a un PEM con llave + certificado,
-     * que es lo que espera el firmador. Acepta PEM pegado (con la llave
-     * protegida o no) y PFX/P12 codificado en base64.
-     */
+    /** PEM llave + certificado que espera el firmador (ver App\Support\CertificadoDigital). */
     private function certificadoPem(Empresa $empresa): string
     {
-        $contenido = trim((string) $empresa->certificado_digital);
-        $clave = (string) $empresa->clave_certificado;
-
-        if (str_contains($contenido, '-----BEGIN')) {
-            $llave = @openssl_pkey_get_private($contenido, $clave !== '' ? $clave : null);
-            $certificado = @openssl_x509_read($contenido);
-
-            if ($llave && $certificado && openssl_pkey_export($llave, $llavePem) && openssl_x509_export($certificado, $certPem)) {
-                return $llavePem . $certPem;
-            }
-
-            return $contenido;
+        try {
+            return CertificadoDigital::pem($empresa->certificado_digital, $empresa->clave_certificado);
+        } catch (ErrorDeNegocio $e) {
+            throw new ErrorDeNegocio('El certificado digital guardado no es válido ('.$e->getMessage().'). Vuelve a cargarlo en la pantalla de Empresa.');
         }
-
-        $pfx = base64_decode(preg_replace('/\s+/', '', $contenido) ?? '', true);
-
-        if ($pfx !== false && @openssl_pkcs12_read($pfx, $partes, $clave)) {
-            return ($partes['pkey'] ?? '') . ($partes['cert'] ?? '');
-        }
-
-        throw new ErrorDeNegocio('El certificado digital guardado no es válido. Vuelve a cargarlo en la pantalla de Empresa.');
     }
 
     /** El hash del CPE es el DigestValue de la firma del XML. */
     private function hashDelXml(string $xml): ?string
     {
-        $doc = new DOMDocument();
+        $doc = new DOMDocument;
 
         if (! @$doc->loadXML($xml)) {
             return null;

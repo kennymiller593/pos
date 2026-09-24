@@ -82,6 +82,8 @@
         <div class="anulado">ANULADO</div>
     @elseif ($comprobante->sunat?->estado === 'rechazado')
         <div class="anulado">RECHAZADO POR SUNAT · SIN VALIDEZ TRIBUTARIA</div>
+    @elseif ($comprobante->tipo_comprobante_codigo !== '00' && $empresa->entorno_sunat !== 'produccion')
+        <div class="anulado">AMBIENTE DE PRUEBAS SUNAT · SIN VALOR TRIBUTARIO</div>
     @endif
 
     @if ($comprobante->comprobanteRef)

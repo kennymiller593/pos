@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\Auditoria;
 use App\Models\Rubro;
 use App\Models\SerieCorrelativo;
+use App\Support\CertificadoDigital;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -34,6 +36,7 @@ class EmpresaController extends Controller
                 'tiene_clave_certificado' => filled($empresa->clave_certificado),
                 'facturacion_electronica' => (bool) $empresa->facturacion_electronica,
                 'entorno_sunat' => $empresa->entorno_sunat,
+                'certificado_vence_en' => $empresa->certificado_vence_en?->toDateString(),
             ],
             'rubros' => Rubro::orderBy('nombre')->get(['codigo', 'nombre']),
             'requisitosFacturacion' => $this->requisitosFacturacion($request),
@@ -145,7 +148,42 @@ class EmpresaController extends Controller
             unset($datos['entorno_sunat']);
         }
 
+        // el certificado se valida al cargarlo (que abra con su contraseña y no este vencido)
+        if (isset($datos['certificado_digital'])) {
+            try {
+                $analisis = CertificadoDigital::analizar($datos['certificado_digital'], $datos['clave_certificado'] ?? $empresa->clave_certificado);
+            } catch (ErrorDeNegocio $e) {
+                return back()->withErrors(['certificado_digital' => $e->getMessage()]);
+            }
+
+            if ($analisis['ruc'] && $analisis['ruc'] !== $empresa->ruc) {
+                return back()->withErrors(['certificado_digital' => "El certificado pertenece al RUC {$analisis['ruc']}, no al de esta empresa ({$empresa->ruc})."]);
+            }
+
+            $datos['certificado_vence_en'] = $analisis['vence_en']->toDateString();
+        }
+
+        // cambiar beta <-> produccion con la facturacion encendida mezclaria numeraciones y archivos
+        $cambiaEntorno = isset($datos['entorno_sunat']) && $datos['entorno_sunat'] !== $empresa->entorno_sunat;
+        if ($cambiaEntorno && $empresa->facturacion_electronica) {
+            return back()->withErrors(['entorno_sunat' => 'Desactiva la facturación electrónica antes de cambiar el entorno SUNAT.']);
+        }
+
         $empresa->update($datos);
+
+        if ($cambiaEntorno) {
+            Auditoria::registrar($request->user(), 'empresa.entorno_sunat', 'empresa', $empresa->id, [
+                'de' => $empresa->getOriginal('entorno_sunat'),
+                'a' => $datos['entorno_sunat'],
+            ]);
+        }
+
+        if (isset($datos['certificado_digital'])) {
+            Auditoria::registrar($request->user(), 'empresa.certificado_cargado', 'empresa', $empresa->id, [
+                'vence_en' => $datos['certificado_vence_en'],
+                'emitido_a' => $analisis['emitido_a'] ?? null,
+            ]);
+        }
 
         return back()->with('success', 'Datos de la empresa actualizados.');
     }

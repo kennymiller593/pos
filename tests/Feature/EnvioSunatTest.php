@@ -44,7 +44,7 @@ class EnvioSunatTest extends TestCase
             'correlativo' => 0,
         ]);
 
-        $this->enviador = new EnviadorSunatFalso();
+        $this->enviador = new EnviadorSunatFalso;
         $this->app->instance(EnviadorSunat::class, $this->enviador);
     }
 
@@ -91,8 +91,8 @@ class EnvioSunatTest extends TestCase
         $this->assertSame('HASH-CPE-123', $comprobante->hash_cpe);
 
         $nombre = "{$this->empresa->ruc}-03-B001-1";
-        Storage::assertExists("sunat/{$this->empresa->id}/{$nombre}.xml");
-        Storage::assertExists("sunat/{$this->empresa->id}/R-{$nombre}.zip");
+        Storage::assertExists("sunat/{$this->empresa->id}/beta/{$nombre}.xml");
+        Storage::assertExists("sunat/{$this->empresa->id}/beta/R-{$nombre}.zip");
     }
 
     public function test_el_rechazo_de_sunat_queda_registrado(): void

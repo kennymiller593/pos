@@ -126,6 +126,19 @@ class NotificacionController extends Controller
             ];
         }
 
+        // el certificado de firma vence pronto: sin el no se factura
+        $empresa = $request->user()->empresa;
+        if ($request->user()->can('empresa.gestionar') && $empresa->certificado_vence_en && $empresa->certificado_vence_en->lte(now()->addDays(30))) {
+            $dias = (int) now()->startOfDay()->diffInDays($empresa->certificado_vence_en->startOfDay(), false);
+            $items[] = [
+                'clave' => 'certificado',
+                'titulo' => $dias < 0 ? 'Tu certificado digital venció' : 'Tu certificado digital vence pronto',
+                'detalle' => ($dias < 0 ? 'Venció el ' : 'Vence el ').$empresa->certificado_vence_en->format('d/m/Y').'. Renuévalo con tu proveedor y cárgalo en Empresa.',
+                'cantidad' => 1,
+                'url' => '/empresa',
+            ];
+        }
+
         // el plan vence pronto: solo lo ve quien puede gestionarlo
         if ($request->user()->can('empresa.gestionar')) {
             $suscripcion = app(SuscripcionService::class)->resumen($request->user()->empresa);

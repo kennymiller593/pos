@@ -95,6 +95,25 @@ const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
 const claseLabel = 'mb-1 block text-sm font-medium'
 const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
+
+// parsea 'YYYY-MM-DD' como fecha local (evita el corrimiento de un dia que da `new Date('YYYY-MM-DD')` por UTC)
+function parseFechaLocal(valor) {
+    const [anio, mes, dia] = valor.split('-').map(Number)
+    return new Date(anio, mes - 1, dia)
+}
+
+const certificadoVencimiento = computed(() => {
+    if (!props.empresa.certificado_vence_en) return null
+    const fecha = parseFechaLocal(props.empresa.certificado_vence_en)
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const diasRestantes = Math.round((fecha - hoy) / 86400000)
+    return {
+        texto: fecha.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' }),
+        vencido: diasRestantes < 0,
+        porVencer: diasRestantes >= 0 && diasRestantes <= 30,
+    }
+})
 </script>
 
 <template>
@@ -245,8 +264,22 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 : 'Pega aquí el contenido de tu certificado (.pem)'"
                         />
                         <p v-if="empresa.tiene_certificado && !form.certificado_digital" class="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                            ✓ Certificado guardado. Déjalo vacío para conservarlo.
+                            ✓ Certificado guardado.
+                            <template v-if="certificadoVencimiento">
+                                <span v-if="certificadoVencimiento.vencido" class="text-red-600 dark:text-red-400">
+                                    Venció el {{ certificadoVencimiento.texto }}: renuévalo.
+                                </span>
+                                <span v-else-if="certificadoVencimiento.porVencer" class="text-amber-600 dark:text-amber-400">
+                                    Vence el {{ certificadoVencimiento.texto }}.
+                                </span>
+                                <span v-else>Vence el {{ certificadoVencimiento.texto }}.</span>
+                            </template>
+                            Déjalo vacío para conservarlo.
                         </p>
+                        <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                            Acepta el .pem (llave + certificado) o el .pfx en base64. Si la llave tiene contraseña, escríbela en "Contraseña del certificado".
+                        </p>
+                        <p v-if="form.errors.certificado_digital" :class="claseError">{{ form.errors.certificado_digital }}</p>
                     </div>
                     <div>
                         <label :class="claseLabel" for="clave_certificado">Contraseña del certificado</label>
@@ -261,10 +294,25 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </div>
                     <div>
                         <label :class="claseLabel" for="entorno_sunat">Entorno</label>
-                        <select id="entorno_sunat" v-model="form.entorno_sunat" :class="claseInput">
+                        <select
+                            id="entorno_sunat"
+                            v-model="form.entorno_sunat"
+                            :disabled="empresa.facturacion_electronica"
+                            :class="[claseInput, empresa.facturacion_electronica ? 'cursor-not-allowed bg-stone-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400' : '']"
+                        >
                             <option value="beta">Beta (pruebas, sin valor real)</option>
                             <option value="produccion">Producción (SUNAT real)</option>
                         </select>
+                        <p v-if="empresa.facturacion_electronica" class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                            Desactiva la facturación electrónica para cambiar el entorno.
+                        </p>
+                        <p v-if="form.errors.entorno_sunat" :class="claseError">{{ form.errors.entorno_sunat }}</p>
+                        <p
+                            v-if="form.entorno_sunat === 'beta'"
+                            class="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                            Estás en el ambiente de pruebas de SUNAT: las boletas y facturas que emitas NO tienen valor tributario y se imprimen con esa leyenda.
+                        </p>
                     </div>
                 </div>
 

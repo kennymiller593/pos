@@ -336,7 +336,7 @@ class SunatService
 
         if ($respuesta->aceptado) {
             if ($respuesta->cdrZip) {
-                $carpeta = "sunat/{$comprobante->empresa_id}";
+                $carpeta = "sunat/{$comprobante->empresa_id}/{$comprobante->empresa->entorno_sunat}";
                 $nombre = "R-BAJA-{$comprobante->empresa->ruc}-{$comprobante->tipo_comprobante_codigo}-{$comprobante->serie}-{$comprobante->correlativo}";
                 Storage::put("{$carpeta}/{$nombre}.zip", $respuesta->cdrZip);
                 $registro->cdr_url = "{$carpeta}/{$nombre}.zip";
@@ -454,7 +454,7 @@ class SunatService
 
     private function guardarResultado(Comprobante $comprobante, ComprobanteSunat $registro, RespuestaSunat $respuesta): void
     {
-        $carpeta = "sunat/{$comprobante->empresa_id}";
+        $carpeta = "sunat/{$comprobante->empresa_id}/{$comprobante->empresa->entorno_sunat}";
         $nombre = "{$comprobante->empresa->ruc}-{$comprobante->tipo_comprobante_codigo}-{$comprobante->serie}-{$comprobante->correlativo}";
 
         if ($respuesta->xml) {

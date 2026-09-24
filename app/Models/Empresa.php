@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Empresa extends Model
 {
@@ -14,6 +15,7 @@ class Empresa extends Model
     protected $table = 'empresas';
 
     public const CREATED_AT = 'creado_en';
+
     public const UPDATED_AT = 'actualizado_en';
 
     protected $fillable = [
@@ -29,6 +31,7 @@ class Empresa extends Model
         'clave_certificado',
         'facturacion_electronica',
         'entorno_sunat',
+        'certificado_vence_en',
         'activo',
     ];
 
@@ -45,6 +48,9 @@ class Empresa extends Model
             'facturacion_electronica' => 'boolean',
             'clave_sol' => 'encrypted',
             'clave_certificado' => 'encrypted',
+            // la llave privada de firma no puede quedar en claro en un backup
+            'certificado_digital' => 'encrypted',
+            'certificado_vence_en' => 'date',
         ];
     }
 
@@ -63,13 +69,13 @@ class Empresa extends Model
         }
 
         $ruta = substr($this->logo_url, strlen('/storage/'));
-        $disco = \Illuminate\Support\Facades\Storage::disk('public');
+        $disco = Storage::disk('public');
 
         if (! $disco->exists($ruta)) {
             return null;
         }
 
-        return 'data:' . $disco->mimeType($ruta) . ';base64,' . base64_encode($disco->get($ruta));
+        return 'data:'.$disco->mimeType($ruta).';base64,'.base64_encode($disco->get($ruta));
     }
 
     public function rubro(): BelongsTo
