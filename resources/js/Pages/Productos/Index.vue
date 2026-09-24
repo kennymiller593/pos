@@ -5,6 +5,7 @@ import { watchDebounced } from '@vueuse/core'
 import { Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 import FormularioProducto from './FormularioProducto.vue'
 
 const props = defineProps({
@@ -46,6 +47,7 @@ function editar(producto) {
 }
 
 const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
 
 async function eliminar(producto) {
     const confirmado = await confirmar({
@@ -109,6 +111,7 @@ function claseStock(producto) {
                 </select>
             </div>
             <button
+                v-if="puede('productos.gestionar')"
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                 @click="nuevo"
             >
@@ -138,7 +141,7 @@ function claseStock(producto) {
                             <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <Package class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 No hay productos que mostrar.
-                                <button class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="nuevo">
+                                <button v-if="puede('productos.gestionar')" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="nuevo">
                                     Crea el primero
                                 </button>
                             </td>
@@ -180,6 +183,7 @@ function claseStock(producto) {
                             <td class="px-4 py-3">
                                 <div class="flex justify-end gap-1">
                                     <button
+                                        v-if="puede('productos.gestionar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                         title="Editar"
                                         @click="editar(p)"
@@ -187,6 +191,7 @@ function claseStock(producto) {
                                         <Pencil class="size-4" />
                                     </button>
                                     <button
+                                        v-if="puede('productos.eliminar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                                         title="Eliminar"
                                         @click="eliminar(p)"

@@ -4,6 +4,7 @@ import { router, useForm } from '@inertiajs/vue3'
 import { CornerDownRight, Pencil, Plus, Tag, Tags, Trash2, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     categorias: { type: Array, required: true },
@@ -11,6 +12,7 @@ const props = defineProps({
 })
 
 const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
 
 // ---- modal (crear/editar categoria o marca) ----
 const modal = ref(null) // { tipo: 'categoria' | 'marca', item: Object | null }
@@ -86,6 +88,7 @@ const claseInput =
                         </div>
                     </div>
                     <button
+                        v-if="puede('catalogos.gestionar')"
                         class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-700"
                         @click="abrir('categoria')"
                     >
@@ -113,7 +116,7 @@ const claseInput =
                                 {{ c.productos_count }} producto{{ c.productos_count === 1 ? '' : 's' }}
                             </p>
                         </div>
-                        <div class="flex shrink-0 gap-1">
+                        <div v-if="puede('catalogos.gestionar')" class="flex shrink-0 gap-1">
                             <button
                                 class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                 title="Editar"
@@ -146,6 +149,7 @@ const claseInput =
                         </div>
                     </div>
                     <button
+                        v-if="puede('catalogos.gestionar')"
                         class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-700"
                         @click="abrir('marca')"
                     >
@@ -169,7 +173,7 @@ const claseInput =
                                 {{ m.productos_count }} producto{{ m.productos_count === 1 ? '' : 's' }}
                             </p>
                         </div>
-                        <div class="flex shrink-0 gap-1">
+                        <div v-if="puede('catalogos.gestionar')" class="flex shrink-0 gap-1">
                             <button
                                 class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                 title="Editar"

@@ -5,6 +5,7 @@ import { watchDebounced } from '@vueuse/core'
 import { Building2, LoaderCircle, Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     proveedores: { type: Object, required: true },
@@ -12,6 +13,7 @@ const props = defineProps({
 })
 
 const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
 // ---- filtros ----
@@ -119,6 +121,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 />
             </div>
             <button
+                v-if="puede('proveedores.gestionar')"
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                 @click="abrir()"
             >
@@ -146,7 +149,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <td colspan="6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <Building2 class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 No hay proveedores que mostrar.
-                                <button class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="abrir()">
+                                <button v-if="puede('proveedores.gestionar')" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="abrir()">
                                     Crea el primero
                                 </button>
                             </td>
@@ -168,7 +171,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <td class="px-4 py-3 text-center text-neutral-600 dark:text-neutral-300">{{ p.compras_count }}</td>
                             <td class="px-4 py-3 text-right font-semibold">{{ soles(p.total_comprado) }}</td>
                             <td class="px-4 py-3">
-                                <div class="flex justify-end gap-1">
+                                <div v-if="puede('proveedores.gestionar')" class="flex justify-end gap-1">
                                     <button
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                         title="Editar"

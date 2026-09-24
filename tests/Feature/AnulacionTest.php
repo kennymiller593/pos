@@ -78,11 +78,13 @@ class AnulacionTest extends TestCase
     public function test_un_cajero_no_puede_anular(): void
     {
         $comprobante = $this->venderYObtenerComprobante();
-        $cajero = $this->crearUsuario('cajero', 'cajero' . random_int(1000, 9999) . '@test.local');
+        $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(1000, 9999).'@test.local');
 
-        $respuesta = $this->actingAs($cajero)->post("/comprobantes/{$comprobante->id}/anular", ['motivo' => 'Intento']);
+        // la ruta exige el permiso comprobantes.anular, que un cajero no tiene
+        $this->actingAs($cajero)
+            ->post("/comprobantes/{$comprobante->id}/anular", ['motivo' => 'Intento'])
+            ->assertForbidden();
 
-        $respuesta->assertSessionHas('error');
         $this->assertSame('emitido', $comprobante->fresh()->estado);
     }
 

@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Link, router, usePage } from '@inertiajs/vue3'
 import { onClickOutside, useDark, useStorage, useToggle } from '@vueuse/core'
 import DialogoConfirmacion from '@/Components/DialogoConfirmacion.vue'
+import { usePermisos } from '@/composables/permisos'
 import {
     ArrowLeftRight,
     Banknote,
@@ -54,58 +55,58 @@ const menuBase = [
         seccion: 'General',
         items: [
             { label: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
-            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, soloAdmin: true },
+            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
         ],
     },
     {
         seccion: 'Ventas',
         items: [
-            { label: 'POS', href: '/pos', icon: ShoppingCart },
-            { label: 'Comprobantes', href: '/comprobantes', icon: ReceiptText },
-            { label: 'Cuentas por cobrar', href: '/cuentas-por-cobrar', icon: HandCoins },
+            { label: 'POS', href: '/pos', icon: ShoppingCart, permiso: 'pos.vender' },
+            { label: 'Comprobantes', href: '/comprobantes', icon: ReceiptText, permiso: 'comprobantes.ver' },
+            { label: 'Cuentas por cobrar', href: '/cuentas-por-cobrar', icon: HandCoins, permiso: 'cuentas_cobrar.ver' },
         ],
     },
     {
         seccion: 'Inventario',
         items: [
-            { label: 'Productos', href: '/productos', icon: Package },
-            { label: 'Categorías y marcas', href: '/catalogos', icon: Tags },
-            { label: 'Stock', href: '/stock', icon: Boxes },
-            { label: 'Transferencias', href: '/transferencias', icon: ArrowLeftRight },
+            { label: 'Productos', href: '/productos', icon: Package, permiso: 'productos.ver' },
+            { label: 'Categorías y marcas', href: '/catalogos', icon: Tags, permiso: 'productos.ver' },
+            { label: 'Stock', href: '/stock', icon: Boxes, permiso: 'stock.ver' },
+            { label: 'Transferencias', href: '/transferencias', icon: ArrowLeftRight, permiso: 'transferencias.ver' },
         ],
     },
     {
         seccion: 'Compras',
         items: [
-            { label: 'Compras', href: '/compras', icon: Truck },
-            { label: 'Cuentas por pagar', href: '/cuentas-por-pagar', icon: Banknote },
-            { label: 'Proveedores', href: '/proveedores', icon: Building2 },
+            { label: 'Compras', href: '/compras', icon: Truck, permiso: 'compras.ver' },
+            { label: 'Cuentas por pagar', href: '/cuentas-por-pagar', icon: Banknote, permiso: 'cuentas_pagar.ver' },
+            { label: 'Proveedores', href: '/proveedores', icon: Building2, permiso: 'proveedores.ver' },
         ],
     },
     {
         seccion: 'Caja y clientes',
         items: [
-            { label: 'Caja', href: '/caja', icon: Wallet },
-            { label: 'Clientes', href: '/clientes', icon: Users },
+            { label: 'Caja', href: '/caja', icon: Wallet, permiso: 'caja.operar' },
+            { label: 'Clientes', href: '/clientes', icon: Users, permiso: 'clientes.ver' },
         ],
     },
     {
         seccion: 'Configuración',
         items: [
-            { label: 'Sucursales', href: '/sucursales', icon: Store, soloAdmin: true },
-            { label: 'Usuarios', href: '/usuarios', icon: UserCog, soloAdmin: true },
-            { label: 'Auditoría', href: '/auditoria', icon: ScrollText, soloAdmin: true },
-            { label: 'Empresa', href: '/empresa', icon: Settings, soloAdmin: true },
+            { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
+            { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
+            { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
+            { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
         ],
     },
 ]
 
-// los items marcados soloAdmin se ocultan a los demas roles
-const esAdmin = computed(() => usuario.value?.rol === 'admin')
+// cada item se muestra solo si el usuario tiene su permiso (sin permiso = visible para todos)
+const { puede } = usePermisos()
 const menu = computed(() => menuBase
     .map((grupo) => ({
         ...grupo,
-        items: grupo.items.filter((item) => !item.soloAdmin || esAdmin.value),
+        items: grupo.items.filter((item) => !item.permiso || puede(item.permiso)),
     }))
     .filter((grupo) => grupo.items.length))
 
@@ -295,9 +296,9 @@ watch(
                 <div class="ml-auto flex items-center gap-2">
                     <!-- Estado de facturación electrónica -->
                     <component
-                        :is="esAdmin ? Link : 'span'"
+                        :is="puede('empresa.gestionar') ? Link : 'span'"
                         v-if="empresa?.facturacion_electronica"
-                        :href="esAdmin ? '/empresa' : undefined"
+                        :href="puede('empresa.gestionar') ? '/empresa' : undefined"
                         class="hidden h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold tracking-wide uppercase sm:flex"
                         :class="empresa.entorno_sunat === 'produccion'
                             ? 'bg-emerald-600 text-white'

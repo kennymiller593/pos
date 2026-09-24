@@ -25,8 +25,7 @@ class PosController extends Controller
     public function __construct(
         private readonly CajaService $caja,
         private readonly VentaService $ventas,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -218,6 +217,11 @@ class PosController extends Controller
             'cliente_id.required' => 'La venta al crédito necesita un cliente.',
         ]);
 
+        $conPrecioManual = collect($datos['items'])->contains(fn ($i) => filled($i['precio_unitario'] ?? null));
+        if ($conPrecioManual && ! $request->user()->can('pos.precio_manual')) {
+            return back()->with('error', 'Tu rol no puede cambiar el precio de lista. Pide a un administrador o cajero que lo haga.');
+        }
+
         try {
             $comprobante = $this->ventas->registrar($request->user(), $apertura, $datos);
         } catch (ErrorDeNegocio $e) {
@@ -233,7 +237,7 @@ class PosController extends Controller
             EnviarComprobanteSunat::dispatchAfterResponse($comprobante->id);
         }
 
-        $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $total = number_format((float) $comprobante->total, 2);
 
         return back()

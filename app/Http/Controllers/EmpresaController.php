@@ -70,7 +70,7 @@ class EmpresaController extends Controller
             ];
 
             return back()->with('error', 'Para activar la facturación falta: '
-                . $faltantes->map(fn ($clave) => $etiquetas[$clave] ?? $clave)->implode(', ') . '.');
+                .$faltantes->map(fn ($clave) => $etiquetas[$clave] ?? $clave)->implode(', ').'.');
         }
 
         $empresa->update(['facturacion_electronica' => true]);
@@ -79,7 +79,7 @@ class EmpresaController extends Controller
         ]);
 
         return back()->with('success', 'Facturación electrónica activada en entorno '
-            . ($empresa->entorno_sunat === 'produccion' ? 'de producción' : 'beta (pruebas)') . '.');
+            .($empresa->entorno_sunat === 'produccion' ? 'de producción' : 'beta (pruebas)').'.');
     }
 
     /** Checklist para poder facturar electronicamente. */
@@ -152,7 +152,7 @@ class EmpresaController extends Controller
 
     private function autorizarAdmin(Request $request): void
     {
-        abort_unless($request->user()->loadMissing('rol')->rol?->codigo === 'admin', 403);
+        abort_unless($request->user()->can('empresa.gestionar'), 403);
     }
 
     /** Borra el archivo del logo solo si fue subido a nuestro almacenamiento. */

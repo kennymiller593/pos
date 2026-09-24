@@ -8,6 +8,8 @@ const props = defineProps({
     usuarios: { type: Object, required: true },
     roles: { type: Array, required: true },
     sucursales: { type: Array, required: true },
+    // { admin: ['descripcion', ...], cajero: [...], ... }
+    permisosPorRol: { type: Object, default: () => ({}) },
 })
 
 const page = usePage()
@@ -19,6 +21,12 @@ const COLORES_ROL = {
     vendedor: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
     almacenero: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
 }
+
+// descripciones de lo que puede hacer el rol elegido en el formulario
+const permisosRolElegido = computed(() => {
+    const codigo = props.roles.find((r) => r.id === form.rol_id)?.codigo
+    return (codigo && props.permisosPorRol[codigo]) || []
+})
 
 // ---- modal ----
 const modalAbierto = ref(false)
@@ -218,6 +226,18 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.nombre }}</option>
                             </select>
                             <p v-if="form.errors.rol_id" :class="claseError">{{ form.errors.rol_id }}</p>
+                            <div
+                                v-if="permisosRolElegido.length"
+                                class="mt-2 rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950/60"
+                            >
+                                <p class="mb-1 text-[11px] font-semibold tracking-wider text-neutral-400 uppercase">Este rol puede</p>
+                                <ul class="max-h-36 space-y-0.5 overflow-y-auto text-xs text-neutral-600 dark:text-neutral-300">
+                                    <li v-for="d in permisosRolElegido" :key="d" class="flex gap-1.5">
+                                        <span class="text-emerald-600 dark:text-emerald-400">•</span>
+                                        <span>{{ d }}</span>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                         <div class="sm:col-span-2">
                             <label :class="claseLabel">Sucursales donde trabaja</label>

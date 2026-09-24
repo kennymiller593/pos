@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import {
@@ -15,6 +15,7 @@ import {
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     productos: { type: Object, required: true },
@@ -22,6 +23,10 @@ const props = defineProps({
     resumen: { type: Object, required: true },
     sucursal: { type: String, default: null },
 })
+
+const { puede } = usePermisos()
+// sin permiso de costos el backend manda valor_total = null (y valor_inventario = null por producto)
+const verCostos = computed(() => props.resumen.valor_total != null)
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
@@ -135,7 +140,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 <template>
     <AppLayout titulo="Stock">
         <!-- Resumen -->
-        <div class="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="mb-4 grid gap-4 sm:grid-cols-2" :class="verCostos ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
             <div class="rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">Productos con inventario</p>
@@ -144,7 +149,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 <p class="mt-2 text-xl font-bold tracking-tight">{{ resumen.productos }}</p>
                 <p v-if="sucursal" class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">Sucursal {{ sucursal }}</p>
             </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div v-if="verCostos" class="rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">Valor del inventario (costo)</p>
                     <Wallet class="size-4 text-neutral-400" />
@@ -209,15 +214,17 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Categoría</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Stock</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Mínimo</th>
-                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Costo prom.</th>
-                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Valorizado</th>
+                            <template v-if="verCostos">
+                                <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Costo prom.</th>
+                                <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Valorizado</th>
+                            </template>
                             <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!productos.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="verCostos ? 8 : 6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <Boxes class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 {{ soloBajos ? 'Nada con stock bajo. ¡Buen inventario!' : 'No hay productos que controlen stock.' }}
                             </td>
@@ -240,8 +247,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <span class="text-xs font-normal text-neutral-400">{{ p.unidad_base?.nombre ?? '' }}</span>
                             </td>
                             <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ cantidad(p.stock_minimo) }}</td>
-                            <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(costoPromedio(p)) }}</td>
-                            <td class="px-4 py-3 text-right font-semibold">{{ soles(p.valor_inventario) }}</td>
+                            <template v-if="verCostos">
+                                <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">
+                                    {{ p.valor_inventario != null ? soles(costoPromedio(p)) : '—' }}
+                                </td>
+                                <td class="px-4 py-3 text-right font-semibold">
+                                    {{ p.valor_inventario != null ? soles(p.valor_inventario) : '—' }}
+                                </td>
+                            </template>
                             <td class="px-4 py-3 text-center">
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" :class="estadoDe(p).clase">
                                     {{ estadoDe(p).label }}
@@ -257,6 +270,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         <History class="size-4" />
                                     </button>
                                     <button
+                                        v-if="puede('stock.ajustar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                                         title="Ajustar stock"
                                         @click="abrirAjuste(p)"
@@ -363,7 +377,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     >
                                         {{ TIPOS[m.tipo]?.entrada ? '+' : '−' }}{{ cantidad(m.cantidad) }}
                                     </p>
-                                    <p v-if="m.costo_unitario" class="text-xs text-neutral-500 dark:text-neutral-400">
+                                    <p v-if="m.costo_unitario != null && Number(m.costo_unitario)" class="text-xs text-neutral-500 dark:text-neutral-400">
                                         {{ soles(m.costo_unitario) }} c/u
                                     </p>
                                 </div>

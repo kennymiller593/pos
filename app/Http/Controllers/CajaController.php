@@ -15,9 +15,7 @@ use Inertia\Response;
 
 class CajaController extends Controller
 {
-    public function __construct(private readonly CajaService $caja)
-    {
-    }
+    public function __construct(private readonly CajaService $caja) {}
 
     public function index(Request $request): Response
     {
@@ -33,13 +31,13 @@ class CajaController extends Controller
 
         $apertura = $this->caja->aperturaDe($usuario);
 
-        $esAdmin = $usuario->loadMissing('rol')->rol?->codigo === 'admin';
+        $veTodas = $usuario->can('caja.ver_todas');
 
-        // turnos cerrados: el admin ve todos, el cajero solo los suyos
+        // turnos cerrados: quien puede ver todas las cajas ve todos; los demas solo los suyos
         $historial = AperturaCaja::query()
             ->where('empresa_id', $usuario->empresa_id)
             ->whereNotNull('cerrada_en')
-            ->when(! $esAdmin, fn ($q) => $q->where('usuario_id', $usuario->id))
+            ->when(! $veTodas, fn ($q) => $q->where('usuario_id', $usuario->id))
             ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo'])
             ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')], 'monto')
             ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')], 'monto')
@@ -52,7 +50,7 @@ class CajaController extends Controller
             ->through(fn ($turno) => [
                 'id' => $turno->id,
                 'caja' => $turno->caja
-                    ? $turno->caja->nombre . ($turno->caja->sucursal ? " · {$turno->caja->sucursal->nombre}" : '')
+                    ? $turno->caja->nombre.($turno->caja->sucursal ? " · {$turno->caja->sucursal->nombre}" : '')
                     : null,
                 'usuario' => $turno->usuario?->nombre_completo,
                 'abierta_en' => $turno->abierta_en,
@@ -77,7 +75,7 @@ class CajaController extends Controller
             'apertura' => $apertura ? [
                 'id' => $apertura->id,
                 'caja' => $apertura->caja->nombre
-                    . ($apertura->caja->loadMissing('sucursal:id,nombre')->sucursal ? " · {$apertura->caja->sucursal->nombre}" : ''),
+                    .($apertura->caja->loadMissing('sucursal:id,nombre')->sucursal ? " · {$apertura->caja->sucursal->nombre}" : ''),
                 'abierta_en' => $apertura->abierta_en,
                 'monto_inicial' => (float) $apertura->monto_inicial,
                 'resumen' => $this->caja->resumen($apertura),
@@ -155,18 +153,31 @@ class CajaController extends Controller
         ]);
 
         if ($datos['tipo'] === 'egreso') {
+            if (! $request->user()->can('caja.egresos')) {
+                return back()->with('error', 'Tu rol no puede registrar egresos de caja.');
+            }
+
             $disponible = $this->caja->resumen($apertura)['esperado'];
             if ($datos['monto'] > $disponible) {
-                return back()->with('error', 'No hay suficiente efectivo en caja para ese egreso (disponible: S/ ' . number_format($disponible, 2) . ').');
+                return back()->with('error', 'No hay suficiente efectivo en caja para ese egreso (disponible: S/ '.number_format($disponible, 2).').');
             }
         }
 
-        MovimientoCaja::create([
+        $movimiento = MovimientoCaja::create([
             'empresa_id' => $apertura->empresa_id,
             'apertura_id' => $apertura->id,
             'usuario_id' => $request->user()->id,
             ...$datos,
         ]);
+
+        // el dinero que sale de caja deja constancia de quien lo saco y por que
+        if ($datos['tipo'] === 'egreso') {
+            Auditoria::registrar($request->user(), 'caja.egreso', 'movimiento_caja', $movimiento->id, [
+                'caja' => $apertura->caja?->nombre,
+                'concepto' => $datos['concepto'],
+                'monto' => (float) $datos['monto'],
+            ]);
+        }
 
         return back()->with('success', $datos['tipo'] === 'ingreso' ? 'Ingreso registrado.' : 'Egreso registrado.');
     }
@@ -210,10 +221,9 @@ class CajaController extends Controller
         $detalle = $diferencia == 0
             ? 'Caja cuadrada, sin diferencias.'
             : ($diferencia > 0
-                ? 'Sobran S/ ' . number_format($diferencia, 2) . '.'
-                : 'Faltan S/ ' . number_format(abs($diferencia), 2) . '.');
+                ? 'Sobran S/ '.number_format($diferencia, 2).'.'
+                : 'Faltan S/ '.number_format(abs($diferencia), 2).'.');
 
         return back()->with('success', "Caja cerrada. {$detalle}");
     }
-
 }

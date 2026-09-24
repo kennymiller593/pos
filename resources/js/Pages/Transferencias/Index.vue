@@ -4,11 +4,13 @@ import { Link, router } from '@inertiajs/vue3'
 import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Plus } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 defineProps({
     transferencias: { type: Object, required: true },
-    esAdmin: { type: Boolean, default: false },
 })
+
+const { puede } = usePermisos()
 
 const { confirmar } = useConfirmar()
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
@@ -54,7 +56,7 @@ async function anular(t) {
 
 <template>
     <AppLayout titulo="Transferencias">
-        <div class="mb-4 flex justify-end">
+        <div v-if="puede('transferencias.gestionar')" class="mb-4 flex justify-end">
             <Link
                 href="/transferencias/crear"
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
@@ -114,7 +116,7 @@ async function anular(t) {
                                 <td class="px-3 py-3">
                                     <div class="flex justify-end gap-1.5">
                                         <button
-                                            v-if="['pendiente', 'en_transito'].includes(t.estado)"
+                                            v-if="puede('transferencias.gestionar') && ['pendiente', 'en_transito'].includes(t.estado)"
                                             class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                                             @click.stop="recibir(t)"
                                         >
@@ -122,7 +124,7 @@ async function anular(t) {
                                             Recibir
                                         </button>
                                         <button
-                                            v-if="esAdmin && ['pendiente', 'en_transito'].includes(t.estado)"
+                                            v-if="puede('transferencias.anular') && ['pendiente', 'en_transito'].includes(t.estado)"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                                             @click.stop="anular(t)"
                                         >

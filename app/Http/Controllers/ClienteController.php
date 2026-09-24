@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Auditoria;
 use App\Models\Cliente;
 use App\Models\CuentaPorCobrar;
 use App\Models\TipoDocumentoIdentidad;
@@ -41,10 +42,21 @@ class ClienteController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        Cliente::create([
-            ...$this->validar($request),
+        $datos = $this->validar($request);
+
+        // solo quien administra el credito puede abrir una linea al crear
+        if (! $request->user()->can('clientes.credito')) {
+            $datos['limite_credito'] = 0;
+        }
+
+        $cliente = Cliente::create([
+            ...$datos,
             'empresa_id' => $request->user()->empresa_id,
         ]);
+
+        if ((float) $datos['limite_credito'] > 0) {
+            $this->auditarCredito($request, $cliente, 0.0, (float) $datos['limite_credito']);
+        }
 
         return back()->with('success', 'Cliente creado.');
     }
@@ -53,9 +65,30 @@ class ClienteController extends Controller
     {
         abort_unless($cliente->empresa_id === $request->user()->empresa_id, 403);
 
-        $cliente->update($this->validar($request, $cliente));
+        $datos = $this->validar($request, $cliente);
+        $limiteAntes = (float) $cliente->limite_credito;
+
+        if (! $request->user()->can('clientes.credito')) {
+            $datos['limite_credito'] = $limiteAntes;
+        }
+
+        $cliente->update($datos);
+
+        if (abs((float) $datos['limite_credito'] - $limiteAntes) >= 0.005) {
+            $this->auditarCredito($request, $cliente, $limiteAntes, (float) $datos['limite_credito']);
+        }
 
         return back()->with('success', 'Cliente actualizado.');
+    }
+
+    /** Cambiar la linea de credito es dar plata fiada: queda constancia de quien y cuanto. */
+    private function auditarCredito(Request $request, Cliente $cliente, float $de, float $a): void
+    {
+        Auditoria::registrar($request->user(), 'cliente.limite_credito', 'cliente', $cliente->id, [
+            'cliente' => $cliente->nombre,
+            'de' => $de,
+            'a' => $a,
+        ]);
     }
 
     public function destroy(Request $request, Cliente $cliente): RedirectResponse
@@ -94,7 +127,7 @@ class ClienteController extends Controller
             'direccion' => ['nullable', 'string', 'max:250'],
             'telefono' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'email', 'max:150'],
-            'limite_credito' => ['required', 'numeric', 'min:0'],
+            'limite_credito' => ['nullable', 'numeric', 'min:0'],
         ], [
             'nombre.required' => 'Ingresa el nombre.',
             'numero_documento.unique' => 'Ya tienes un cliente con este documento.',

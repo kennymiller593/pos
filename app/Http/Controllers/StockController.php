@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Auditoria;
 use App\Models\CapaCosto;
 use App\Models\Lote;
 use App\Models\MovimientoInventario;
@@ -17,9 +18,7 @@ use Inertia\Response;
 
 class StockController extends Controller
 {
-    public function __construct(private readonly InventarioService $inventario)
-    {
-    }
+    public function __construct(private readonly InventarioService $inventario) {}
 
     public function index(Request $request): Response
     {
@@ -35,7 +34,7 @@ class StockController extends Controller
                 ->where('fecha_vencimiento', '<=', now()->addDays(30)->toDateString()));
 
         $condicionBajo = 'COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id = ?), 0) <= 0'
-            . ' or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id = ?), 0) <= stock_minimo)';
+            .' or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id = ?), 0) <= stock_minimo)';
 
         $productos = Producto::query()
             ->where('empresa_id', $empresaId)
@@ -84,6 +83,16 @@ class StockController extends Controller
                 ->count(),
         ];
 
+        // el valor del inventario al costo solo lo ven quienes manejan costos
+        if (! $request->user()->can('stock.costos')) {
+            $resumen['valor_total'] = null;
+            $productos->through(function ($producto) {
+                $producto->valor_inventario = null;
+
+                return $producto;
+            });
+        }
+
         return Inertia::render('Stock/Index', [
             'productos' => $productos,
             'filtros' => $filtros,
@@ -121,7 +130,12 @@ class StockController extends Controller
                 ->with('usuario:id,nombre_completo')
                 ->latest('creado_en')
                 ->limit(30)
-                ->get(['id', 'tipo', 'cantidad', 'costo_unitario', 'usuario_id', 'creado_en']),
+                ->get(['id', 'tipo', 'cantidad', 'costo_unitario', 'usuario_id', 'creado_en'])
+                ->each(function ($m) use ($request) {
+                    if (! $request->user()->can('stock.costos')) {
+                        $m->costo_unitario = null;
+                    }
+                }),
         ]);
     }
 
@@ -208,6 +222,15 @@ class StockController extends Controller
 
             return back()->with('error', 'No se pudo registrar el ajuste. Intenta de nuevo.');
         }
+
+        // un ajuste mueve mercaderia sin documento: queda quien, cuanto y a que costo
+        Auditoria::registrar($usuario, 'stock.ajustado', 'producto', $producto->id, [
+            'producto' => $producto->nombre,
+            'direccion' => $datos['direccion'],
+            'cantidad' => $cantidad,
+            'costo_unitario' => $datos['direccion'] === 'entrada' ? (float) $datos['costo_unitario'] : null,
+            'lote' => $datos['numero_lote'] ?? null,
+        ]);
 
         return back()->with('success', $datos['direccion'] === 'entrada'
             ? 'Entrada registrada. Stock actualizado.'

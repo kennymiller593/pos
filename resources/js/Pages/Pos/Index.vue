@@ -21,6 +21,7 @@ import {
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     apertura: { type: Object, default: null },
@@ -32,6 +33,7 @@ const props = defineProps({
 })
 
 const page = usePage()
+const { puede } = usePermisos()
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
 // ================= catálogo =================
@@ -143,6 +145,8 @@ const esMayorista = (item) => {
 const precioLista = (item) => (esMayorista(item) ? Number(item.presentacion.precio_mayorista) : Number(item.presentacion.precio_venta))
 // el cajero puede escribir un precio distinto en la linea; vacio = precio de lista
 const precioManual = (item) => {
+    // sin permiso de precio manual siempre se cobra el precio de lista
+    if (!puede('pos.precio_manual')) return null
     const valor = Number(item.precio)
     return item.precio !== '' && item.precio !== null && !Number.isNaN(valor) && valor > 0 ? valor : null
 }
@@ -569,6 +573,7 @@ const claseInput =
                                     {{ soles(presentacionDefault(p)?.precio_venta) }}
                                 </p>
                                 <button
+                                    v-if="puede('stock.costos')"
                                     class="grid size-7 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                                     title="Últimas compras y ventas"
                                     @click.stop="verHistorial(p)"
@@ -647,6 +652,7 @@ const claseInput =
                             </div>
                         </div>
                         <button
+                            v-if="puede('clientes.gestionar')"
                             class="grid size-10 shrink-0 place-items-center rounded-xl border border-stone-200 text-neutral-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-neutral-800 dark:text-neutral-400 dark:hover:border-emerald-600 dark:hover:text-emerald-400"
                             title="Nuevo cliente"
                             @click="abrirModalCliente"
@@ -697,8 +703,11 @@ const claseInput =
                                 {{ item.presentacion.nombre }}
                             </span>
 
-                            <!-- Precio unitario editable -->
-                            <div class="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            <!-- Precio unitario editable (solo con permiso de precio manual) -->
+                            <span v-if="!puede('pos.precio_manual')" class="text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ soles(precioLista(item)) }} c/u
+                            </span>
+                            <div v-else class="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 <span>S/</span>
                                 <input
                                     :value="precioManual(item) !== null ? item.precio : precioLista(item).toFixed(2)"
@@ -971,7 +980,7 @@ const claseInput =
                                 <label class="mb-1 block text-sm font-medium" for="nc_telefono">Teléfono</label>
                                 <input id="nc_telefono" v-model="nuevoCliente.telefono" type="text" :class="claseInput" placeholder="999 999 999" />
                             </div>
-                            <div>
+                            <div v-if="puede('clientes.credito')">
                                 <label class="mb-1 block text-sm font-medium" for="nc_limite">Límite crédito (S/)</label>
                                 <input id="nc_limite" v-model="nuevoCliente.limite_credito" type="number" step="0.01" min="0" :class="claseInput" placeholder="0" />
                             </div>

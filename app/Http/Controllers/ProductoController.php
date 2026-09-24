@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Http\Requests\ProductoRequest;
 use App\Models\Auditoria;
 use App\Models\Categoria;
@@ -64,7 +65,11 @@ class ProductoController extends Controller
     {
         abort_unless($producto->empresa_id === $request->user()->empresa_id, 403);
 
-        $this->guardar($request, $producto);
+        try {
+            $this->guardar($request, $producto);
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Producto actualizado.');
     }
@@ -103,6 +108,19 @@ class ProductoController extends Controller
         $preciosAntes = $producto->exists
             ? $producto->presentaciones()->pluck('precio_venta', 'id')
             : collect();
+
+        // un almacenero mantiene el catalogo, pero los precios de lista los fija quien tiene el permiso
+        if ($producto->exists && ! $request->user()->can('productos.precios')) {
+            $mayoristasAntes = $producto->presentaciones()->pluck('precio_mayorista', 'id');
+            $cambiaPrecios = $presentaciones->contains(fn ($p) => ($p['id'] ?? null)
+                && $preciosAntes->has($p['id'])
+                && (abs((float) $preciosAntes[$p['id']] - (float) $p['precio_venta']) >= 0.005
+                    || abs((float) ($mayoristasAntes[$p['id']] ?? 0) - (float) ($p['precio_mayorista'] ?? 0)) >= 0.005));
+
+            if ($cambiaPrecios) {
+                throw new ErrorDeNegocio('Tu rol no puede cambiar precios de venta. Pide a un administrador que lo haga.');
+            }
+        }
 
         DB::transaction(function () use ($producto, $datos, $presentaciones) {
             $producto->fill($datos)->save();

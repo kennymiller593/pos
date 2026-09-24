@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { ImagePlus, Package, Plus, Trash2, X } from '@lucide/vue'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     abierto: { type: Boolean, default: false },
@@ -10,6 +11,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['cerrar'])
+
+// al editar, los precios de las presentaciones existentes solo los cambia quien tiene productos.precios
+const { puede } = usePermisos()
+const preciosBloqueados = computed(() => !!props.producto && !puede('productos.precios'))
+const precioBloqueado = (pres) => preciosBloqueados.value && pres.id !== null
 
 const form = useForm({
     codigo_interno: '',
@@ -143,6 +149,7 @@ function enviar() {
 
 const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
+const claseBloqueado = 'cursor-not-allowed bg-stone-100 text-neutral-500 focus:border-stone-300 focus:ring-0 dark:bg-neutral-800 dark:text-neutral-400'
 const claseLabel = 'mb-1 block text-sm font-medium'
 const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 </script>
@@ -281,6 +288,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     Agregar
                                 </button>
                             </div>
+                            <p v-if="preciosBloqueados" class="mb-1 text-xs text-amber-700 dark:text-amber-400">
+                                Solo un administrador puede cambiar precios.
+                            </p>
                             <p v-if="form.errors.presentaciones" :class="claseError">{{ form.errors.presentaciones }}</p>
 
                             <div
@@ -307,12 +317,27 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     </div>
                                     <div>
                                         <label :class="claseLabel">Precio venta (S/) *</label>
-                                        <input v-model="pres.precio_venta" type="number" step="0.01" min="0" :class="claseInput" />
+                                        <input
+                                            v-model="pres.precio_venta"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            :readonly="precioBloqueado(pres)"
+                                            :class="[claseInput, precioBloqueado(pres) && claseBloqueado]"
+                                        />
                                         <p v-if="form.errors[`presentaciones.${i}.precio_venta`]" :class="claseError">{{ form.errors[`presentaciones.${i}.precio_venta`] }}</p>
                                     </div>
                                     <div>
                                         <label :class="claseLabel">Precio mayorista (S/)</label>
-                                        <input v-model="pres.precio_mayorista" type="number" step="0.01" min="0" :class="claseInput" placeholder="Opcional" />
+                                        <input
+                                            v-model="pres.precio_mayorista"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            :readonly="precioBloqueado(pres)"
+                                            :class="[claseInput, precioBloqueado(pres) && claseBloqueado]"
+                                            placeholder="Opcional"
+                                        />
                                         <p v-if="form.errors[`presentaciones.${i}.precio_mayorista`]" :class="claseError">{{ form.errors[`presentaciones.${i}.precio_mayorista`] }}</p>
                                     </div>
                                     <div>

@@ -31,7 +31,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Le
 
 const props = defineProps({
     hoy: { type: Object, required: true },
-    mes: { type: Object, required: true },
+    mes: { type: Object, default: null },
     serie: { type: Array, required: true },
     serieMeses: { type: Array, default: () => [] },
     serieDias: { type: Array, default: () => [] },
@@ -207,12 +207,15 @@ const opcionesMedios = computed(() => ({
 const maxTop = computed(() => Math.max(...props.topProductos.map((p) => p.total), 1))
 const maxSucursal = computed(() => Math.max(...props.ventasSucursales.map((s) => s.mes), 1))
 
+// sin permiso de finanzas el backend manda por_pagar = null: se omite ese renglon
 const PENDIENTES = computed(() => [
     { label: 'Por cobrar', valor: soles(props.pendientes.por_cobrar), url: '/cuentas-por-cobrar', icon: HandCoins, alerta: props.pendientes.por_cobrar > 0 },
-    { label: 'Por pagar', valor: soles(props.pendientes.por_pagar), url: '/cuentas-por-pagar', icon: Banknote, alerta: props.pendientes.por_pagar > 0 },
+    props.pendientes.por_pagar != null
+        ? { label: 'Por pagar', valor: soles(props.pendientes.por_pagar), url: '/cuentas-por-pagar', icon: Banknote, alerta: props.pendientes.por_pagar > 0 }
+        : null,
     { label: 'Stock bajo', valor: `${props.pendientes.stock_bajo} prod.`, url: '/stock?bajos=1', icon: AlertTriangle, alerta: props.pendientes.stock_bajo > 0 },
     { label: 'Por vencer', valor: `${props.pendientes.lotes_por_vencer} lotes`, url: '/stock?vencen=1', icon: CalendarClock, alerta: props.pendientes.lotes_por_vencer > 0 },
-])
+].filter(Boolean))
 
 const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
 </script>
@@ -220,7 +223,7 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
 <template>
     <AppLayout titulo="Inicio">
         <!-- Tarjetas de resumen -->
-        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-4 sm:grid-cols-2" :class="mes ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
             <!-- Ventas de hoy -->
             <div class="rounded-2xl bg-emerald-600 p-5 text-white">
                 <div class="flex items-center justify-between">
@@ -241,11 +244,11 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         {{ Math.abs(hoy.variacion) }}%
                     </span>
                 </div>
-                <p class="mt-1 text-sm text-emerald-100">Margen: {{ soles(hoy.margen) }}</p>
+                <p v-if="hoy.margen != null" class="mt-1 text-sm text-emerald-100">Margen: {{ soles(hoy.margen) }}</p>
             </div>
 
             <!-- Este mes -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div v-if="mes" class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
                     <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Este mes</p>
                     <div class="grid size-9 place-items-center rounded-full bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">

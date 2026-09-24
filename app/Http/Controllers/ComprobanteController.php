@@ -5,10 +5,11 @@ namespace App\Http\Controllers;
 use App\Exceptions\ErrorDeNegocio;
 use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
+use App\Models\Empresa;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
 use App\Services\VentaService;
-use Illuminate\Validation\Rule;
+use App\Support\NumeroALetras;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
@@ -17,14 +18,13 @@ use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ComprobanteController extends Controller
 {
-    public function __construct(private readonly VentaService $ventas)
-    {
-    }
+    public function __construct(private readonly VentaService $ventas) {}
 
     public function index(Request $request): Response
     {
@@ -70,7 +70,6 @@ class ComprobanteController extends Controller
         return Inertia::render('Comprobantes/Index', [
             'comprobantes' => $comprobantes,
             'filtros' => $filtros,
-            'esAdmin' => $request->user()->loadMissing('rol')->rol?->codigo === 'admin',
         ]);
     }
 
@@ -88,7 +87,7 @@ class ComprobanteController extends Controller
             'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',
         ]);
 
-        $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $empresa = $request->user()->empresa;
         $logo = $empresa->logoParaPdf();
         $ancho = (int) ($comprobante->caja?->ancho_ticket ?? 80);
@@ -139,7 +138,7 @@ class ComprobanteController extends Controller
             'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',
         ]);
 
-        $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $empresa = $request->user()->empresa;
 
         return SnappyPdf::loadView('pdf.comprobante-a4', [
@@ -149,8 +148,8 @@ class ComprobanteController extends Controller
             'logo' => $empresa->logoParaPdf(),
             'qr' => $this->qrDelComprobante($comprobante, $empresa),
             'hash' => $comprobante->hash_cpe,
-            'letras' => \App\Support\NumeroALetras::enSoles((float) $comprobante->total),
-            'motivoNota' => \App\Services\NotaCreditoService::MOTIVOS[trim((string) $comprobante->motivo_nota)] ?? null,
+            'letras' => NumeroALetras::enSoles((float) $comprobante->total),
+            'motivoNota' => NotaCreditoService::MOTIVOS[trim((string) $comprobante->motivo_nota)] ?? null,
         ])
             ->setOption('page-size', 'A4')
             ->setOption('margin-top', '12')
@@ -165,7 +164,7 @@ class ComprobanteController extends Controller
      * QR reglamentario de la representación impresa (solo boletas y facturas):
      * RUC | tipo | serie | correlativo | IGV | total | fecha | doc. cliente | hash.
      */
-    private function qrDelComprobante(Comprobante $comprobante, \App\Models\Empresa $empresa): ?string
+    private function qrDelComprobante(Comprobante $comprobante, Empresa $empresa): ?string
     {
         if (! in_array($comprobante->tipo_comprobante_codigo, ['01', '03', '07'], true)) {
             return null;
@@ -184,10 +183,10 @@ class ComprobanteController extends Controller
             (string) $comprobante->hash_cpe,
         ]);
 
-        $svg = (new Writer(new ImageRenderer(new RendererStyle(300, 1), new SvgImageBackEnd())))
+        $svg = (new Writer(new ImageRenderer(new RendererStyle(300, 1), new SvgImageBackEnd)))
             ->writeString($contenido);
 
-        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     /** Descarga el XML firmado que se envió a SUNAT. */
@@ -225,7 +224,7 @@ class ComprobanteController extends Controller
             return back()->with('error', 'Este tipo de comprobante no se envía a SUNAT.');
         }
 
-        $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
 
         // con una baja en camino lo unico que procede es consultarla; si SUNAT la
         // confirmo, aqui mismo se completa la anulacion interna
@@ -262,10 +261,6 @@ class ComprobanteController extends Controller
 
         abort_unless($comprobante->empresa_id === $usuario->empresa_id, 403);
 
-        if ($usuario->loadMissing('rol')->rol?->codigo !== 'admin') {
-            return back()->with('error', 'Solo un administrador puede emitir notas de crédito.');
-        }
-
         $esParcial = $request->input('motivo') === '07';
 
         $datos = $request->validate([
@@ -289,7 +284,7 @@ class ComprobanteController extends Controller
 
         EnviarComprobanteSunat::dispatchAfterResponse($nota->id);
 
-        $numero = "{$nota->serie}-" . str_pad($nota->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$nota->serie}-".str_pad($nota->correlativo, 6, '0', STR_PAD_LEFT);
         $total = number_format((float) $nota->total, 2);
 
         return back()
@@ -302,10 +297,6 @@ class ComprobanteController extends Controller
         $usuario = $request->user();
 
         abort_unless($comprobante->empresa_id === $usuario->empresa_id, 403);
-
-        if ($usuario->loadMissing('rol')->rol?->codigo !== 'admin') {
-            return back()->with('error', 'Solo un administrador puede anular comprobantes.');
-        }
 
         $datos = $request->validate([
             'motivo' => ['required', 'string', 'max:250'],
@@ -323,7 +314,7 @@ class ComprobanteController extends Controller
             return back()->with('error', 'No se pudo anular el comprobante. Intenta de nuevo.');
         }
 
-        $numero = "{$comprobante->serie}-" . str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
 
         if ($resultado === 'baja_pendiente') {
             return back()->with('success', "SUNAT recibió la baja de {$numero} y la está procesando. El comprobante se anulará solo cuando la confirme (o con el botón \"Consultar baja\").");

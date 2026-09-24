@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Permisos;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -16,6 +17,7 @@ class Usuario extends Authenticatable
     protected $table = 'usuarios';
 
     public const CREATED_AT = 'creado_en';
+
     public const UPDATED_AT = 'actualizado_en';
 
     protected $fillable = [
@@ -63,6 +65,29 @@ class Usuario extends Authenticatable
     public function sucursales(): BelongsToMany
     {
         return $this->belongsToMany(Sucursal::class, 'usuario_sucursales', 'usuario_id', 'sucursal_id');
+    }
+
+    /** Código del rol (admin, cajero, vendedor, almacenero). */
+    public function codigoRol(): ?string
+    {
+        return $this->loadMissing('rol')->rol?->codigo;
+    }
+
+    public function esAdmin(): bool
+    {
+        return $this->codigoRol() === 'admin';
+    }
+
+    /** Permiso según la matriz de App\Support\Permisos (es lo que consulta Gate). */
+    public function puede(string $permiso): bool
+    {
+        return Permisos::tiene($this->codigoRol(), $permiso);
+    }
+
+    /** @return list<string> */
+    public function permisos(): array
+    {
+        return Permisos::deRol($this->codigoRol());
     }
 
     /**

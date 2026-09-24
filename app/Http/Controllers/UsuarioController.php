@@ -6,6 +6,7 @@ use App\Models\Auditoria;
 use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\Usuario;
+use App\Support\Permisos;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,7 @@ class UsuarioController extends Controller
                 ->orderBy('nombre_completo')
                 ->paginate(10),
             'roles' => Rol::orderBy('id')->get(['id', 'codigo', 'nombre']),
+            'permisosPorRol' => Permisos::resumenPorRol(),
             'sucursales' => Sucursal::where('empresa_id', $empresaId)->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
         ]);
     }

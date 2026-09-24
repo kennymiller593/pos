@@ -15,6 +15,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     cajas: { type: Array, required: true },
@@ -23,6 +24,7 @@ const props = defineProps({
 })
 
 const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const hora = (fecha) => new Date(fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
@@ -353,7 +355,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </div>
 
                     <div class="space-y-4">
-                        <div class="grid grid-cols-2 gap-2">
+                        <div class="grid gap-2" :class="puede('caja.egresos') ? 'grid-cols-2' : 'grid-cols-1'">
                             <button
                                 type="button"
                                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border text-sm font-medium transition-colors"
@@ -366,6 +368,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 Ingreso
                             </button>
                             <button
+                                v-if="puede('caja.egresos')"
                                 type="button"
                                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border text-sm font-medium transition-colors"
                                 :class="formMovimiento.tipo === 'egreso'

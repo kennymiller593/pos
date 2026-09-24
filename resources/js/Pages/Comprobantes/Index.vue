@@ -4,12 +4,14 @@ import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import { Ban, ChevronDown, CloudUpload, FileText, Printer, ReceiptText, Search, Undo2, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     comprobantes: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
-    esAdmin: { type: Boolean, default: false },
 })
+
+const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const numero = (c) => `${c.serie}-${String(c.correlativo).padStart(6, '0')}`
@@ -80,7 +82,7 @@ const formNota = useForm({ motivo: '06', items: [] })
 const cantidadesNota = ref({}) // detalle_id -> cantidad a devolver
 
 const puedeNotaCredito = (c) =>
-    props.esAdmin && esElectronico(c) && c.estado === 'emitido' && ['aceptado', 'observado'].includes(c.sunat?.estado)
+    puede('comprobantes.nota_credito') && esElectronico(c) && c.estado === 'emitido' && ['aceptado', 'observado'].includes(c.sunat?.estado)
 
 function abrirNotaCredito(c) {
     comprobanteNota.value = c
@@ -260,7 +262,7 @@ const claseInput =
                                             <FileText class="size-4" />
                                         </a>
                                         <button
-                                            v-if="puedeReenviar(c) || bajaPendiente(c)"
+                                            v-if="puede('comprobantes.sunat') && (puedeReenviar(c) || bajaPendiente(c))"
                                             :disabled="enviandoSunat === c.id"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                             :title="bajaPendiente(c) ? 'Consultar baja en SUNAT' : 'Enviar a SUNAT'"
@@ -279,7 +281,7 @@ const claseInput =
                                             N. crédito
                                         </button>
                                         <button
-                                            v-if="esAdmin && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)"
+                                            v-if="puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                                             @click.stop="abrirAnulacion(c)"
                                         >
@@ -353,7 +355,7 @@ const claseInput =
                                                     <div class="flex items-center gap-2">
                                                         <span class="font-semibold text-amber-700 dark:text-amber-400">-{{ soles(n.total) }}</span>
                                                         <button
-                                                            v-if="['pendiente', 'rechazado', undefined].includes(n.sunat?.estado)"
+                                                            v-if="puede('comprobantes.sunat') && ['pendiente', 'rechazado', undefined].includes(n.sunat?.estado)"
                                                             :disabled="enviandoSunat === n.id"
                                                             class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                                             title="Reenviar la nota de crédito a SUNAT"

@@ -4,6 +4,7 @@ import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import { AlertCircle, Banknote, HandCoins, Search, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     cuentas: { type: Object, required: true },
@@ -12,6 +13,8 @@ const props = defineProps({
     mediosPago: { type: Array, required: true },
     cajaAbierta: { type: Boolean, default: false },
 })
+
+const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const numero = (c) => c.comprobante ? `${c.comprobante.serie}-${String(c.comprobante.correlativo).padStart(6, '0')}` : '—'
@@ -169,7 +172,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <button
-                                    v-if="c.estado !== 'pagado'"
+                                    v-if="puede('cuentas_cobrar.cobrar') && c.estado !== 'pagado'"
                                     class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     :disabled="!cajaAbierta"
                                     :title="!cajaAbierta ? 'Abre caja para cobrar' : undefined"

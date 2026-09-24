@@ -10,9 +10,9 @@ use App\Models\CuentaPorPagar;
 use App\Models\Pago;
 use App\Models\Producto;
 use App\Models\Sucursal;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\Request;
 
 class InicioController extends Controller
 {
@@ -195,7 +195,7 @@ class InicioController extends Controller
             ->get()
             ->map(fn ($c) => [
                 'id' => $c->id,
-                'numero' => "{$c->serie}-" . str_pad($c->correlativo, 6, '0', STR_PAD_LEFT),
+                'numero' => "{$c->serie}-".str_pad($c->correlativo, 6, '0', STR_PAD_LEFT),
                 'cliente' => $c->cliente_nombre ?? 'Público general',
                 'sucursal' => $c->sucursal?->nombre,
                 'hora' => substr((string) $c->hora_emision, 0, 5),
@@ -235,23 +235,26 @@ class InicioController extends Controller
             ->where('activo', true)
             ->where('controla_stock', true)
             ->whereRaw("(COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id{$filtroSucursal}), 0) <= 0"
-                . " or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id{$filtroSucursal}), 0) <= stock_minimo))", $parametros)
+                ." or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id{$filtroSucursal}), 0) <= stock_minimo))", $parametros)
             ->count();
 
         $variacion = fn (float $actual, float $previo) => $previo > 0 ? round(($actual - $previo) / $previo * 100, 1) : null;
+
+        // margen, acumulado del mes y deudas con proveedores son datos del dueno
+        $veFinanzas = $request->user()->can('dashboard.finanzas');
 
         return Inertia::render('Inicio', [
             'hoy' => [
                 'total' => (float) $ventasHoy->total,
                 'tickets' => (int) $ventasHoy->tickets,
                 'promedio' => $ventasHoy->tickets > 0 ? round($ventasHoy->total / $ventasHoy->tickets, 2) : 0.0,
-                'margen' => round($margenHoy, 2),
+                'margen' => $veFinanzas ? round($margenHoy, 2) : null,
                 'variacion' => $variacion((float) $ventasHoy->total, $totalAyer),
             ],
-            'mes' => [
+            'mes' => $veFinanzas ? [
                 'total' => round($totalMes, 2),
                 'variacion' => $variacion($totalMes, $totalMesAnterior),
-            ],
+            ] : null,
             'serie' => $serie,
             'serieMeses' => $serieMeses,
             'serieDias' => $serieDias,
@@ -261,7 +264,7 @@ class InicioController extends Controller
             'ultimasVentas' => $ultimasVentas,
             'pendientes' => [
                 'por_cobrar' => $porCobrar,
-                'por_pagar' => $porPagar,
+                'por_pagar' => $veFinanzas ? $porPagar : null,
                 'stock_bajo' => $stockBajo,
                 'lotes_por_vencer' => $lotesPorVencer,
             ],

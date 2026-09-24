@@ -237,7 +237,8 @@ class TransferenciaTest extends TestCase
         $transferencia = Transferencia::where('empresa_id', $this->empresa->id)->firstOrFail();
         $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(10000, 99999).'@test.local');
 
-        $this->actingAs($cajero)->post("/transferencias/{$transferencia->id}/anular")->assertSessionHas('error');
+        // la ruta exige el permiso transferencias.anular, que un cajero no tiene
+        $this->actingAs($cajero)->post("/transferencias/{$transferencia->id}/anular")->assertForbidden();
         $this->assertSame('en_transito', $transferencia->fresh()->estado);
     }
 }

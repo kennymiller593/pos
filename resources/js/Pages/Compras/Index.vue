@@ -3,10 +3,13 @@ import { ref } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import { Download, Eye, Plus, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { usePermisos } from '@/composables/permisos'
 
 defineProps({
     compras: { type: Object, required: true },
 })
+
+const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const fecha = (f) => new Date(`${f}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -17,7 +20,7 @@ const compraVer = ref(null)
 
 <template>
     <AppLayout titulo="Compras">
-        <div class="mb-4 flex justify-end">
+        <div v-if="puede('compras.gestionar')" class="mb-4 flex justify-end">
             <Link
                 href="/compras/crear"
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
@@ -47,7 +50,7 @@ const compraVer = ref(null)
                             <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <Truck class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 Aún no registras compras.
-                                <Link href="/compras/crear" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+                                <Link v-if="puede('compras.gestionar')" href="/compras/crear" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400">
                                     Registra la primera
                                 </Link>
                             </td>

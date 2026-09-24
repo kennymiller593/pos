@@ -5,14 +5,14 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
 use App\Http\Controllers\CajaController;
-use App\Http\Controllers\ClienteController;
-use App\Http\Controllers\CuentaPorCobrarController;
-use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\CatalogoController;
+use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\ComprobanteController;
-use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ConsultaController;
+use App\Http\Controllers\CuentaPorCobrarController;
+use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\MarcaController;
@@ -56,6 +56,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/restablecer-password', [RecuperacionPasswordController::class, 'guardar'])->middleware('throttle:5,1');
 });
 
+// Cada ruta que muta datos lleva el permiso que exige (ver App\Support\Permisos).
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 
@@ -64,20 +65,27 @@ Route::middleware('auth')->group(function () {
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
     Route::get('/notificaciones', [NotificacionController::class, 'index'])->name('notificaciones');
 
-    Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
-    Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
-    Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');
+    // ---- configuracion (solo admin) ----
+    Route::middleware('can:empresa.gestionar')->group(function () {
+        Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
+        Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
+        Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');
+    });
 
-    Route::middleware('admin')->group(function () {
-        Route::get('/auditoria', [AuditoriaController::class, 'index'])->name('auditoria.index');
+    Route::get('/auditoria', [AuditoriaController::class, 'index'])->middleware('can:auditoria.ver')->name('auditoria.index');
 
+    Route::middleware('can:reportes.ver')->group(function () {
         Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
         Route::get('/reportes/exportar', [ReporteController::class, 'exportar'])->name('reportes.exportar');
+    });
 
+    Route::middleware('can:usuarios.gestionar')->group(function () {
         Route::get('/usuarios', [UsuarioController::class, 'index'])->name('usuarios.index');
         Route::post('/usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
         Route::put('/usuarios/{usuario}', [UsuarioController::class, 'update'])->name('usuarios.update');
+    });
 
+    Route::middleware('can:sucursales.gestionar')->group(function () {
         Route::get('/sucursales', [SucursalController::class, 'index'])->name('sucursales.index');
         Route::post('/sucursales', [SucursalController::class, 'store'])->name('sucursales.store');
         Route::put('/sucursales/{sucursal}', [SucursalController::class, 'update'])->name('sucursales.update');
@@ -86,67 +94,86 @@ Route::middleware('auth')->group(function () {
         Route::delete('/sucursales/{sucursal}/series/{serie}', [SucursalController::class, 'eliminarSerie'])->name('sucursales.series.eliminar');
     });
 
-    Route::get('/productos', [ProductoController::class, 'index'])->name('productos.index');
-    Route::post('/productos', [ProductoController::class, 'store'])->name('productos.store');
-    Route::put('/productos/{producto}', [ProductoController::class, 'update'])->name('productos.update');
-    Route::delete('/productos/{producto}', [ProductoController::class, 'destroy'])->name('productos.destroy');
+    // ---- productos y catalogos ----
+    Route::get('/productos', [ProductoController::class, 'index'])->middleware('can:productos.ver')->name('productos.index');
+    Route::post('/productos', [ProductoController::class, 'store'])->middleware('can:productos.gestionar')->name('productos.store');
+    Route::put('/productos/{producto}', [ProductoController::class, 'update'])->middleware('can:productos.gestionar')->name('productos.update');
+    Route::delete('/productos/{producto}', [ProductoController::class, 'destroy'])->middleware('can:productos.eliminar')->name('productos.destroy');
 
-    Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
-    Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
-    Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->name('pos.clientes.crear');
-    Route::get('/pos/productos/{producto}/historial', [PosController::class, 'historialProducto'])->name('pos.historial');
-    Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
+    Route::get('/catalogos', [CatalogoController::class, 'index'])->middleware('can:productos.ver')->name('catalogos.index');
+    Route::middleware('can:catalogos.gestionar')->group(function () {
+        Route::post('/categorias', [CategoriaController::class, 'store'])->name('categorias.store');
+        Route::put('/categorias/{categoria}', [CategoriaController::class, 'update'])->name('categorias.update');
+        Route::delete('/categorias/{categoria}', [CategoriaController::class, 'destroy'])->name('categorias.destroy');
+        Route::post('/marcas', [MarcaController::class, 'store'])->name('marcas.store');
+        Route::put('/marcas/{marca}', [MarcaController::class, 'update'])->name('marcas.update');
+        Route::delete('/marcas/{marca}', [MarcaController::class, 'destroy'])->name('marcas.destroy');
+    });
 
-    Route::get('/caja', [CajaController::class, 'index'])->name('caja.index');
-    Route::post('/caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
-    Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
-    Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
+    // ---- POS y caja ----
+    Route::middleware('can:pos.vender')->group(function () {
+        Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
+        Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
+        Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
+        Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
+    });
+    Route::get('/pos/productos/{producto}/historial', [PosController::class, 'historialProducto'])->middleware('can:stock.costos')->name('pos.historial');
 
-    Route::get('/comprobantes', [ComprobanteController::class, 'index'])->name('comprobantes.index');
-    Route::get('/comprobantes/{comprobante}/ticket', [ComprobanteController::class, 'ticket'])->name('comprobantes.ticket');
-    Route::get('/comprobantes/{comprobante}/a4', [ComprobanteController::class, 'a4'])->name('comprobantes.a4');
-    Route::post('/comprobantes/{comprobante}/anular', [ComprobanteController::class, 'anular'])->name('comprobantes.anular');
-    Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->name('comprobantes.sunat');
-    Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');
-    Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
-    Route::post('/comprobantes/{comprobante}/nota-credito', [ComprobanteController::class, 'notaCredito'])->name('comprobantes.nota-credito');
+    Route::middleware('can:caja.operar')->group(function () {
+        Route::get('/caja', [CajaController::class, 'index'])->name('caja.index');
+        Route::post('/caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
+        Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
+        Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
+    });
 
-    Route::get('/compras', [CompraController::class, 'index'])->name('compras.index');
-    Route::get('/compras/crear', [CompraController::class, 'crear'])->name('compras.crear');
-    Route::post('/compras', [CompraController::class, 'store'])->name('compras.store');
-    Route::get('/compras/{compra}/pdf', [CompraController::class, 'pdf'])->name('compras.pdf');
-    Route::get('/proveedores', [ProveedorController::class, 'index'])->name('proveedores.index');
-    Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar'])->name('proveedores.buscar');
-    Route::post('/proveedores', [ProveedorController::class, 'store'])->name('proveedores.store');
-    Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update'])->name('proveedores.update');
-    Route::delete('/proveedores/{proveedor}', [ProveedorController::class, 'destroy'])->name('proveedores.destroy');
+    // ---- comprobantes ----
+    Route::middleware('can:comprobantes.ver')->group(function () {
+        Route::get('/comprobantes', [ComprobanteController::class, 'index'])->name('comprobantes.index');
+        Route::get('/comprobantes/{comprobante}/ticket', [ComprobanteController::class, 'ticket'])->name('comprobantes.ticket');
+        Route::get('/comprobantes/{comprobante}/a4', [ComprobanteController::class, 'a4'])->name('comprobantes.a4');
+        Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');
+        Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
+    });
+    Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->middleware('can:comprobantes.sunat')->name('comprobantes.sunat');
+    Route::post('/comprobantes/{comprobante}/anular', [ComprobanteController::class, 'anular'])->middleware('can:comprobantes.anular')->name('comprobantes.anular');
+    Route::post('/comprobantes/{comprobante}/nota-credito', [ComprobanteController::class, 'notaCredito'])->middleware('can:comprobantes.nota_credito')->name('comprobantes.nota-credito');
 
-    Route::get('/clientes', [ClienteController::class, 'index'])->name('clientes.index');
-    Route::post('/clientes', [ClienteController::class, 'store'])->name('clientes.store');
-    Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->name('clientes.update');
-    Route::delete('/clientes/{cliente}', [ClienteController::class, 'destroy'])->name('clientes.destroy');
+    // ---- compras y proveedores ----
+    Route::get('/compras', [CompraController::class, 'index'])->middleware('can:compras.ver')->name('compras.index');
+    Route::get('/compras/{compra}/pdf', [CompraController::class, 'pdf'])->middleware('can:compras.ver')->name('compras.pdf');
+    Route::get('/compras/crear', [CompraController::class, 'crear'])->middleware('can:compras.gestionar')->name('compras.crear');
+    Route::post('/compras', [CompraController::class, 'store'])->middleware('can:compras.gestionar')->name('compras.store');
 
-    Route::get('/cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index'])->name('cuentas.index');
-    Route::post('/cuentas-por-cobrar/{cuenta}/cobrar', [CuentaPorCobrarController::class, 'cobrar'])->name('cuentas.cobrar');
+    Route::get('/proveedores', [ProveedorController::class, 'index'])->middleware('can:proveedores.ver')->name('proveedores.index');
+    Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar'])->middleware('can:proveedores.ver')->name('proveedores.buscar');
+    Route::middleware('can:proveedores.gestionar')->group(function () {
+        Route::post('/proveedores', [ProveedorController::class, 'store'])->name('proveedores.store');
+        Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update'])->name('proveedores.update');
+        Route::delete('/proveedores/{proveedor}', [ProveedorController::class, 'destroy'])->name('proveedores.destroy');
+    });
 
-    Route::get('/cuentas-por-pagar', [CuentaPorPagarController::class, 'index'])->name('cuentas-pagar.index');
-    Route::post('/cuentas-por-pagar/{cuenta}/pagar', [CuentaPorPagarController::class, 'pagar'])->name('cuentas-pagar.pagar');
+    // ---- clientes y cuentas ----
+    Route::get('/clientes', [ClienteController::class, 'index'])->middleware('can:clientes.ver')->name('clientes.index');
+    Route::post('/clientes', [ClienteController::class, 'store'])->middleware('can:clientes.gestionar')->name('clientes.store');
+    Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->middleware('can:clientes.gestionar')->name('clientes.update');
+    Route::delete('/clientes/{cliente}', [ClienteController::class, 'destroy'])->middleware('can:clientes.eliminar')->name('clientes.destroy');
 
-    Route::get('/stock', [StockController::class, 'index'])->name('stock.index');
-    Route::get('/stock/{producto}/kardex', [StockController::class, 'kardex'])->name('stock.kardex');
-    Route::post('/stock/{producto}/ajustar', [StockController::class, 'ajustar'])->name('stock.ajustar');
+    Route::get('/cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index'])->middleware('can:cuentas_cobrar.ver')->name('cuentas.index');
+    Route::post('/cuentas-por-cobrar/{cuenta}/cobrar', [CuentaPorCobrarController::class, 'cobrar'])->middleware('can:cuentas_cobrar.cobrar')->name('cuentas.cobrar');
 
-    Route::get('/transferencias', [TransferenciaController::class, 'index'])->name('transferencias.index');
-    Route::get('/transferencias/crear', [TransferenciaController::class, 'crear'])->name('transferencias.crear');
-    Route::post('/transferencias', [TransferenciaController::class, 'store'])->name('transferencias.store');
-    Route::post('/transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir'])->name('transferencias.recibir');
-    Route::post('/transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular'])->name('transferencias.anular');
+    Route::get('/cuentas-por-pagar', [CuentaPorPagarController::class, 'index'])->middleware('can:cuentas_pagar.ver')->name('cuentas-pagar.index');
+    Route::post('/cuentas-por-pagar/{cuenta}/pagar', [CuentaPorPagarController::class, 'pagar'])->middleware('can:cuentas_pagar.pagar')->name('cuentas-pagar.pagar');
 
-    Route::get('/catalogos', [CatalogoController::class, 'index'])->name('catalogos.index');
-    Route::post('/categorias', [CategoriaController::class, 'store'])->name('categorias.store');
-    Route::put('/categorias/{categoria}', [CategoriaController::class, 'update'])->name('categorias.update');
-    Route::delete('/categorias/{categoria}', [CategoriaController::class, 'destroy'])->name('categorias.destroy');
-    Route::post('/marcas', [MarcaController::class, 'store'])->name('marcas.store');
-    Route::put('/marcas/{marca}', [MarcaController::class, 'update'])->name('marcas.update');
-    Route::delete('/marcas/{marca}', [MarcaController::class, 'destroy'])->name('marcas.destroy');
+    // ---- stock y transferencias ----
+    Route::get('/stock', [StockController::class, 'index'])->middleware('can:stock.ver')->name('stock.index');
+    Route::get('/stock/{producto}/kardex', [StockController::class, 'kardex'])->middleware('can:stock.ver')->name('stock.kardex');
+    Route::post('/stock/{producto}/ajustar', [StockController::class, 'ajustar'])->middleware('can:stock.ajustar')->name('stock.ajustar');
+
+    Route::get('/transferencias', [TransferenciaController::class, 'index'])->middleware('can:transferencias.ver')->name('transferencias.index');
+    Route::middleware('can:transferencias.gestionar')->group(function () {
+        Route::get('/transferencias/crear', [TransferenciaController::class, 'crear'])->name('transferencias.crear');
+        Route::post('/transferencias', [TransferenciaController::class, 'store'])->name('transferencias.store');
+        Route::post('/transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir'])->name('transferencias.recibir');
+    });
+    Route::post('/transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular'])->middleware('can:transferencias.anular')->name('transferencias.anular');
 });

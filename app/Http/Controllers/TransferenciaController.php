@@ -14,9 +14,7 @@ use Inertia\Response;
 
 class TransferenciaController extends Controller
 {
-    public function __construct(private readonly TransferenciaService $transferencias)
-    {
-    }
+    public function __construct(private readonly TransferenciaService $transferencias) {}
 
     public function index(Request $request): Response
     {
@@ -33,7 +31,6 @@ class TransferenciaController extends Controller
                 ->latest('creado_en')
                 ->paginate(10)
                 ->withQueryString(),
-            'esAdmin' => $request->user()->loadMissing('rol')->rol?->codigo === 'admin',
         ]);
     }
 
@@ -121,10 +118,6 @@ class TransferenciaController extends Controller
     public function anular(Request $request, Transferencia $transferencia): RedirectResponse
     {
         abort_unless($transferencia->empresa_id === $request->user()->empresa_id, 403);
-
-        if ($request->user()->loadMissing('rol')->rol?->codigo !== 'admin') {
-            return back()->with('error', 'Solo un administrador puede anular transferencias.');
-        }
 
         try {
             $this->transferencias->anular($transferencia, $request->user());

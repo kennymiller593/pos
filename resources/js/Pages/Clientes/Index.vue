@@ -5,6 +5,7 @@ import { watchDebounced } from '@vueuse/core'
 import { LoaderCircle, Pencil, Plus, Search, Trash2, UserRound, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     clientes: { type: Object, required: true },
@@ -13,6 +14,7 @@ const props = defineProps({
 })
 
 const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
 // ---- filtros ----
@@ -134,6 +136,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 />
             </div>
             <button
+                v-if="puede('clientes.gestionar')"
                 class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
                 @click="abrir()"
             >
@@ -161,7 +164,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <td colspan="6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <UserRound class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 No hay clientes que mostrar.
-                                <button class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="abrir()">
+                                <button v-if="puede('clientes.gestionar')" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="abrir()">
                                     Crea el primero
                                 </button>
                             </td>
@@ -195,6 +198,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <td class="px-4 py-3">
                                 <div class="flex justify-end gap-1">
                                     <button
+                                        v-if="puede('clientes.gestionar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                                         title="Editar"
                                         @click="abrir(c)"
@@ -202,6 +206,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         <Pencil class="size-4" />
                                     </button>
                                     <button
+                                        v-if="puede('clientes.eliminar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                                         title="Eliminar"
                                         @click="eliminar(c)"
@@ -316,10 +321,19 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </div>
                         <div class="sm:col-span-2">
                             <label :class="claseLabel" for="cli_limite">Límite de crédito (S/)</label>
-                            <input id="cli_limite" v-model="form.limite_credito" type="number" step="0.01" min="0" :class="claseInput" />
+                            <input
+                                id="cli_limite"
+                                v-model="form.limite_credito"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                :disabled="!puede('clientes.credito')"
+                                :class="[claseInput, 'disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-neutral-500 dark:disabled:bg-neutral-800 dark:disabled:text-neutral-400']"
+                            />
                             <p v-if="form.errors.limite_credito" :class="claseError">{{ form.errors.limite_credito }}</p>
                             <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-                                Con 0 el cliente no puede comprar al crédito (fiado).
+                                <template v-if="puede('clientes.credito')">Con 0 el cliente no puede comprar al crédito (fiado).</template>
+                                <template v-else>Solo un administrador puede cambiar el límite de crédito.</template>
                             </p>
                         </div>
                     </div>
