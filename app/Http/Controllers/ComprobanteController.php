@@ -3,19 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Jobs\EnviarComprobantePorCorreo;
 use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
-use App\Models\Empresa;
 use App\Models\MedioPago;
+use App\Services\ComprobantePdfService;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
 use App\Services\VentaService;
-use App\Support\NumeroALetras;
-use BaconQrCode\Renderer\Image\SvgImageBackEnd;
-use BaconQrCode\Renderer\ImageRenderer;
-use BaconQrCode\Renderer\RendererStyle\RendererStyle;
-use BaconQrCode\Writer;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +22,10 @@ use Inertia\Response;
 
 class ComprobanteController extends Controller
 {
-    public function __construct(private readonly VentaService $ventas) {}
+    public function __construct(
+        private readonly VentaService $ventas,
+        private readonly ComprobantePdfService $pdf,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -38,6 +37,7 @@ class ComprobanteController extends Controller
             ->where('tipo_comprobante_codigo', '!=', '07')
             ->with([
                 'usuario:id,nombre_completo',
+                'cliente:id,email',
                 'detalles:id,comprobante_id,descripcion,cantidad,precio_unitario,total',
                 'pagos:id,comprobante_id,medio_pago_codigo,monto,referencia',
                 'pagos.medioPago:codigo,nombre',
@@ -94,7 +94,22 @@ class ComprobanteController extends Controller
         $empresa = $request->user()->empresa;
         $logo = $empresa->logoParaPdf();
         $ancho = (int) ($comprobante->caja?->ancho_ticket ?? 80);
-        $qr = $this->qrDelComprobante($comprobante, $empresa);
+        $qr = $this->pdf->qr($comprobante, $empresa);
+
+        // impresion directa: la misma vista como HTML que se imprime solo desde el
+        // navegador (con Chrome en --kiosk-printing sale a la termica sin dialogo)
+        if ($request->query('formato') === 'html') {
+            return view('pdf.ticket', [
+                'comprobante' => $comprobante,
+                'empresa' => $empresa,
+                'numero' => $numero,
+                'logo' => $logo,
+                'ancho' => $ancho,
+                'qr' => $qr,
+                'hash' => $comprobante->hash_cpe,
+                'imprimirDirecto' => true,
+            ]);
+        }
 
         // alto del papel segun el contenido, calibrado contra renders reales
         // (la termica corta al final; 58mm ocupa mas lineas por fila)
@@ -134,62 +149,34 @@ class ComprobanteController extends Controller
     {
         abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
 
-        $comprobante->load([
-            'detalles:id,comprobante_id,descripcion,unidad_codigo,cantidad,precio_unitario,descuento,total',
-            'pagos.medioPago:codigo,nombre',
-            'sucursal:id,nombre,direccion',
-            'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',
-        ]);
-
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
-        $empresa = $request->user()->empresa;
 
-        return SnappyPdf::loadView('pdf.comprobante-a4', [
-            'comprobante' => $comprobante,
-            'empresa' => $empresa,
-            'numero' => $numero,
-            'logo' => $empresa->logoParaPdf(),
-            'qr' => $this->qrDelComprobante($comprobante, $empresa),
-            'hash' => $comprobante->hash_cpe,
-            'letras' => NumeroALetras::enSoles((float) $comprobante->total),
-            'motivoNota' => NotaCreditoService::MOTIVOS[trim((string) $comprobante->motivo_nota)] ?? null,
-        ])
-            ->setOption('page-size', 'A4')
-            ->setOption('margin-top', '12')
-            ->setOption('margin-bottom', '12')
-            ->setOption('margin-left', '14')
-            ->setOption('margin-right', '14')
-            ->setOption('encoding', 'utf-8')
-            ->inline("{$numero}.pdf");
+        return $this->pdf->a4($comprobante)->inline("{$numero}.pdf");
     }
 
-    /**
-     * QR reglamentario de la representación impresa (solo boletas y facturas):
-     * RUC | tipo | serie | correlativo | IGV | total | fecha | doc. cliente | hash.
-     */
-    private function qrDelComprobante(Comprobante $comprobante, Empresa $empresa): ?string
+    /** Manda el comprobante (PDF y XML) al correo indicado; opcionalmente lo guarda en la ficha del cliente. */
+    public function correo(Request $request, Comprobante $comprobante): RedirectResponse
     {
-        if (! in_array($comprobante->tipo_comprobante_codigo, ['01', '03', '07'], true)) {
-            return null;
-        }
+        abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
 
-        $contenido = implode('|', [
-            $empresa->ruc,
-            $comprobante->tipo_comprobante_codigo,
-            $comprobante->serie,
-            $comprobante->correlativo,
-            number_format((float) $comprobante->total_igv, 2, '.', ''),
-            number_format((float) $comprobante->total, 2, '.', ''),
-            $comprobante->fecha_emision->format('Y-m-d'),
-            trim((string) $comprobante->cliente_tipo_doc) ?: '0',
-            $comprobante->cliente_numero_doc ?: '-',
-            (string) $comprobante->hash_cpe,
+        $datos = $request->validate([
+            'email' => ['required', 'email', 'max:150'],
+            'guardar_en_cliente' => ['nullable', 'boolean'],
+        ], [
+            'email.required' => 'Ingresa el correo del cliente.',
+            'email.email' => 'El correo no es válido.',
         ]);
 
-        $svg = (new Writer(new ImageRenderer(new RendererStyle(300, 1), new SvgImageBackEnd)))
-            ->writeString($contenido);
+        if ($request->boolean('guardar_en_cliente') && $comprobante->cliente && blank($comprobante->cliente->email)) {
+            $comprobante->cliente->update(['email' => $datos['email']]);
+        }
 
-        return 'data:image/svg+xml;base64,'.base64_encode($svg);
+        // el PDF y el SMTP tardan: se hace despues de responder
+        EnviarComprobantePorCorreo::dispatchAfterResponse($comprobante->id, $datos['email']);
+
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+
+        return back()->with('success', "El comprobante {$numero} se está enviando a {$datos['email']}.");
     }
 
     /** Descarga el XML firmado que se envió a SUNAT. */

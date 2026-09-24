@@ -137,6 +137,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/comprobantes/{comprobante}/a4', [ComprobanteController::class, 'a4'])->name('comprobantes.a4');
         Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');
         Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
+        Route::post('/comprobantes/{comprobante}/correo', [ComprobanteController::class, 'correo'])->middleware('throttle:30,1')->name('comprobantes.correo');
     });
     Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->middleware('can:comprobantes.sunat')->name('comprobantes.sunat');
     Route::post('/comprobantes/{comprobante}/reemitir', [ComprobanteController::class, 'reemitir'])->middleware('can:comprobantes.sunat')->name('comprobantes.reemitir');

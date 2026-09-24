@@ -90,7 +90,7 @@ class PosController extends Controller
             Cliente::query()
                 ->where('empresa_id', $request->user()->empresa_id)
                 ->addSelect([
-                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'limite_credito',
+                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'email', 'limite_credito',
                     'deuda' => CuentaPorCobrar::query()
                         ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0)')
                         ->whereColumn('cliente_id', 'clientes.id')

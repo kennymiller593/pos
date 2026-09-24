@@ -29,7 +29,22 @@
             padding: 4px; margin: 6px 0; letter-spacing: 3px;
         }
         .pie { margin-top: 8px; text-align: center; font-size: 8.5px; }
+        @if (!empty($imprimirDirecto))
+            /* impresion directa desde el navegador: el papel es del ancho de la caja */
+            @page { size: {{ $ancho }}mm auto; margin: 3mm 4mm; }
+            html, body { width: {{ $ancho - 8 }}mm; }
+            @media screen { body { margin: 8mm auto; } }
+        @endif
     </style>
+    @if (!empty($imprimirDirecto))
+        <script>
+            // se imprime apenas carga; con Chrome en modo --kiosk-printing sale sin dialogo
+            window.addEventListener('load', function () {
+                window.print();
+                window.addEventListener('afterprint', function () { window.close(); });
+            });
+        </script>
+    @endif
 </head>
 <body>
     {{-- Encabezado --}}
@@ -44,7 +59,7 @@
             <div>{{ $comprobante->sucursal->direccion }}</div>
         @endif
         <div class="doc">
-            {{ ['00' => 'NOTA DE VENTA', '01' => 'FACTURA', '03' => 'BOLETA DE VENTA', '07' => 'NOTA DE CRÉDITO'][$comprobante->tipo_comprobante_codigo] ?? 'COMPROBANTE' }}
+            {{ ['00' => 'NOTA DE VENTA', '01' => 'FACTURA ELECTRÓNICA', '03' => 'BOLETA DE VENTA ELECTRÓNICA', '07' => 'NOTA DE CRÉDITO ELECTRÓNICA'][$comprobante->tipo_comprobante_codigo] ?? 'COMPROBANTE' }}
         </div>
         <div class="negrita">{{ $numero }}</div>
         @if ($comprobante->comprobanteRef)
@@ -71,7 +86,10 @@
     @if ($comprobante->cliente_nombre)
         <div>Cliente: {{ $comprobante->cliente_nombre }}</div>
         @if ($comprobante->cliente_numero_doc)
-            <div>Doc: {{ $comprobante->cliente_numero_doc }}</div>
+            <div>{{ ['1' => 'DNI', '4' => 'CE', '6' => 'RUC', '7' => 'PAS.'][trim((string) $comprobante->cliente_tipo_doc)] ?? 'Doc' }}: {{ $comprobante->cliente_numero_doc }}</div>
+        @endif
+        @if ($comprobante->tipo_comprobante_codigo === '01' && $comprobante->cliente_direccion)
+            <div>Dir: {{ $comprobante->cliente_direccion }}</div>
         @endif
     @endif
 
@@ -114,6 +132,9 @@
             <div class="fila"><span class="izq">OP. INAFECTA</span><span class="der">S/ {{ number_format($comprobante->total_inafecto, 2) }}</span></div>
         @endif
         <div class="fila total-final"><span class="izq">TOTAL</span><span class="der">S/ {{ number_format($comprobante->total, 2) }}</span></div>
+        @if ($comprobante->tipo_comprobante_codigo !== '00')
+            <div style="font-size: 8px;">SON: {{ \App\Support\NumeroALetras::enSoles((float) $comprobante->total) }}</div>
+        @endif
     </div>
 
     {{-- Pagos --}}

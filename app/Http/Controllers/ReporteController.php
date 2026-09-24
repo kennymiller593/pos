@@ -6,8 +6,8 @@ use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
 use App\Models\MovimientoInventario;
 use App\Models\Producto;
-use App\Models\Sucursal;
 use Barryvdh\Snappy\Facades\SnappyPdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -56,7 +56,7 @@ class ReporteController extends Controller
         return SnappyPdf::loadView('pdf.reporte', [
             'empresa' => $request->user()->empresa,
             'titulo' => $datos['titulo'],
-            'subtitulo' => "Del {$desde} al {$hasta}" . ($datos['contexto'] ?? null ? " · {$datos['contexto']}" : ''),
+            'subtitulo' => "Del {$desde} al {$hasta}".($datos['contexto'] ?? null ? " · {$datos['contexto']}" : ''),
             'columnas' => $datos['columnas'],
             'filas' => $datos['filas'],
             'resumen' => $datos['resumen'],
@@ -71,7 +71,23 @@ class ReporteController extends Controller
 
     private function filtros(Request $request): array
     {
-        $tipo = in_array($request->query('tipo'), ['ventas', 'margen', 'kardex'], true)
+        // fechas invalidas o rangos de mas de un ano no llegan a la consulta
+        $request->validate([
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde', function ($atributo, $valor, $falla) use ($request) {
+                $desde = $request->query('desde');
+                if ($desde && $valor && Carbon::parse($desde)->diffInDays(Carbon::parse($valor)) > 366) {
+                    $falla('El rango no puede superar un año.');
+                }
+            }],
+            'producto_id' => ['nullable', 'uuid'],
+        ], [
+            'desde.date' => 'La fecha inicial no es válida.',
+            'hasta.date' => 'La fecha final no es válida.',
+            'hasta.after_or_equal' => 'La fecha final debe ser igual o posterior a la inicial.',
+        ]);
+
+        $tipo = in_array($request->query('tipo'), ['ventas', 'libro', 'margen', 'kardex'], true)
             ? $request->query('tipo')
             : 'ventas';
 
@@ -84,10 +100,86 @@ class ReporteController extends Controller
     private function construir(Request $request, string $tipo, string $desde, string $hasta, ?string $productoId): array
     {
         return match ($tipo) {
+            'libro' => $this->reporteLibroVentas($request, $desde, $hasta),
             'margen' => $this->reporteMargen($request, $desde, $hasta),
             'kardex' => $this->reporteKardex($request, $desde, $hasta, $productoId),
             default => $this->reporteVentas($request, $desde, $hasta),
         };
+    }
+
+    /**
+     * Registro de ventas con el detalle que pide el contador (y el PLE 14.1):
+     * solo comprobantes electrónicos, anulados con importe cero, notas de
+     * crédito en negativo y con el documento que modifican.
+     */
+    private function reporteLibroVentas(Request $request, string $desde, string $hasta): array
+    {
+        $comprobantes = Comprobante::query()
+            ->where('empresa_id', $request->user()->empresa_id)
+            ->when($this->sucursalConsultaId($request), fn ($q, $id) => $q->where('sucursal_id', $id))
+            ->whereIn('tipo_comprobante_codigo', ['01', '03', '07'])
+            ->whereBetween('fecha_emision', [$desde, $hasta])
+            ->with([
+                'sunat:comprobante_id,estado',
+                'comprobanteRef:id,tipo_comprobante_codigo,serie,correlativo,fecha_emision',
+            ])
+            ->orderBy('fecha_emision')
+            ->orderBy('tipo_comprobante_codigo')
+            ->orderBy('serie')
+            ->orderBy('correlativo')
+            ->get();
+
+        $estadosSunat = [
+            'aceptado' => 'Aceptado', 'observado' => 'Aceptado con obs.', 'rechazado' => 'Rechazado',
+            'pendiente' => 'Pendiente', 'baja_pendiente' => 'Baja en proceso', 'baja' => 'Dado de baja',
+        ];
+
+        $monto = function (Comprobante $c, string $campo): float {
+            if ($c->estado === 'anulado') {
+                return 0.0;
+            }
+
+            return ($c->tipo_comprobante_codigo === '07' ? -1 : 1) * (float) $c->{$campo};
+        };
+
+        $filas = $comprobantes->map(fn (Comprobante $c) => [
+            $c->fecha_emision->format('d/m/Y'),
+            $c->tipo_comprobante_codigo,
+            $c->serie,
+            str_pad($c->correlativo, 8, '0', STR_PAD_LEFT),
+            trim((string) $c->cliente_tipo_doc) ?: '0',
+            $c->cliente_numero_doc ?: '-',
+            $c->estado === 'anulado' ? 'ANULADO' : ($c->cliente_nombre ?: 'CLIENTES VARIOS'),
+            number_format($monto($c, 'total_gravado'), 2, '.', ''),
+            number_format($monto($c, 'total_exonerado'), 2, '.', ''),
+            number_format($monto($c, 'total_inafecto'), 2, '.', ''),
+            number_format($monto($c, 'total_igv'), 2, '.', ''),
+            number_format($monto($c, 'total'), 2, '.', ''),
+            $c->estado === 'anulado' ? 'Anulado' : 'Emitido',
+            $estadosSunat[$c->sunat?->estado ?? 'pendiente'] ?? '-',
+            $c->comprobanteRef?->tipo_comprobante_codigo ?? '',
+            $c->comprobanteRef ? "{$c->comprobanteRef->serie}-".str_pad($c->comprobanteRef->correlativo, 8, '0', STR_PAD_LEFT) : '',
+            $c->comprobanteRef?->fecha_emision?->format('d/m/Y') ?? '',
+        ])->values();
+
+        $suma = fn (string $campo) => $comprobantes->sum(fn ($c) => $monto($c, $campo));
+
+        return [
+            'titulo' => 'Registro de ventas',
+            'columnas' => [
+                'Fecha', 'Tipo', 'Serie', 'Número', 'Tipo doc.', 'Nº doc.', 'Cliente',
+                'Base gravada', 'Exonerado', 'Inafecto', 'IGV', 'Total', 'Estado', 'SUNAT',
+                'Ref. tipo', 'Ref. número', 'Ref. fecha',
+            ],
+            'filas' => $filas,
+            'resumen' => [
+                ['etiqueta' => 'Comprobantes', 'valor' => (string) $comprobantes->count()],
+                ['etiqueta' => 'Base gravada', 'valor' => 'S/ '.number_format($suma('total_gravado'), 2)],
+                ['etiqueta' => 'Exonerado + inafecto', 'valor' => 'S/ '.number_format($suma('total_exonerado') + $suma('total_inafecto'), 2)],
+                ['etiqueta' => 'IGV', 'valor' => 'S/ '.number_format($suma('total_igv'), 2)],
+                ['etiqueta' => 'Total', 'valor' => 'S/ '.number_format($suma('total'), 2)],
+            ],
+        ];
     }
 
     private function reporteVentas(Request $request, string $desde, string $hasta): array
@@ -112,7 +204,7 @@ class ReporteController extends Controller
             'columnas' => ['Fecha', 'Comprobante', 'Tipo', 'Cliente', 'Condición', 'Vendedor', 'Total'],
             'filas' => $comprobantes->map(fn ($c) => [
                 $c->fecha_emision->format('d/m/Y'),
-                "{$c->serie}-" . str_pad($c->correlativo, 6, '0', STR_PAD_LEFT),
+                "{$c->serie}-".str_pad($c->correlativo, 6, '0', STR_PAD_LEFT),
                 $tipos[$c->tipo_comprobante_codigo] ?? $c->tipo_comprobante_codigo,
                 $c->cliente_nombre ?? 'Público general',
                 $c->es_credito ? 'Crédito' : 'Contado',
@@ -121,9 +213,9 @@ class ReporteController extends Controller
             ])->values(),
             'resumen' => [
                 ['etiqueta' => 'Comprobantes', 'valor' => (string) $comprobantes->where('tipo_comprobante_codigo', '!=', '07')->count()],
-                ['etiqueta' => 'Total vendido', 'valor' => 'S/ ' . number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total), 2)],
-                ['etiqueta' => 'IGV', 'valor' => 'S/ ' . number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total_igv), 2)],
-                ['etiqueta' => 'Descuentos', 'valor' => 'S/ ' . number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total_descuentos), 2)],
+                ['etiqueta' => 'Total vendido', 'valor' => 'S/ '.number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total), 2)],
+                ['etiqueta' => 'IGV', 'valor' => 'S/ '.number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total_igv), 2)],
+                ['etiqueta' => 'Descuentos', 'valor' => 'S/ '.number_format($comprobantes->sum(fn ($c) => $signo($c) * (float) $c->total_descuentos), 2)],
             ],
         ];
     }
@@ -165,14 +257,14 @@ class ReporteController extends Controller
                     number_format((float) $fila->venta, 2),
                     number_format((float) $fila->costo, 2),
                     number_format($margen, 2),
-                    ((float) $fila->venta > 0 ? number_format($margen / (float) $fila->venta * 100, 1) : '0.0') . '%',
+                    ((float) $fila->venta > 0 ? number_format($margen / (float) $fila->venta * 100, 1) : '0.0').'%',
                 ];
             })->values(),
             'resumen' => [
-                ['etiqueta' => 'Venta total', 'valor' => 'S/ ' . number_format($ventaTotal, 2)],
-                ['etiqueta' => 'Costo total', 'valor' => 'S/ ' . number_format($costoTotal, 2)],
-                ['etiqueta' => 'Margen', 'valor' => 'S/ ' . number_format($ventaTotal - $costoTotal, 2)],
-                ['etiqueta' => 'Margen %', 'valor' => ($ventaTotal > 0 ? number_format(($ventaTotal - $costoTotal) / $ventaTotal * 100, 1) : '0.0') . '%'],
+                ['etiqueta' => 'Venta total', 'valor' => 'S/ '.number_format($ventaTotal, 2)],
+                ['etiqueta' => 'Costo total', 'valor' => 'S/ '.number_format($costoTotal, 2)],
+                ['etiqueta' => 'Margen', 'valor' => 'S/ '.number_format($ventaTotal - $costoTotal, 2)],
+                ['etiqueta' => 'Margen %', 'valor' => ($ventaTotal > 0 ? number_format(($ventaTotal - $costoTotal) / $ventaTotal * 100, 1) : '0.0').'%'],
             ],
         ];
     }
@@ -259,14 +351,19 @@ class ReporteController extends Controller
         // BOM UTF-8 para que Excel muestre bien tildes y enes
         fwrite($flujo, "\xEF\xBB\xBF");
 
+        // un nombre de cliente o producto que empiece con "=" seria una formula al abrir en Excel
+        $segura = fn ($celda) => is_string($celda) && $celda !== '' && (
+            in_array($celda[0], ['=', '@'], true) || (in_array($celda[0], ['+', '-'], true) && ! is_numeric($celda))
+        ) ? "'".$celda : $celda;
+
         fputcsv($flujo, $datos['columnas'], ';');
         foreach ($datos['filas'] as $fila) {
-            fputcsv($flujo, $fila, ';');
+            fputcsv($flujo, array_map($segura, (array) $fila), ';');
         }
 
         fputcsv($flujo, [], ';');
         foreach ($datos['resumen'] as $linea) {
-            fputcsv($flujo, [$linea['etiqueta'], $linea['valor']], ';');
+            fputcsv($flujo, [$linea['etiqueta'], $segura($linea['valor'])], ';');
         }
 
         rewind($flujo);

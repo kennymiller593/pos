@@ -8,6 +8,7 @@ import {
     History,
     LoaderCircle,
     LockOpen,
+    Mail,
     Minus,
     Package,
     Plus,
@@ -428,6 +429,26 @@ function abrirCobro() {
 }
 
 const ventaExitosa = ref(null) // { mensaje, ticket }
+const formCorreoVenta = useForm({ email: '', guardar_en_cliente: false })
+const mostrarCorreoVenta = ref(false)
+const correoVentaEnviado = ref(false)
+
+function idComprobanteVenta() {
+    // los ids son UUID
+    return ventaExitosa.value?.ticket?.match(/\/comprobantes\/([^/]+)\/ticket/)?.[1] ?? null
+}
+
+function enviarCorreoVenta() {
+    const id = idComprobanteVenta()
+    if (!id) return
+    formCorreoVenta.post(`/comprobantes/${id}/correo`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (page.props.flash?.error) return
+            correoVentaEnviado.value = true
+        },
+    })
+}
 
 function cobrar() {
     if (!puedeCobrar.value) return
@@ -459,6 +480,7 @@ function cobrar() {
         onSuccess: () => {
             // solo limpiamos si la venta fue aceptada (flash success)
             if (page.props.flash?.success) {
+                const emailCliente = clienteSeleccionado.value?.email ?? ''
                 carrito.value = []
                 clienteSeleccionado.value = null
                 modalCobro.value = false
@@ -466,6 +488,11 @@ function cobrar() {
                     mensaje: page.props.flash.success,
                     ticket: page.props.flash.ticket ?? null,
                 }
+                formCorreoVenta.clearErrors()
+                formCorreoVenta.email = emailCliente
+                formCorreoVenta.guardar_en_cliente = false
+                mostrarCorreoVenta.value = false
+                correoVentaEnviado.value = false
             }
         },
         onFinish: () => (procesando.value = false),
@@ -846,6 +873,38 @@ const claseInput =
                             <Printer class="size-4" />
                             Imprimir ticket
                         </a>
+                        <button
+                            v-if="!mostrarCorreoVenta && !correoVentaEnviado"
+                            type="button"
+                            class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="mostrarCorreoVenta = true"
+                        >
+                            <Mail class="size-4" />
+                            Enviar por correo
+                        </button>
+                        <p v-else-if="correoVentaEnviado" class="inline-flex h-10 items-center justify-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 class="size-4" />
+                            Enviado
+                        </p>
+                        <form v-else class="text-left" @submit.prevent="enviarCorreoVenta">
+                            <div class="flex items-center gap-2">
+                                <input
+                                    v-model="formCorreoVenta.email"
+                                    type="email"
+                                    placeholder="cliente@correo.com"
+                                    autofocus
+                                    class="h-10 min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                                />
+                                <button
+                                    type="submit"
+                                    :disabled="formCorreoVenta.processing"
+                                    class="h-10 shrink-0 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {{ formCorreoVenta.processing ? 'Enviando...' : 'Enviar' }}
+                                </button>
+                            </div>
+                            <p v-if="formCorreoVenta.errors.email" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formCorreoVenta.errors.email }}</p>
+                        </form>
                         <button
                             class="inline-flex h-11 items-center justify-center rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
                             @click="ventaExitosa = null"

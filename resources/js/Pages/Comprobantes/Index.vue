@@ -9,6 +9,7 @@ import {
     CloudUpload,
     FileText,
     LoaderCircle,
+    Mail,
     Printer,
     ReceiptText,
     RefreshCw,
@@ -231,6 +232,27 @@ function emitirNota() {
     })
 }
 
+// ---- envio por correo ----
+const comprobanteCorreo = ref(null)
+const formCorreo = useForm({ email: '', guardar_en_cliente: true })
+
+function abrirCorreo(c) {
+    comprobanteCorreo.value = c
+    formCorreo.clearErrors()
+    formCorreo.email = c.cliente?.email ?? ''
+    formCorreo.guardar_en_cliente = !!(c.cliente_id && !c.cliente?.email)
+}
+
+function enviarCorreo() {
+    formCorreo.post(`/comprobantes/${comprobanteCorreo.value.id}/correo`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            if (page.props.flash?.error) return
+            comprobanteCorreo.value = null
+        },
+    })
+}
+
 // ---- anulacion ----
 const comprobanteAnular = ref(null)
 const formAnular = useForm({ motivo: '' })
@@ -407,6 +429,13 @@ const claseInput =
                                             <FileText class="size-4" />
                                         </a>
                                         <button
+                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                            title="Enviar por correo"
+                                            @click.stop="abrirCorreo(c)"
+                                        >
+                                            <Mail class="size-4" />
+                                        </button>
+                                        <button
                                             v-if="puedeConvertir(c)"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                             title="Emitir boleta o factura a partir de esta nota de venta"
@@ -552,6 +581,14 @@ const claseInput =
                                                         <a :href="`/comprobantes/${n.id}/a4`" target="_blank" rel="noopener" title="PDF A4" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
                                                             <FileText class="size-3.5" />
                                                         </a>
+                                                        <button
+                                                            type="button"
+                                                            title="Enviar por correo"
+                                                            class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
+                                                            @click.stop="abrirCorreo(n)"
+                                                        >
+                                                            <Mail class="size-3.5" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -909,6 +946,72 @@ const claseInput =
                             class="rounded-xl bg-red-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {{ formAnular.processing ? 'Anulando...' : 'Anular comprobante' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Teleport>
+
+        <!-- Modal enviar por correo -->
+        <Teleport to="body">
+            <div v-if="comprobanteCorreo" class="fixed inset-0 z-50 grid place-items-center p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="comprobanteCorreo = null" />
+                <form
+                    class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="enviarCorreo"
+                >
+                    <div class="mb-4 flex items-center justify-between">
+                        <h3 class="font-semibold tracking-tight">Enviar {{ numero(comprobanteCorreo) }} por correo</h3>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            @click="comprobanteCorreo = null"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+
+                    <label class="mb-1 block text-sm font-medium" for="email-correo">Correo *</label>
+                    <input
+                        id="email-correo"
+                        v-model="formCorreo.email"
+                        type="email"
+                        placeholder="cliente@correo.com"
+                        autofocus
+                        class="h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                    />
+                    <p v-if="formCorreo.errors.email" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formCorreo.errors.email }}</p>
+
+                    <label
+                        v-if="comprobanteCorreo.cliente_id && !comprobanteCorreo.cliente?.email"
+                        class="mt-3 flex items-center gap-2 text-sm"
+                    >
+                        <input
+                            v-model="formCorreo.guardar_en_cliente"
+                            type="checkbox"
+                            class="size-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 dark:border-neutral-700"
+                        />
+                        Guardar este correo en la ficha del cliente
+                    </label>
+
+                    <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+                        Se adjunta el PDF y, si fue enviado a SUNAT, el XML firmado.
+                    </p>
+
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="comprobanteCorreo = null"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="formCorreo.processing"
+                            class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {{ formCorreo.processing ? 'Enviando...' : 'Enviar' }}
                         </button>
                     </div>
                 </form>

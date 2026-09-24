@@ -12,6 +12,7 @@ const props = defineProps({
 
 const TABS = [
     { valor: 'ventas', label: 'Ventas' },
+    { valor: 'libro', label: 'Registro de ventas (para el contador)' },
     { valor: 'margen', label: 'Margen por producto' },
     { valor: 'kardex', label: 'Kardex' },
 ]

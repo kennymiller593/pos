@@ -11,6 +11,7 @@ use App\Models\DetalleConsumoCapa;
 use App\Models\SerieCorrelativo;
 use App\Models\Stock;
 use App\Models\Sucursal;
+use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -389,8 +390,8 @@ class VentaTest extends TestCase
     {
         // logo subido: debe incrustarse en el ticket sin romper la generacion
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
-        $rutaLogo = 'logos/test-ticket-' . random_int(1000, 9999) . '.png';
-        \Illuminate\Support\Facades\Storage::disk('public')->put($rutaLogo, $png);
+        $rutaLogo = 'logos/test-ticket-'.random_int(1000, 9999).'.png';
+        Storage::disk('public')->put($rutaLogo, $png);
         $this->empresa->update(['logo_url' => "/storage/{$rutaLogo}"]);
 
         // la caja usa tiketera de 58mm: el ticket debe adaptarse
@@ -416,7 +417,24 @@ class VentaTest extends TestCase
         $this->crearEscenarioBase();
         $this->actingAs($this->admin)->get("/comprobantes/{$comprobante->id}/ticket")->assertForbidden();
 
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($rutaLogo);
+        Storage::disk('public')->delete($rutaLogo);
+    }
+
+    public function test_el_ticket_en_html_se_imprime_solo_al_ancho_de_la_caja(): void
+    {
+        $producto = $this->crearProducto(precio: 10.00);
+        $this->darStock($producto, 5, 4.00);
+        $this->abrirCaja();
+        $this->venderContado($producto->presentaciones->first(), 1)->assertSessionHas('success');
+        $comprobante = Comprobante::where('empresa_id', $this->empresa->id)->latest('creado_en')->firstOrFail();
+
+        $respuesta = $this->actingAs($this->admin)->get("/comprobantes/{$comprobante->id}/ticket?formato=html");
+
+        $respuesta->assertOk();
+        $this->assertStringContainsString('text/html', $respuesta->headers->get('content-type'));
+        $this->assertStringContainsString('window.print()', $respuesta->getContent());
+        $this->assertStringContainsString('size: 80mm auto', $respuesta->getContent());
+        $this->assertStringContainsString('NOTA DE VENTA', $respuesta->getContent());
     }
 
     public function test_historial_de_compras_del_producto(): void
