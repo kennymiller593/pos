@@ -30,6 +30,9 @@ class RegistroController extends Controller
 
     public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
     {
+        // el correo se guarda y se compara siempre en minusculas
+        $request->merge(['email' => mb_strtolower(trim((string) $request->input('email')))]);
+
         $datos = $request->validate([
             'ruc' => ['required', 'digits:11', Rule::unique('empresas', 'ruc')],
             'razon_social' => ['required', 'string', 'max:200'],
@@ -40,7 +43,7 @@ class RegistroController extends Controller
             'ubigeo' => ['nullable', 'digits:6'],
             'nombre_completo' => ['required', 'string', 'max:150'],
             'email' => ['required', 'email', 'max:150', Rule::unique('usuarios', 'email')],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'password' => ['required', 'confirmed', Password::defaults()],
         ], [
             'ruc.required' => 'Ingresa el RUC.',
             'ruc.digits' => 'El RUC debe tener 11 dígitos.',

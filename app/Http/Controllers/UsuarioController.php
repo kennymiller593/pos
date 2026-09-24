@@ -136,6 +136,9 @@ class UsuarioController extends Controller
 
     private function validar(Request $request, ?Usuario $usuario = null): array
     {
+        // el correo se guarda y se compara siempre en minusculas
+        $request->merge(['email' => mb_strtolower(trim((string) $request->input('email')))]);
+
         return $request->validate([
             'nombre_completo' => ['required', 'string', 'max:150'],
             'email' => [
@@ -148,7 +151,7 @@ class UsuarioController extends Controller
                 'uuid',
                 Rule::exists('sucursales', 'id')->where('empresa_id', $request->user()->empresa_id),
             ],
-            'password' => [$usuario ? 'nullable' : 'required', 'confirmed', Password::min(8)],
+            'password' => [$usuario ? 'nullable' : 'required', 'confirmed', Password::defaults()],
             'activo' => ['required', 'boolean'],
         ], [
             'nombre_completo.required' => 'Ingresa el nombre.',

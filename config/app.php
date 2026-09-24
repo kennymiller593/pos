@@ -31,6 +31,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Hosts y proxies de confianza
+    |--------------------------------------------------------------------------
+    |
+    | TRUSTED_HOSTS: dominios (separados por coma) desde los que se acepta la
+    | aplicacion; por defecto el host de APP_URL. TRUSTED_PROXIES: IPs del
+    | balanceador o "*" si esta detras de Cloudflare/nginx en el mismo servidor.
+    |
+    */
+
+    'trusted_hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_HOSTS', (string) parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)))))),
+    'trusted_proxies' => env('TRUSTED_PROXIES') === '*' ? '*' : array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))))),
+    'force_https' => (bool) env('FORCE_HTTPS', env('APP_ENV') === 'production'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |
@@ -92,9 +107,9 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'es'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'es'),
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 

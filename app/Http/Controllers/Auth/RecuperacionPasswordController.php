@@ -43,7 +43,7 @@ class RecuperacionPasswordController extends Controller
                 ['token' => Hash::make($token), 'creado_en' => now()],
             );
 
-            $url = url('/restablecer-password/' . $token . '?email=' . urlencode($email));
+            $url = url('/restablecer-password/'.$token.'?email='.urlencode($email));
             Mail::to($email)->send(new RecuperarPassword($url));
         }
 
@@ -63,7 +63,7 @@ class RecuperacionPasswordController extends Controller
         $datos = $request->validate([
             'token' => ['required', 'string'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'password' => ['required', 'confirmed', Password::defaults()],
         ], [
             'password.required' => 'Ingresa la nueva contraseña.',
             'password.confirmed' => 'Las contraseñas no coinciden.',
@@ -89,6 +89,12 @@ class RecuperacionPasswordController extends Controller
             });
 
         DB::table('recuperaciones_password')->where('email', $email)->delete();
+
+        // quien tuviera una sesion robada la pierde (solo posible con sesiones en base de datos)
+        if (config('session.driver') === 'database') {
+            $ids = Usuario::where('email', $email)->pluck('id');
+            DB::table(config('session.table', 'sessions'))->whereIn('user_id', $ids)->delete();
+        }
 
         return redirect('/login')->with('success', 'Contraseña actualizada. Ya puedes ingresar.');
     }

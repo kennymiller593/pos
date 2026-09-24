@@ -47,7 +47,7 @@ Route::get('/consultas/ubigeos', [ConsultaController::class, 'ubigeos'])
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
-    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:login');
     Route::get('/registro', [RegistroController::class, 'create'])->name('registro');
     Route::post('/registro', [RegistroController::class, 'store'])->middleware('throttle:5,1');
 

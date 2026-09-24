@@ -21,6 +21,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // datos de demostracion con credenciales conocidas: jamas en produccion
+        if ($this->command?->getLaravel()->isProduction()) {
+            $this->command->warn('El seeder de demostración no se ejecuta en producción.');
+
+            return;
+        }
+
         $empresa = Empresa::firstOrCreate(
             ['ruc' => '20123456789'],
             [

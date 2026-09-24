@@ -19,6 +19,9 @@ class AuthController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // el correo se guarda y se compara siempre en minusculas
+        $request->merge(['email' => mb_strtolower(trim((string) $request->input('email')))]);
+
         $credenciales = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required'],
