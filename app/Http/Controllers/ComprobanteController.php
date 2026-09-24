@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\ErrorDeNegocio;
 use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
+use App\Models\ComprobanteSunat;
 use App\Models\Empresa;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
@@ -41,7 +42,7 @@ class ComprobanteController extends Controller
                 'pagos.medioPago:codigo,nombre',
                 'sunat:comprobante_id,estado,mensaje_sunat,intentos,enviado_en,xml_url,cdr_url,ticket',
                 'notas' => fn ($q) => $q
-                    ->select('id', 'comprobante_ref_id', 'serie', 'correlativo', 'motivo_nota', 'total', 'creado_en')
+                    ->select('id', 'comprobante_ref_id', 'serie', 'correlativo', 'motivo_nota', 'total', 'estado', 'tipo_comprobante_codigo', 'creado_en')
                     ->where('estado', 'emitido')
                     ->orderBy('creado_en')
                     ->with('sunat:comprobante_id,estado,mensaje_sunat'),
@@ -244,7 +245,60 @@ class ComprobanteController extends Controller
 
         // un comprobante electronico ya emitido debe llegar a SUNAT aunque la
         // empresa haya desactivado la facturacion despues: la obligacion sigue
-        $registro = $sunat->emitir($comprobante);
+        return $this->respuestaDeEnvio($comprobante, $sunat->emitir($comprobante));
+    }
+
+    /** Corrige los datos del cliente desde su ficha y reenvía un comprobante rechazado con el mismo número. */
+    public function reemitir(Request $request, Comprobante $comprobante): RedirectResponse
+    {
+        abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
+
+        try {
+            $registro = $this->ventas->reemitir($comprobante);
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return $this->respuestaDeEnvio($comprobante, $registro);
+    }
+
+    /** Convierte una nota de venta en boleta o factura y la envía a SUNAT. */
+    public function convertir(Request $request, Comprobante $comprobante): RedirectResponse
+    {
+        $usuario = $request->user();
+
+        abort_unless($comprobante->empresa_id === $usuario->empresa_id, 403);
+
+        $datos = $request->validate([
+            'tipo' => ['required', 'in:01,03'],
+            'cliente_id' => ['nullable', 'uuid'],
+        ], [
+            'tipo.in' => 'Elige boleta o factura.',
+        ]);
+
+        try {
+            $this->ventas->convertir($comprobante, $usuario, $datos['tipo'], $datos['cliente_id'] ?? null);
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'No se pudo convertir la nota de venta. Intenta de nuevo.');
+        }
+
+        EnviarComprobanteSunat::dispatchAfterResponse($comprobante->id);
+
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+        $nombre = $datos['tipo'] === '01' ? 'Factura' : 'Boleta';
+
+        return back()
+            ->with('ticket', route('comprobantes.ticket', $comprobante))
+            ->with('success', "{$nombre} {$numero} emitida a partir de la nota de venta. Se envía a SUNAT.");
+    }
+
+    private function respuestaDeEnvio(Comprobante $comprobante, ComprobanteSunat $registro): RedirectResponse
+    {
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
 
         return match ($registro->estado) {
             'aceptado' => back()->with('success', "SUNAT aceptó el comprobante {$numero}."),

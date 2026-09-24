@@ -45,7 +45,7 @@ class BajaSunatTest extends TestCase
             'correlativo' => 0,
         ]);
 
-        $this->enviador = new EnviadorSunatFalso();
+        $this->enviador = new EnviadorSunatFalso;
         $this->app->instance(EnviadorSunat::class, $this->enviador);
 
         // por defecto, el envio original resulta aceptado
@@ -79,7 +79,7 @@ class BajaSunatTest extends TestCase
         return Cliente::create([
             'empresa_id' => $this->empresa->id,
             'tipo_documento_codigo' => '6',
-            'numero_documento' => '20123456789',
+            'numero_documento' => '20123456786',
             'nombre' => 'Empresa Cliente SAC',
             'limite_credito' => 0,
         ]);

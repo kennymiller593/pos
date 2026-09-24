@@ -15,6 +15,7 @@ use App\Models\ProductoPresentacion;
 use App\Models\SerieCorrelativo;
 use App\Models\TipoAfectacionIgv;
 use App\Models\Usuario;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Support\Facades\DB;
 
 class VentaService
@@ -23,11 +24,16 @@ class VentaService
 
     private const SERIES_POR_DEFECTO = ['00' => 'NV01', '03' => 'B001', '01' => 'F001'];
 
+    /** Dias calendario, contados desde la emision, en que SUNAT admite el envio (facturas 3, boletas 7). */
+    private const PLAZO_ENVIO_DIAS = ['01' => 3, '03' => 7];
+
+    /** Desde este importe la boleta debe identificar al comprador (Reglamento de Comprobantes de Pago). */
+    private const BOLETA_EXIGE_DOCUMENTO_DESDE = 700.0;
+
     public function __construct(
         private readonly InventarioService $inventario,
         private readonly SunatService $sunat,
-    ) {
-    }
+    ) {}
 
     /**
      * Registra una venta completa: comprobante, detalles, FIFO, stock, kardex y pagos.
@@ -45,12 +51,10 @@ class VentaService
 
         $cliente = $this->resolverCliente($empresaId, $datos['cliente_id'] ?? null, $esCredito);
 
-        if ($datos['tipo_comprobante_codigo'] === '01' && trim((string) $cliente?->tipo_documento_codigo) !== '6') {
-            throw new ErrorDeNegocio('La factura necesita un cliente con RUC. Selecciónalo o créalo desde el buscador de clientes.');
-        }
-
         [$lineas, $totales] = $this->calcularLineas($empresaId, $datos['items']);
         $totalVenta = round($totales['total'], 2);
+
+        $this->validarClienteParaTipo($datos['tipo_comprobante_codigo'], $cliente, $totalVenta);
 
         if ($esCredito) {
             $this->validarLineaDeCredito($cliente, $totalVenta);
@@ -185,6 +189,167 @@ class VentaService
         }
 
         return $registro;
+    }
+
+    /**
+     * Convierte una nota de venta ya cobrada en boleta o factura electrónica:
+     * el mismo comprobante toma el tipo, la serie y el correlativo nuevos y
+     * conserva detalles, pagos, stock y caja. Solo dentro del plazo en que
+     * SUNAT admite el envío contado desde la fecha de la venta.
+     *
+     * @throws ErrorDeNegocio
+     */
+    public function convertir(Comprobante $comprobante, Usuario $usuario, string $tipo, ?string $clienteId): Comprobante
+    {
+        if (! isset(self::PLAZO_ENVIO_DIAS[$tipo])) {
+            throw new ErrorDeNegocio('Solo se puede convertir en boleta o factura.');
+        }
+
+        if ($comprobante->tipo_comprobante_codigo !== '00') {
+            throw new ErrorDeNegocio('Solo una nota de venta se puede convertir en comprobante electrónico.');
+        }
+
+        if ($comprobante->estado !== 'emitido') {
+            throw new ErrorDeNegocio('Una nota de venta anulada no se puede convertir.');
+        }
+
+        if (! $comprobante->empresa->facturacion_electronica) {
+            throw new ErrorDeNegocio('Activa la facturación electrónica en Empresa para emitir boletas y facturas.');
+        }
+
+        $dias = $comprobante->fecha_emision->startOfDay()->diffInDays(now()->startOfDay());
+        if ($dias > self::PLAZO_ENVIO_DIAS[$tipo]) {
+            throw new ErrorDeNegocio(sprintf(
+                'Ya pasaron %d días desde la venta: SUNAT solo admite %s hasta %d días después. Registra una venta nueva.',
+                $dias,
+                $tipo === '01' ? 'facturas' : 'boletas',
+                self::PLAZO_ENVIO_DIAS[$tipo],
+            ));
+        }
+
+        $cliente = $clienteId
+            ? $this->resolverCliente($comprobante->empresa_id, $clienteId, false)
+            : $comprobante->cliente;
+
+        $this->validarClienteParaTipo($tipo, $cliente, (float) $comprobante->total);
+
+        return DB::transaction(function () use ($comprobante, $usuario, $tipo, $cliente) {
+            $bloqueado = Comprobante::lockForUpdate()->find($comprobante->id);
+
+            if (! $bloqueado || $bloqueado->tipo_comprobante_codigo !== '00' || $bloqueado->estado !== 'emitido') {
+                throw new ErrorDeNegocio('Esta nota de venta ya fue convertida o anulada.');
+            }
+
+            $origen = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+            $serie = $this->tomarCorrelativo($comprobante->empresa_id, $comprobante->sucursal_id, $comprobante->caja_id, $tipo);
+
+            $comprobante->forceFill([
+                'tipo_comprobante_codigo' => $tipo,
+                'serie' => $serie->serie,
+                'correlativo' => $serie->correlativo,
+                'cliente_id' => $cliente?->id,
+                'cliente_tipo_doc' => $cliente?->tipo_documento_codigo,
+                'cliente_numero_doc' => $cliente?->numero_documento,
+                'cliente_nombre' => $cliente?->nombre,
+                'cliente_direccion' => $cliente?->direccion,
+                'sunat_respuesta' => array_merge((array) $comprobante->sunat_respuesta, ['convertido_de' => $origen]),
+            ])->save();
+
+            Auditoria::registrar($usuario, 'comprobante.convertido', 'comprobante', $comprobante->id, [
+                'de' => $origen,
+                'a' => "{$serie->serie}-".str_pad($serie->correlativo, 6, '0', STR_PAD_LEFT),
+                'tipo' => $tipo,
+                'total' => (float) $comprobante->total,
+            ]);
+
+            return $comprobante;
+        });
+    }
+
+    /**
+     * Vuelve a enviar a SUNAT un comprobante rechazado con el mismo número:
+     * SUNAT no registra los rechazados, así que basta corregir los datos del
+     * cliente (se toman de nuevo de su ficha) y reenviar.
+     *
+     * @throws ErrorDeNegocio
+     */
+    public function reemitir(Comprobante $comprobante): ComprobanteSunat
+    {
+        if ($comprobante->estado !== 'emitido') {
+            throw new ErrorDeNegocio('Un comprobante anulado no se reenvía.');
+        }
+
+        if ($comprobante->sunat?->estado !== 'rechazado') {
+            throw new ErrorDeNegocio('Solo un comprobante rechazado por SUNAT se corrige y reenvía; los pendientes usan "Enviar".');
+        }
+
+        $cliente = $comprobante->cliente;
+
+        if ($cliente) {
+            $comprobante->forceFill([
+                'cliente_tipo_doc' => $cliente->tipo_documento_codigo,
+                'cliente_numero_doc' => $cliente->numero_documento,
+                'cliente_nombre' => $cliente->nombre,
+                'cliente_direccion' => $cliente->direccion,
+            ]);
+        }
+
+        // el comprobante conserva el tipo original; si es una nota de credito se valida como su referencia
+        $tipoParaValidar = $comprobante->tipo_comprobante_codigo === '07'
+            ? (string) $comprobante->comprobanteRef?->tipo_comprobante_codigo
+            : $comprobante->tipo_comprobante_codigo;
+
+        $this->validarClienteParaTipo($tipoParaValidar, $cliente, (float) $comprobante->total);
+        $comprobante->save();
+
+        return $this->sunat->emitir($comprobante->fresh(['empresa', 'sucursal', 'detalles']));
+    }
+
+    /**
+     * Reglas del Reglamento de Comprobantes de Pago sobre el adquirente:
+     * la factura exige RUC válido; la boleta identifica al cliente desde
+     * S/ 700; y cualquier documento informado debe tener el formato correcto.
+     *
+     * @throws ErrorDeNegocio
+     */
+    private function validarClienteParaTipo(string $tipo, ?Cliente $cliente, float $total): void
+    {
+        if ($tipo === '00') {
+            return;
+        }
+
+        $tipoDoc = trim((string) $cliente?->tipo_documento_codigo);
+        $numeroDoc = trim((string) $cliente?->numero_documento);
+        $identificado = $cliente && $tipoDoc !== DocumentoIdentidad::SIN_DOCUMENTO && $numeroDoc !== '';
+
+        if ($tipo === '01') {
+            if (! $cliente || $tipoDoc !== DocumentoIdentidad::RUC) {
+                throw new ErrorDeNegocio('La factura necesita un cliente con RUC. Selecciónalo o créalo desde el buscador de clientes.');
+            }
+
+            if (! DocumentoIdentidad::rucValido($numeroDoc)) {
+                throw new ErrorDeNegocio("El RUC de \"{$cliente->nombre}\" ({$numeroDoc}) no es válido. Corrígelo en Clientes antes de facturar.");
+            }
+
+            return;
+        }
+
+        if ($total >= self::BOLETA_EXIGE_DOCUMENTO_DESDE && ! $identificado) {
+            throw new ErrorDeNegocio(sprintf(
+                'Las boletas desde S/ %s deben identificar al cliente con su DNI u otro documento.',
+                number_format(self::BOLETA_EXIGE_DOCUMENTO_DESDE, 2),
+            ));
+        }
+
+        if ($identificado && ! DocumentoIdentidad::esValido($tipoDoc, $numeroDoc)) {
+            throw new ErrorDeNegocio(sprintf(
+                'El %s de "%s" (%s) no es válido: %s Corrígelo en Clientes.',
+                DocumentoIdentidad::nombre($tipoDoc),
+                $cliente->nombre,
+                $numeroDoc,
+                DocumentoIdentidad::mensaje($tipoDoc),
+            ));
+        }
     }
 
     /** @throws ErrorDeNegocio */
@@ -483,7 +648,7 @@ class VentaService
             ->map(fn (string $serie) => (int) substr($serie, strlen($prefijo)))
             ->max() ?? 0;
 
-        return $prefijo . str_pad((string) ($mayorUsada + 1), strlen($porDefecto) - strlen($prefijo), '0', STR_PAD_LEFT);
+        return $prefijo.str_pad((string) ($mayorUsada + 1), strlen($porDefecto) - strlen($prefijo), '0', STR_PAD_LEFT);
     }
 
     private function registrarDetalle(Comprobante $comprobante, array $linea, string $sucursalId, Usuario $usuario): void
@@ -500,7 +665,7 @@ class VentaService
             'producto_id' => $producto->id,
             'presentacion_id' => $linea['presentacion']->id,
             'lote_id' => $consumo['consumos'][0]['lote_id'] ?? null,
-            'descripcion' => $producto->nombre . ($linea['presentacion']->nombre !== 'Unidad' ? " ({$linea['presentacion']->nombre})" : ''),
+            'descripcion' => $producto->nombre.($linea['presentacion']->nombre !== 'Unidad' ? " ({$linea['presentacion']->nombre})" : ''),
             'unidad_codigo' => $producto->unidad_base_codigo,
             'tipo_afectacion_codigo' => $producto->tipo_afectacion_codigo,
             'cantidad' => $linea['cantidad'],

@@ -135,6 +135,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
     });
     Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->middleware('can:comprobantes.sunat')->name('comprobantes.sunat');
+    Route::post('/comprobantes/{comprobante}/reemitir', [ComprobanteController::class, 'reemitir'])->middleware('can:comprobantes.sunat')->name('comprobantes.reemitir');
+    Route::post('/comprobantes/{comprobante}/convertir', [ComprobanteController::class, 'convertir'])->middleware('can:comprobantes.convertir')->name('comprobantes.convertir');
     Route::post('/comprobantes/{comprobante}/anular', [ComprobanteController::class, 'anular'])->middleware('can:comprobantes.anular')->name('comprobantes.anular');
     Route::post('/comprobantes/{comprobante}/nota-credito', [ComprobanteController::class, 'notaCredito'])->middleware('can:comprobantes.nota_credito')->name('comprobantes.nota-credito');
 
@@ -143,6 +145,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/compras/{compra}/pdf', [CompraController::class, 'pdf'])->middleware('can:compras.ver')->name('compras.pdf');
     Route::get('/compras/crear', [CompraController::class, 'crear'])->middleware('can:compras.gestionar')->name('compras.crear');
     Route::post('/compras', [CompraController::class, 'store'])->middleware('can:compras.gestionar')->name('compras.store');
+    Route::post('/compras/{compra}/anular', [CompraController::class, 'anular'])->middleware('can:compras.anular')->name('compras.anular');
 
     Route::get('/proveedores', [ProveedorController::class, 'index'])->middleware('can:proveedores.ver')->name('proveedores.index');
     Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar'])->middleware('can:proveedores.ver')->name('proveedores.buscar');

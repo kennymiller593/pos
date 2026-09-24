@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
-import { Link } from '@inertiajs/vue3'
-import { Download, Eye, Plus, Truck, X } from '@lucide/vue'
+import { Link, useForm } from '@inertiajs/vue3'
+import { Ban, Download, Eye, Plus, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
 
@@ -16,6 +16,30 @@ const fecha = (f) => new Date(`${f}T00:00:00`).toLocaleDateString('es-PE', { day
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
 
 const compraVer = ref(null)
+
+const fechaHora = (f) => (f
+    ? new Date(f).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—')
+
+// ---- anulacion ----
+const compraAnular = ref(null)
+const formAnular = useForm({ motivo: '' })
+
+function abrirAnulacion(c) {
+    compraAnular.value = c
+    formAnular.clearErrors()
+    formAnular.motivo = ''
+}
+
+function anular() {
+    formAnular.post(`/compras/${compraAnular.value.id}/anular`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            compraAnular.value = null
+            compraVer.value = null
+        },
+    })
+}
 </script>
 
 <template>
@@ -59,11 +83,19 @@ const compraVer = ref(null)
                             v-for="c in compras.data"
                             :key="c.id"
                             class="cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50"
+                            :class="c.estado === 'anulada' ? 'opacity-60' : ''"
                             @click="compraVer = c"
                         >
                             <td class="px-4 py-3 whitespace-nowrap">{{ fecha(c.fecha) }}</td>
                             <td class="px-4 py-3">
                                 <span class="font-medium">{{ c.proveedor?.razon_social ?? 'Sin proveedor' }}</span>
+                                <span
+                                    v-if="c.estado === 'anulada'"
+                                    class="ml-2 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-400"
+                                    :title="c.motivo_anulacion ?? ''"
+                                >
+                                    Anulada
+                                </span>
                             </td>
                             <td class="px-4 py-3 text-neutral-600 dark:text-neutral-300">{{ c.serie_numero ?? '—' }}</td>
                             <td class="px-4 py-3 text-center text-neutral-600 dark:text-neutral-300">{{ c.detalles.length }}</td>
@@ -96,6 +128,15 @@ const compraVer = ref(null)
                                     >
                                         <Download class="size-4" />
                                     </a>
+                                    <button
+                                        v-if="c.estado === 'registrada' && puede('compras.anular')"
+                                        class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                        title="Anular compra"
+                                        @click.stop="abrirAnulacion(c)"
+                                    >
+                                        <Ban class="size-3.5" />
+                                        Anular
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -155,6 +196,14 @@ const compraVer = ref(null)
                         </button>
                     </div>
 
+                    <div
+                        v-if="compraVer.estado === 'anulada'"
+                        class="mx-6 mt-4 rounded-xl bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-500/15 dark:text-red-300"
+                    >
+                        Anulada el {{ fechaHora(compraVer.anulada_en) }}
+                        por {{ compraVer.anulada_por?.nombre_completo ?? '—' }}<template v-if="compraVer.motivo_anulacion">: {{ compraVer.motivo_anulacion }}</template>
+                    </div>
+
                     <!-- Items -->
                     <div class="max-h-[50vh] overflow-y-auto px-6 py-4">
                         <table class="w-full text-left text-sm">
@@ -205,6 +254,66 @@ const compraVer = ref(null)
                         </div>
                     </div>
                 </div>
+            </div>
+        </Teleport>
+
+        <!-- Modal anulación -->
+        <Teleport to="body">
+            <div v-if="compraAnular" class="fixed inset-0 z-50 grid place-items-center p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="compraAnular = null" />
+                <form
+                    class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="anular"
+                >
+                    <div class="mb-4 flex items-center justify-between">
+                        <h3 class="font-semibold tracking-tight">
+                            Anular compra<template v-if="compraAnular.serie_numero"> {{ compraAnular.serie_numero }}</template>
+                        </h3>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            @click="compraAnular = null"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+
+                    <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                        Se retirará del stock la mercadería de esta compra y se eliminará la deuda con el proveedor.
+                        Solo es posible si nada de esa mercadería se vendió o movió y la deuda no tiene pagos.
+                    </p>
+
+                    <div class="mt-4">
+                        <label class="mb-1 block text-sm font-medium" for="motivo-compra">Motivo *</label>
+                        <input
+                            id="motivo-compra"
+                            v-model="formAnular.motivo"
+                            type="text"
+                            required
+                            class="h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                            placeholder="Ej. compra registrada por error"
+                            autofocus
+                        />
+                        <p v-if="formAnular.errors.motivo" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formAnular.errors.motivo }}</p>
+                    </div>
+
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="compraAnular = null"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="formAnular.processing || !formAnular.motivo.trim()"
+                            class="rounded-xl bg-red-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {{ formAnular.processing ? 'Anulando...' : 'Anular compra' }}
+                        </button>
+                    </div>
+                </form>
             </div>
         </Teleport>
     </AppLayout>

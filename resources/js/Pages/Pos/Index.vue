@@ -22,6 +22,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
 
 const props = defineProps({
     apertura: { type: Object, default: null },
@@ -286,6 +287,11 @@ function abrirModalCliente() {
     resultadosCliente.value = []
     modalCliente.value = true
 }
+
+// "Sin documento" no lleva numero
+watch(() => nuevoCliente.value.tipo_documento_codigo, (tipo) => {
+    if (esSinDocumento(tipo)) nuevoCliente.value.numero_documento = ''
+})
 
 async function consultarDocumentoCliente() {
     const numero = nuevoCliente.value.numero_documento.trim()
@@ -950,21 +956,25 @@ const claseInput =
                                         v-model="nuevoCliente.numero_documento"
                                         type="text"
                                         maxlength="15"
-                                        :class="[claseInput, 'pr-10']"
-                                        placeholder="12345678"
+                                        :disabled="esSinDocumento(nuevoCliente.tipo_documento_codigo)"
+                                        :class="[claseInput, 'pr-10 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-neutral-800']"
+                                        :placeholder="esSinDocumento(nuevoCliente.tipo_documento_codigo) ? '' : '12345678'"
                                         @blur="consultarDocumentoCliente"
                                     />
                                     <button
                                         type="button"
                                         class="absolute top-1/2 right-1.5 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-neutral-400 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                                         title="Buscar en RENIEC / SUNAT"
-                                        :disabled="consultandoDoc"
+                                        :disabled="consultandoDoc || esSinDocumento(nuevoCliente.tipo_documento_codigo)"
                                         @click="consultarDocumentoCliente"
                                     >
                                         <LoaderCircle v-if="consultandoDoc" class="size-4 animate-spin" />
                                         <Search v-else class="size-4" />
                                     </button>
                                 </div>
+                                <p v-if="ayudaDocumento(nuevoCliente.tipo_documento_codigo)" class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                                    {{ ayudaDocumento(nuevoCliente.tipo_documento_codigo) }}
+                                </p>
                                 <p v-if="erroresCliente.numero_documento" class="mt-1 text-xs text-red-600 dark:text-red-400">
                                     {{ erroresCliente.numero_documento[0] }}
                                 </p>

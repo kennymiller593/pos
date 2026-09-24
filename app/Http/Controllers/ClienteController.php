@@ -6,6 +6,7 @@ use App\Models\Auditoria;
 use App\Models\Cliente;
 use App\Models\CuentaPorCobrar;
 use App\Models\TipoDocumentoIdentidad;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -117,6 +118,7 @@ class ClienteController extends Controller
             'tipo_documento_codigo' => ['required', Rule::exists('tipos_documento_identidad', 'codigo')],
             'numero_documento' => [
                 'nullable', 'string', 'max:15',
+                DocumentoIdentidad::regla($request->input('tipo_documento_codigo')),
                 Rule::unique('clientes', 'numero_documento')
                     ->where('empresa_id', $empresaId)
                     ->where('tipo_documento_codigo', $request->input('tipo_documento_codigo'))

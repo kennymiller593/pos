@@ -80,6 +80,8 @@
 
     @if ($comprobante->estado === 'anulado')
         <div class="anulado">ANULADO</div>
+    @elseif ($comprobante->sunat?->estado === 'rechazado')
+        <div class="anulado">RECHAZADO POR SUNAT · SIN VALIDEZ TRIBUTARIA</div>
     @endif
 
     @if ($comprobante->comprobanteRef)

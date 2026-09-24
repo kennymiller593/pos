@@ -1,8 +1,22 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Link, router, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Ban, ChevronDown, CloudUpload, FileText, Printer, ReceiptText, Search, Undo2, X } from '@lucide/vue'
+import {
+    Ban,
+    CheckCircle2,
+    ChevronDown,
+    CloudUpload,
+    FileText,
+    LoaderCircle,
+    Printer,
+    ReceiptText,
+    RefreshCw,
+    Search,
+    Undo2,
+    UserRound,
+    X,
+} from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
 
@@ -12,6 +26,8 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const page = usePage()
+const facturacionElectronica = computed(() => !!page.props.auth?.user?.empresa?.facturacion_electronica)
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const numero = (c) => `${c.serie}-${String(c.correlativo).padStart(6, '0')}`
@@ -57,7 +73,11 @@ const SUNAT_BADGES = {
 const bajaPendiente = (c) => c.sunat?.estado === 'baja_pendiente'
 const badgeSunat = (c) => SUNAT_BADGES[c.sunat?.estado ?? 'pendiente'] ?? SUNAT_BADGES.pendiente
 const puedeReenviar = (c) =>
-    esElectronico(c) && c.estado === 'emitido' && ['pendiente', 'rechazado', undefined].includes(c.sunat?.estado)
+    esElectronico(c) && c.estado === 'emitido' && ['pendiente', undefined].includes(c.sunat?.estado)
+// un rechazado no se reenvia tal cual: se reemite con el mismo numero y los datos del cliente actualizados
+const puedeReemitir = (c) =>
+    esElectronico(c) && c.estado === 'emitido' && c.sunat?.estado === 'rechazado'
+const AYUDA_REEMITIR = 'Actualiza los datos del cliente desde Clientes y vuelve a enviar con el mismo número'
 
 const enviandoSunat = ref(null)
 
@@ -66,6 +86,92 @@ function enviarSunat(c) {
     router.post(`/comprobantes/${c.id}/sunat`, {}, {
         preserveScroll: true,
         onFinish: () => (enviandoSunat.value = null),
+    })
+}
+
+function reemitir(c) {
+    enviandoSunat.value = c.id
+    router.post(`/comprobantes/${c.id}/reemitir`, {}, {
+        preserveScroll: true,
+        onFinish: () => (enviandoSunat.value = null),
+    })
+}
+
+// ---- convertir nota de venta en boleta/factura ----
+const puedeConvertir = (c) =>
+    facturacionElectronica.value && puede('comprobantes.convertir') && c.tipo_comprobante_codigo === '00' && c.estado === 'emitido'
+
+const comprobanteConvertir = ref(null)
+const tipoConversion = ref('03')
+const clienteConversion = ref(null)
+const buscarClienteConv = ref('')
+const resultadosClienteConv = ref([])
+const buscandoClienteConv = ref(false)
+const erroresConversion = ref({})
+const convirtiendo = ref(false)
+const ticketConversion = ref(null) // { mensaje, ticket }
+
+function abrirConversion(c) {
+    comprobanteConvertir.value = c
+    tipoConversion.value = c.cliente_tipo_doc?.trim() === '6' ? '01' : '03'
+    clienteConversion.value = c.cliente_id
+        ? {
+            id: c.cliente_id,
+            nombre: c.cliente_nombre,
+            tipo_documento_codigo: c.cliente_tipo_doc ?? null,
+            numero_documento: c.cliente_numero_doc ?? null,
+        }
+        : null
+    buscarClienteConv.value = ''
+    resultadosClienteConv.value = []
+    erroresConversion.value = {}
+}
+
+watchDebounced(buscarClienteConv, async (texto) => {
+    if (!texto.trim()) {
+        resultadosClienteConv.value = []
+        return
+    }
+    buscandoClienteConv.value = true
+    try {
+        const r = await fetch(`/pos/clientes?buscar=${encodeURIComponent(texto)}`, { headers: { Accept: 'application/json' } })
+        resultadosClienteConv.value = r.ok ? await r.json() : []
+    } catch {
+        resultadosClienteConv.value = []
+    } finally {
+        buscandoClienteConv.value = false
+    }
+}, { debounce: 300 })
+
+function elegirClienteConversion(cliente) {
+    clienteConversion.value = cliente
+    buscarClienteConv.value = ''
+    resultadosClienteConv.value = []
+}
+
+function convertir() {
+    const c = comprobanteConvertir.value
+    if (!c) return
+    convirtiendo.value = true
+    erroresConversion.value = {}
+    router.post(`/comprobantes/${c.id}/convertir`, {
+        tipo: tipoConversion.value,
+        cliente_id: clienteConversion.value?.id ?? null,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // un flash error tambien llega como "success" de Inertia: solo cerramos si hubo exito
+            if (page.props.flash?.error) return
+            comprobanteConvertir.value = null
+            if (page.props.flash?.ticket) {
+                ticketConversion.value = {
+                    mensaje: page.props.flash.success ?? 'Comprobante emitido.',
+                    ticket: page.props.flash.ticket,
+                }
+            }
+        },
+        onError: (errores) => (erroresConversion.value = errores),
+        onFinish: () => (convirtiendo.value = false),
     })
 }
 
@@ -171,6 +277,35 @@ const claseInput =
             </select>
         </div>
 
+        <!-- Aviso tras convertir una nota de venta -->
+        <div
+            v-if="ticketConversion"
+            class="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/20 dark:bg-emerald-500/10"
+        >
+            <div class="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                <CheckCircle2 class="size-5 shrink-0" />
+                <span>{{ ticketConversion.mensaje }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <a
+                    :href="ticketConversion.ticket"
+                    target="_blank"
+                    rel="noopener"
+                    class="inline-flex h-9 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                >
+                    <Printer class="size-4" />
+                    Imprimir ticket
+                </a>
+                <button
+                    class="rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                    title="Cerrar"
+                    @click="ticketConversion = null"
+                >
+                    <X class="size-4" />
+                </button>
+            </div>
+        </div>
+
         <!-- Tabla -->
         <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
             <div class="overflow-x-auto">
@@ -262,6 +397,25 @@ const claseInput =
                                             <FileText class="size-4" />
                                         </a>
                                         <button
+                                            v-if="puedeConvertir(c)"
+                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                            title="Emitir boleta o factura a partir de esta nota de venta"
+                                            @click.stop="abrirConversion(c)"
+                                        >
+                                            <ReceiptText class="size-3.5" />
+                                            Emitir boleta/factura
+                                        </button>
+                                        <button
+                                            v-if="puede('comprobantes.sunat') && puedeReemitir(c)"
+                                            :disabled="enviandoSunat === c.id"
+                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                            :title="AYUDA_REEMITIR"
+                                            @click.stop="reemitir(c)"
+                                        >
+                                            <RefreshCw class="size-3.5" :class="enviandoSunat === c.id ? 'animate-spin' : ''" />
+                                            {{ enviandoSunat === c.id ? 'Reenviando...' : 'Corregir y reenviar' }}
+                                        </button>
+                                        <button
                                             v-if="puede('comprobantes.sunat') && (puedeReenviar(c) || bajaPendiente(c))"
                                             :disabled="enviandoSunat === c.id"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
@@ -322,6 +476,14 @@ const claseInput =
                                             </div>
                                             <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">Sin pagos (anulado)</p>
 
+                                            <p
+                                                v-if="c.sunat_respuesta?.convertido_de"
+                                                class="mt-3 text-xs text-neutral-500 dark:text-neutral-400"
+                                            >
+                                                Emitido a partir de la nota de venta
+                                                <span class="font-mono font-semibold">{{ c.sunat_respuesta.convertido_de }}</span>
+                                            </p>
+
                                             <div v-if="c.estado === 'anulado'" class="mt-3 rounded-xl bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-500/15 dark:text-red-300">
                                                 Anulado: {{ c.motivo_anulacion }}
                                             </div>
@@ -355,7 +517,17 @@ const claseInput =
                                                     <div class="flex items-center gap-2">
                                                         <span class="font-semibold text-amber-700 dark:text-amber-400">-{{ soles(n.total) }}</span>
                                                         <button
-                                                            v-if="puede('comprobantes.sunat') && ['pendiente', 'rechazado', undefined].includes(n.sunat?.estado)"
+                                                            v-if="puede('comprobantes.sunat') && puedeReemitir(n)"
+                                                            :disabled="enviandoSunat === n.id"
+                                                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                                            :title="AYUDA_REEMITIR"
+                                                            @click.stop="reemitir(n)"
+                                                        >
+                                                            <RefreshCw class="size-3.5" :class="enviandoSunat === n.id ? 'animate-spin' : ''" />
+                                                            {{ enviandoSunat === n.id ? 'Reenviando...' : 'Corregir y reenviar' }}
+                                                        </button>
+                                                        <button
+                                                            v-else-if="puede('comprobantes.sunat') && ['pendiente', undefined].includes(n.sunat?.estado)"
                                                             :disabled="enviandoSunat === n.id"
                                                             class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                                             title="Reenviar la nota de crédito a SUNAT"
@@ -510,6 +682,142 @@ const claseInput =
                             class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {{ formNota.processing ? 'Emitiendo...' : 'Emitir nota de crédito' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Teleport>
+
+        <!-- Modal convertir nota de venta -->
+        <Teleport to="body">
+            <div v-if="comprobanteConvertir" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="comprobanteConvertir = null" />
+                <form
+                    class="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="convertir"
+                >
+                    <div class="mb-4 flex items-center justify-between">
+                        <div>
+                            <h3 class="font-semibold tracking-tight">Emitir comprobante electrónico</h3>
+                            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                A partir de la nota de venta {{ numero(comprobanteConvertir) }} · {{ soles(comprobanteConvertir.total) }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            @click="comprobanteConvertir = null"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+
+                    <!-- Tipo -->
+                    <p class="mb-1 text-sm font-medium">Tipo *</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            v-for="t in [{ codigo: '03', nombre: 'Boleta' }, { codigo: '01', nombre: 'Factura' }]"
+                            :key="t.codigo"
+                            type="button"
+                            class="h-10 rounded-xl border text-sm font-medium transition-colors"
+                            :class="tipoConversion === t.codigo
+                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                : 'border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'"
+                            @click="tipoConversion = t.codigo"
+                        >
+                            {{ t.nombre }}
+                        </button>
+                    </div>
+                    <p v-if="erroresConversion.tipo" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ erroresConversion.tipo }}</p>
+
+                    <!-- Cliente -->
+                    <p class="mt-4 mb-1 text-sm font-medium">Cliente</p>
+                    <div
+                        v-if="clienteConversion"
+                        class="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-500/20 dark:bg-emerald-500/10"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <UserRound class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium">{{ clienteConversion.nombre }}</p>
+                                <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ clienteConversion.numero_documento ?? 'Sin documento' }}</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-emerald-100 hover:text-neutral-700 dark:hover:bg-emerald-950/40 dark:hover:text-neutral-200"
+                            title="Quitar cliente"
+                            @click="clienteConversion = null"
+                        >
+                            <X class="size-4" />
+                        </button>
+                    </div>
+                    <div v-else>
+                        <div class="relative">
+                            <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" />
+                            <input
+                                v-model="buscarClienteConv"
+                                type="text"
+                                placeholder="Buscar por nombre, DNI o RUC..."
+                                class="h-10 w-full rounded-xl border border-stone-300 bg-white pr-9 pl-9 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                            />
+                            <LoaderCircle v-if="buscandoClienteConv" class="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-neutral-400" />
+                        </div>
+                        <div
+                            v-if="resultadosClienteConv.length"
+                            class="mt-1 max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-xl border border-stone-200 dark:divide-neutral-800 dark:border-neutral-800"
+                        >
+                            <button
+                                v-for="cli in resultadosClienteConv"
+                                :key="cli.id"
+                                type="button"
+                                class="block w-full px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-800"
+                                @click="elegirClienteConversion(cli)"
+                            >
+                                {{ cli.nombre }}
+                                <span v-if="cli.numero_documento" class="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{{ cli.numero_documento }}</span>
+                            </button>
+                        </div>
+                        <p
+                            v-else-if="buscarClienteConv.trim() && !buscandoClienteConv"
+                            class="mt-1 text-xs text-neutral-500 dark:text-neutral-400"
+                        >
+                            Sin resultados. Registra al cliente desde Clientes.
+                        </p>
+                        <p v-if="tipoConversion === '03'" class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            Sin cliente: la boleta se emite a público general.
+                        </p>
+                    </div>
+                    <p v-if="erroresConversion.cliente_id" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ erroresConversion.cliente_id }}</p>
+
+                    <!-- Ayuda -->
+                    <p
+                        v-if="tipoConversion === '01'"
+                        class="mt-4 rounded-xl bg-stone-100 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                    >
+                        La factura necesita un cliente con RUC.
+                    </p>
+                    <p
+                        v-else-if="Number(comprobanteConvertir.total) >= 700"
+                        class="mt-4 rounded-xl bg-amber-100 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+                    >
+                        Las boletas desde S/ 700 deben identificar al cliente con su documento.
+                    </p>
+
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="comprobanteConvertir = null"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="convirtiendo || (tipoConversion === '01' && !clienteConversion)"
+                            class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {{ convirtiendo ? 'Emitiendo...' : 'Emitir' }}
                         </button>
                     </div>
                 </form>

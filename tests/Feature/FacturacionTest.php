@@ -111,7 +111,7 @@ class FacturacionTest extends TestCase
         $clienteRuc = Cliente::create([
             'empresa_id' => $this->empresa->id,
             'tipo_documento_codigo' => '6',
-            'numero_documento' => '20123456789',
+            'numero_documento' => '20123456786',
             'nombre' => 'Empresa Cliente SAC',
             'limite_credito' => 0,
         ]);

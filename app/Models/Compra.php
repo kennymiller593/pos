@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Compra extends Model
 {
@@ -14,6 +15,7 @@ class Compra extends Model
     protected $table = 'compras';
 
     public const CREATED_AT = 'creado_en';
+
     public const UPDATED_AT = null;
 
     protected $fillable = [
@@ -26,6 +28,10 @@ class Compra extends Model
         'fecha',
         'total',
         'es_credito',
+        'estado',
+        'anulada_en',
+        'anulada_por',
+        'motivo_anulacion',
     ];
 
     protected function casts(): array
@@ -35,7 +41,18 @@ class Compra extends Model
             'total' => 'decimal:2',
             'es_credito' => 'boolean',
             'creado_en' => 'datetime',
+            'anulada_en' => 'datetime',
         ];
+    }
+
+    public function cuentaPorPagar(): HasOne
+    {
+        return $this->hasOne(CuentaPorPagar::class, 'compra_id');
+    }
+
+    public function anuladaPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'anulada_por');
     }
 
     public function empresa(): BelongsTo

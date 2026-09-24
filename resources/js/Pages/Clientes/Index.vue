@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import { LoaderCircle, Pencil, Plus, Search, Trash2, UserRound, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
+import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
 
 const props = defineProps({
     clientes: { type: Object, required: true },
@@ -82,6 +83,11 @@ async function eliminar(cliente) {
         router.delete(`/clientes/${cliente.id}`, { preserveScroll: true })
     }
 }
+
+// "Sin documento" no lleva numero
+watch(() => form.tipo_documento_codigo, (tipo) => {
+    if (esSinDocumento(tipo)) form.numero_documento = ''
+})
 
 // ---- lookup DNI / RUC ----
 const consultando = ref(false)
@@ -283,21 +289,25 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     v-model="form.numero_documento"
                                     type="text"
                                     maxlength="15"
-                                    :class="[claseInput, 'pr-11']"
-                                    placeholder="12345678"
+                                    :disabled="esSinDocumento(form.tipo_documento_codigo)"
+                                    :class="[claseInput, 'pr-11 disabled:cursor-not-allowed disabled:bg-stone-100 dark:disabled:bg-neutral-800']"
+                                    :placeholder="esSinDocumento(form.tipo_documento_codigo) ? '' : '12345678'"
                                     @blur="consultarDocumento"
                                 />
                                 <button
                                     type="button"
                                     class="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-neutral-400 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
                                     title="Buscar en RENIEC / SUNAT"
-                                    :disabled="consultando"
+                                    :disabled="consultando || esSinDocumento(form.tipo_documento_codigo)"
                                     @click="consultarDocumento"
                                 >
                                     <LoaderCircle v-if="consultando" class="size-4 animate-spin" />
                                     <Search v-else class="size-4" />
                                 </button>
                             </div>
+                            <p v-if="ayudaDocumento(form.tipo_documento_codigo)" class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                                {{ ayudaDocumento(form.tipo_documento_codigo) }}
+                            </p>
                             <p v-if="form.errors.numero_documento" :class="claseError">{{ form.errors.numero_documento }}</p>
                             <p v-if="errorConsulta" :class="claseError">{{ errorConsulta }}</p>
                         </div>

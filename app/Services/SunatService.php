@@ -30,9 +30,7 @@ use Illuminate\Support\Facades\Storage;
 
 class SunatService
 {
-    public function __construct(private readonly EnviadorSunat $enviador)
-    {
-    }
+    public function __construct(private readonly EnviadorSunat $enviador) {}
 
     /**
      * Envía a SUNAT una boleta o factura emitida y registra el resultado.
@@ -70,7 +68,7 @@ class SunatService
                 report($e);
 
                 $registro->estado = 'pendiente';
-                $registro->mensaje_sunat = 'No se pudo enviar: ' . $e->getMessage();
+                $registro->mensaje_sunat = 'No se pudo enviar: '.$e->getMessage();
                 $registro->save();
 
                 $this->reflejarEnComprobante($comprobante, $registro, null);
@@ -92,7 +90,7 @@ class SunatService
         $comprobante->loadMissing(['empresa', 'sucursal', 'detalles']);
 
         $emision = Carbon::parse(
-            $comprobante->fecha_emision->format('Y-m-d') . ' ' . ($comprobante->hora_emision ?? '00:00:00'),
+            $comprobante->fecha_emision->format('Y-m-d').' '.($comprobante->hora_emision ?? '00:00:00'),
             'America/Lima',
         );
 
@@ -102,7 +100,7 @@ class SunatService
         $totalIgv = (float) $comprobante->total_igv;
         $total = (float) $comprobante->total;
 
-        $invoice = (new Invoice())
+        $invoice = (new Invoice)
             ->setUblVersion('2.1')
             ->setTipoOperacion('0101') // venta interna
             ->setTipoDoc($comprobante->tipo_comprobante_codigo)
@@ -125,17 +123,17 @@ class SunatService
             $vencimiento = $comprobante->fecha_vencimiento ?? $comprobante->fecha_emision->copy()->addDays(30);
 
             $invoice->setFormaPago(new FormaPagoCredito($total))
-                ->setCuotas([(new Cuota())
+                ->setCuotas([(new Cuota)
                     ->setMoneda('PEN')
                     ->setMonto($total)
                     ->setFechaPago(Carbon::parse($vencimiento->format('Y-m-d'), 'America/Lima'))]);
         } else {
-            $invoice->setFormaPago(new FormaPagoContado());
+            $invoice->setFormaPago(new FormaPagoContado);
         }
 
         return $invoice
             ->setDetails($this->detallesUbl($comprobante))
-            ->setLegends([(new Legend())->setCode('1000')->setValue('SON ' . NumeroALetras::enSoles($total))]);
+            ->setLegends([(new Legend)->setCode('1000')->setValue('SON '.NumeroALetras::enSoles($total))]);
     }
 
     /** Arma la nota de crédito UBL (tipo 07) que modifica una boleta o factura. */
@@ -145,7 +143,7 @@ class SunatService
         $referencia = $comprobante->comprobanteRef;
 
         $emision = Carbon::parse(
-            $comprobante->fecha_emision->format('Y-m-d') . ' ' . ($comprobante->hora_emision ?? '00:00:00'),
+            $comprobante->fecha_emision->format('Y-m-d').' '.($comprobante->hora_emision ?? '00:00:00'),
             'America/Lima',
         );
 
@@ -155,7 +153,7 @@ class SunatService
         $totalIgv = (float) $comprobante->total_igv;
         $total = (float) $comprobante->total;
 
-        return (new Note())
+        return (new Note)
             ->setUblVersion('2.1')
             ->setTipoDoc('07')
             ->setSerie($comprobante->serie)
@@ -177,7 +175,7 @@ class SunatService
             ->setSubTotal($total)
             ->setMtoImpVenta($total)
             ->setDetails($this->detallesUbl($comprobante))
-            ->setLegends([(new Legend())->setCode('1000')->setValue('SON ' . NumeroALetras::enSoles($total))]);
+            ->setLegends([(new Legend)->setCode('1000')->setValue('SON '.NumeroALetras::enSoles($total))]);
     }
 
     /** @return SaleDetail[] */
@@ -192,7 +190,7 @@ class SunatService
 
             // el valor unitario se deriva del importe neto para que la aritmetica
             // del XML cierre exacta aunque la linea tenga descuento
-            return (new SaleDetail())
+            return (new SaleDetail)
                 ->setUnidad(trim((string) $d->unidad_codigo) ?: 'NIU')
                 ->setDescripcion($d->descripcion)
                 ->setCantidad($cantidad)
@@ -266,7 +264,7 @@ class SunatService
             } catch (\Throwable $e) {
                 report($e);
 
-                throw new ErrorDeNegocio('No se pudo comunicar la baja a SUNAT: ' . $e->getMessage());
+                throw new ErrorDeNegocio('No se pudo comunicar la baja a SUNAT: '.$e->getMessage());
             }
 
             if (! $respuesta->enProceso) {
@@ -275,7 +273,7 @@ class SunatService
 
             $registro->estado = 'baja_pendiente';
             $registro->ticket = $respuesta->ticket;
-            $registro->mensaje_sunat = 'Baja en proceso (ticket ' . $respuesta->ticket . ').';
+            $registro->mensaje_sunat = 'Baja en proceso (ticket '.$respuesta->ticket.').';
             $registro->save();
 
             $comprobante->forceFill([
@@ -321,7 +319,7 @@ class SunatService
             $respuesta = $this->enviador->consultarTicket($comprobante->empresa, $registro->ticket);
         } catch (\Throwable $e) {
             report($e);
-            $registro->mensaje_sunat = 'No se pudo consultar la baja: ' . $e->getMessage();
+            $registro->mensaje_sunat = 'No se pudo consultar la baja: '.$e->getMessage();
             $registro->save();
 
             return $registro;
@@ -364,19 +362,19 @@ class SunatService
     private function correlativoDeBajaDelDia(string $empresaId): int
     {
         return Comprobante::query()
-                ->where('empresa_id', $empresaId)
-                ->whereRaw("sunat_respuesta->'baja'->>'fecha' = ?", [now()->format('Y-m-d')])
-                ->count() + 1;
+            ->where('empresa_id', $empresaId)
+            ->whereRaw("sunat_respuesta->'baja'->>'fecha' = ?", [now()->format('Y-m-d')])
+            ->count() + 1;
     }
 
     private function construirComunicacionDeBaja(Comprobante $comprobante, int $correlativo, string $motivo): Voided
     {
-        return (new Voided())
+        return (new Voided)
             ->setCorrelativo(str_pad((string) $correlativo, 5, '0', STR_PAD_LEFT))
             ->setFecGeneracion(Carbon::parse($comprobante->fecha_emision->format('Y-m-d'), 'America/Lima'))
             ->setFecComunicacion(now())
             ->setCompany($this->companyDe($comprobante))
-            ->setDetails([(new VoidedDetail())
+            ->setDetails([(new VoidedDetail)
                 ->setTipoDoc($comprobante->tipo_comprobante_codigo)
                 ->setSerie($comprobante->serie)
                 ->setCorrelativo((string) $comprobante->correlativo)
@@ -385,13 +383,13 @@ class SunatService
 
     private function construirResumenDeBaja(Comprobante $comprobante, int $correlativo): Summary
     {
-        return (new Summary())
+        return (new Summary)
             ->setCorrelativo(str_pad((string) $correlativo, 3, '0', STR_PAD_LEFT))
             ->setFecGeneracion(Carbon::parse($comprobante->fecha_emision->format('Y-m-d'), 'America/Lima'))
             ->setFecResumen(now())
             ->setMoneda('PEN')
             ->setCompany($this->companyDe($comprobante))
-            ->setDetails([(new SummaryDetail())
+            ->setDetails([(new SummaryDetail)
                 ->setTipoDoc($comprobante->tipo_comprobante_codigo)
                 ->setSerieNro("{$comprobante->serie}-{$comprobante->correlativo}")
                 ->setEstado('3') // condicion 3: baja
@@ -408,7 +406,7 @@ class SunatService
     {
         $empresa = $comprobante->empresa;
 
-        return (new Company())
+        return (new Company)
             ->setRuc($empresa->ruc)
             ->setRazonSocial($empresa->razon_social)
             ->setNombreComercial($empresa->nombre_comercial ?: $empresa->razon_social)
@@ -424,7 +422,7 @@ class SunatService
         $codigo = trim((string) ($sucursal?->ubigeo ?? ''));
         $ubigeo = $codigo !== '' ? Ubigeo::find($codigo) : null;
 
-        return (new Address())
+        return (new Address)
             ->setUbigueo($codigo ?: null)
             ->setDepartamento($ubigeo?->departamento)
             ->setProvincia($ubigeo?->provincia)
@@ -436,19 +434,19 @@ class SunatService
     {
         if (blank($comprobante->cliente_numero_doc)) {
             // boleta sin identificar: cliente generico (catalogo 06, tipo 0)
-            return (new Client())
+            return (new Client)
                 ->setTipoDoc('0')
                 ->setNumDoc('-')
                 ->setRznSocial('CLIENTES VARIOS');
         }
 
-        $cliente = (new Client())
+        $cliente = (new Client)
             ->setTipoDoc(trim((string) $comprobante->cliente_tipo_doc))
             ->setNumDoc(trim((string) $comprobante->cliente_numero_doc))
             ->setRznSocial($comprobante->cliente_nombre ?: '-');
 
         if ($comprobante->cliente_direccion) {
-            $cliente->setAddress((new Address())->setDireccion($comprobante->cliente_direccion));
+            $cliente->setAddress((new Address)->setDireccion($comprobante->cliente_direccion));
         }
 
         return $cliente;
@@ -478,7 +476,7 @@ class SunatService
 
         $registro->hash_cpe = $respuesta->hash;
         $registro->mensaje_sunat = trim("[{$respuesta->codigo}] {$respuesta->mensaje}"
-            . ($respuesta->observaciones !== [] ? ' | ' . implode('; ', $respuesta->observaciones) : ''));
+            .($respuesta->observaciones !== [] ? ' | '.implode('; ', $respuesta->observaciones) : ''));
         $registro->save();
 
         $this->reflejarEnComprobante($comprobante, $registro, $respuesta);
@@ -491,11 +489,12 @@ class SunatService
             // el CHECK de comprobantes no admite los estados de baja; los demas coinciden
             'estado_sunat' => in_array($registro->estado, ['baja', 'baja_pendiente'], true) ? 'aceptado' : $registro->estado,
             'hash_cpe' => $registro->hash_cpe,
-            'sunat_respuesta' => $respuesta ? [
+            // se conservan las demas claves (baja, convertido_de): solo se refresca la respuesta del envio
+            'sunat_respuesta' => array_merge((array) $comprobante->sunat_respuesta, $respuesta ? [
                 'codigo' => $respuesta->codigo,
                 'mensaje' => $respuesta->mensaje,
                 'observaciones' => $respuesta->observaciones,
-            ] : ['mensaje' => $registro->mensaje_sunat],
+            ] : ['mensaje' => $registro->mensaje_sunat]),
         ])->save();
     }
 }

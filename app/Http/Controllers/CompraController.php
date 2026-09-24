@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\Compra;
 use App\Models\CuentaPorPagar;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
 use App\Models\Sucursal;
 use App\Models\TipoComprobante;
+use App\Services\CompraService;
 use App\Services\InventarioService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
@@ -19,9 +21,10 @@ use Inertia\Response;
 
 class CompraController extends Controller
 {
-    public function __construct(private readonly InventarioService $inventario)
-    {
-    }
+    public function __construct(
+        private readonly InventarioService $inventario,
+        private readonly CompraService $comprasService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -30,6 +33,7 @@ class CompraController extends Controller
             ->with([
                 'proveedor' => fn ($q) => $q->withTrashed()->select('id', 'razon_social'),
                 'usuario:id,nombre_completo',
+                'anuladaPor:id,nombre_completo',
                 'detalles:id,compra_id,producto_id,presentacion_id,cantidad,costo_unitario,total',
                 'detalles.producto' => fn ($q) => $q->withTrashed()->select('id', 'nombre'),
                 'detalles.presentacion:id,nombre',
@@ -53,7 +57,7 @@ class CompraController extends Controller
             'detalles.presentacion:id,nombre',
         ]);
 
-        $nombre = 'compra-' . $compra->fecha->format('Y-m-d') . '-' . substr($compra->id, -6) . '.pdf';
+        $nombre = 'compra-'.$compra->fecha->format('Y-m-d').'-'.substr($compra->id, -6).'.pdf';
 
         return SnappyPdf::loadView('pdf.compra', [
             'compra' => $compra,
@@ -131,6 +135,20 @@ class CompraController extends Controller
 
         if (! $sucursalId) {
             return back()->with('error', 'No tienes una sucursal asignada.');
+        }
+
+        // el mismo comprobante del proveedor no se registra dos veces
+        if (filled($datos['proveedor_id'] ?? null) && filled($datos['serie_numero'] ?? null)) {
+            $repetida = Compra::query()
+                ->where('empresa_id', $empresaId)
+                ->where('proveedor_id', $datos['proveedor_id'])
+                ->where('serie_numero', trim($datos['serie_numero']))
+                ->where('estado', 'registrada')
+                ->exists();
+
+            if ($repetida) {
+                return back()->with('error', "Ya registraste el comprobante {$datos['serie_numero']} de este proveedor. Si fue un error, anula la compra anterior.");
+            }
         }
 
         $presentaciones = ProductoPresentacion::query()
@@ -251,6 +269,29 @@ class CompraController extends Controller
         }
 
         return redirect()->route('compras.index')
-            ->with('success', 'Compra registrada por S/ ' . number_format($total, 2) . '. Stock actualizado.');
+            ->with('success', 'Compra registrada por S/ '.number_format($total, 2).'. Stock actualizado.');
+    }
+
+    public function anular(Request $request, Compra $compra): RedirectResponse
+    {
+        abort_unless($compra->empresa_id === $request->user()->empresa_id, 403);
+
+        $datos = $request->validate([
+            'motivo' => ['required', 'string', 'max:250'],
+        ], [
+            'motivo.required' => 'Indica el motivo de la anulación.',
+        ]);
+
+        try {
+            $this->comprasService->anular($compra, $request->user(), $datos['motivo']);
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'No se pudo anular la compra. Intenta de nuevo.');
+        }
+
+        return back()->with('success', 'Compra anulada. Se retiró la mercadería del stock.');
     }
 }

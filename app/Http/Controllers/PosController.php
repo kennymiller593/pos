@@ -13,6 +13,7 @@ use App\Models\Producto;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
 use App\Services\VentaService;
+use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -113,6 +114,7 @@ class PosController extends Controller
             'tipo_documento_codigo' => ['required', Rule::exists('tipos_documento_identidad', 'codigo')],
             'numero_documento' => [
                 'nullable', 'string', 'max:15',
+                DocumentoIdentidad::regla($request->input('tipo_documento_codigo')),
                 Rule::unique('clientes', 'numero_documento')
                     ->where('empresa_id', $empresaId)
                     ->where('tipo_documento_codigo', $request->input('tipo_documento_codigo'))
