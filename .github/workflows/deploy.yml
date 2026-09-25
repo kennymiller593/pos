@@ -85,7 +85,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/^DB_USERNAME=.*/DB_USERNAME=postgres/; s/^DB_PASSWORD=.*/DB_PASSWORD=postgres/; s/^DB_DATABASE=.*/DB_DATABASE=inkapos_test/' .env
-          sed -i 's|^WKHTML_PDF_BINARY=.*|WKHTML_PDF_BINARY=/usr/bin/wkhtmltopdf|' .env
+          sed -i 's|^WKHTML_PDF_BINARY=.*|WKHTML_PDF_BINARY=/usr/local/bin/wkhtmltopdf|' .env
           php artisan key:generate --force
 
       - name: Frontend
