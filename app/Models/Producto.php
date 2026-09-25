@@ -7,16 +7,34 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Producto extends Model
 {
     use HasUuids;
     use SoftDeletes;
 
+    /**
+     * Siguiente codigo interno automatico de la empresa: P0001, P0002...
+     * Cuenta tambien los eliminados (el UNIQUE de la BD los incluye) y solo
+     * los codigos con ese formato, asi los codigos manuales antiguos no estorban.
+     */
+    public static function siguienteCodigo(string $empresaId): string
+    {
+        $mayor = (int) static::withTrashed()
+            ->where('empresa_id', $empresaId)
+            ->whereRaw("codigo_interno ~ '^P[0-9]+$'")
+            ->max(DB::raw('CAST(SUBSTRING(codigo_interno FROM 2) AS BIGINT)'));
+
+        return 'P'.str_pad((string) ($mayor + 1), 4, '0', STR_PAD_LEFT);
+    }
+
     protected $table = 'productos';
 
     public const CREATED_AT = 'creado_en';
+
     public const UPDATED_AT = 'actualizado_en';
+
     public const DELETED_AT = 'eliminado_en';
 
     protected $fillable = [

@@ -13,8 +13,9 @@ class ProductoRequest extends FormRequest
         $productoId = $this->route('producto')?->id;
 
         return [
+            // al crear lo asigna el sistema (P0001, P0002...); solo se edita en productos existentes
             'codigo_interno' => [
-                'required', 'string', 'max:50',
+                $productoId ? 'required' : 'nullable', 'string', 'max:50',
                 Rule::unique('productos', 'codigo_interno')
                     ->where('empresa_id', $empresaId)
                     ->whereNull('eliminado_en')

@@ -214,8 +214,23 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <!-- Datos generales -->
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-sm font-medium" for="codigo_interno">Código interno *</label>
-                                <input id="codigo_interno" v-model="form.codigo_interno" type="text" :class="claseInput" placeholder="P-0001" />
+                                <label class="mb-1 block text-sm font-medium" for="codigo_interno">Código interno{{ producto ? ' *' : '' }}</label>
+                                <input
+                                    v-if="producto"
+                                    id="codigo_interno"
+                                    v-model="form.codigo_interno"
+                                    type="text"
+                                    :class="claseInput"
+                                />
+                                <input
+                                    v-else
+                                    id="codigo_interno"
+                                    :value="catalogos.siguienteCodigo"
+                                    type="text"
+                                    readonly
+                                    :class="[claseInput, 'cursor-not-allowed bg-stone-100 font-mono dark:bg-neutral-800']"
+                                />
+                                <p v-if="!producto" class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Se asigna automáticamente al guardar.</p>
                                 <p v-if="form.errors.codigo_interno" :class="claseError">{{ form.errors.codigo_interno }}</p>
                             </div>
                             <div>

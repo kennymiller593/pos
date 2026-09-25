@@ -12,6 +12,7 @@ use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -49,6 +50,8 @@ class ProductoController extends Controller
                 'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
                 'marcas' => Marca::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
                 'unidades' => UnidadMedida::orderBy('nombre')->get(['codigo', 'nombre']),
+                // vista previa del codigo que tomara el proximo producto (se confirma al guardar)
+                'siguienteCodigo' => Producto::siguienteCodigo($empresaId),
                 'tiposAfectacion' => TipoAfectacionIgv::orderBy('codigo')->get(['codigo', 'nombre']),
             ],
         ]);
@@ -56,9 +59,18 @@ class ProductoController extends Controller
 
     public function store(ProductoRequest $request): RedirectResponse
     {
-        $this->guardar($request, new Producto(['empresa_id' => $request->user()->empresa_id]));
+        $empresaId = $request->user()->empresa_id;
 
-        return back()->with('success', 'Producto creado.');
+        // el codigo se calcula bajo lock: dos altas simultaneas no pueden tomar el mismo numero
+        $producto = Cache::lock("producto-codigo:{$empresaId}", 10)->block(5, function () use ($request, $empresaId) {
+            $producto = new Producto(['empresa_id' => $empresaId]);
+            $producto->codigo_interno = Producto::siguienteCodigo($empresaId);
+            $this->guardar($request, $producto);
+
+            return $producto;
+        });
+
+        return back()->with('success', "Producto {$producto->codigo_interno} creado.");
     }
 
     public function update(ProductoRequest $request, Producto $producto): RedirectResponse
@@ -86,6 +98,11 @@ class ProductoController extends Controller
     private function guardar(ProductoRequest $request, Producto $producto): void
     {
         $datos = $request->safe()->except(['presentaciones', 'imagen', 'imagen_eliminar']);
+
+        // al crear, el codigo lo asigna store() (P0001...): se ignora lo que envie el formulario
+        if (! $producto->exists || blank($datos['codigo_interno'] ?? null)) {
+            unset($datos['codigo_interno']);
+        }
         $datos['stock_minimo'] = $datos['stock_minimo'] ?? 0;
 
         if ($request->hasFile('imagen')) {

@@ -51,6 +51,35 @@ class ProductoTest extends TestCase
         ];
     }
 
+    public function test_el_codigo_interno_se_asigna_solo_y_es_correlativo(): void
+    {
+        // lo que envie el formulario al crear se ignora: el sistema asigna P0001, P0002...
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['codigo_interno' => 'LO-QUE-SEA']))
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'P0001'));
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['codigo_interno' => null, 'nombre' => 'Segundo']))
+            ->assertSessionHas('success');
+
+        $codigos = Producto::where('empresa_id', $this->empresa->id)->orderBy('codigo_interno')->pluck('codigo_interno')->all();
+        $this->assertContains('P0001', $codigos);
+        $this->assertContains('P0002', $codigos);
+
+        // los eliminados no liberan su numero y los codigos manuales antiguos no interfieren
+        Producto::where('codigo_interno', 'P0002')->where('empresa_id', $this->empresa->id)->first()->delete();
+        $this->assertSame('P0003', Producto::siguienteCodigo($this->empresa->id));
+
+        // la pantalla muestra el proximo codigo
+        $this->actingAs($this->admin)->get('/productos')
+            ->assertInertia(fn ($p) => $p->where('catalogos.siguienteCodigo', 'P0003'));
+
+        // al editar el codigo sigue siendo editable
+        $producto = Producto::where('codigo_interno', 'P0001')->where('empresa_id', $this->empresa->id)->firstOrFail();
+        $pres = $producto->presentaciones()->first();
+        $payload = $this->payload(['codigo_interno' => 'CABLE-UTP']);
+        $payload['presentaciones'][0]['id'] = $pres->id;
+        $this->actingAs($this->admin)->put("/productos/{$producto->id}", $payload)->assertSessionHas('success');
+        $this->assertSame('CABLE-UTP', $producto->fresh()->codigo_interno);
+    }
+
     public function test_crear_producto_con_imagen_y_luego_quitarla(): void
     {
         Storage::fake('public');
