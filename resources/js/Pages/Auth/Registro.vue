@@ -121,7 +121,7 @@ const claseError = 'mt-1.5 text-sm text-red-600 dark:text-red-400'
             <template #firma>
                 <div
                     class="font-receipt w-80 rounded-xl border border-white/10 bg-black/50 p-5 text-[12.5px] leading-loose shadow-2xl shadow-black/50 backdrop-blur-md">
-                    <p class="text-neutral-500">$ falcontech <span class="text-white">init</span></p>
+                    <p class="text-neutral-500">$ inkapos <span class="text-white">init</span></p>
                     <p class="text-neutral-300"><span class="text-emerald-400">✓</span> empresa registrada</p>
                     <p class="text-neutral-300"><span class="text-emerald-400">✓</span> sucursal principal creada</p>
                     <p class="text-neutral-300"><span class="text-emerald-400">✓</span> caja 01 aperturada</p>
@@ -138,8 +138,8 @@ const claseError = 'mt-1.5 text-sm text-red-600 dark:text-red-400'
 
                 <!-- Logo solo móvil -->
                 <div class="mb-10 flex justify-center lg:hidden">
-                    <div class="rounded-2xl bg-[#050807] px-5 py-4">
-                        <img :src="'/images/falcontech_oscuro.png'" alt="FalconTech" class="h-8 w-auto" />
+                    <div>
+                        <img :src="'/images/inkanet_logo.png'" alt="inkaPos" class="h-14 w-auto" />
                     </div>
                 </div>
 
@@ -308,7 +308,7 @@ const claseError = 'mt-1.5 text-sm text-red-600 dark:text-red-400'
 
                 <p
                     class="font-receipt mt-10 text-center text-[11px] tracking-wider text-neutral-400 dark:text-neutral-600">
-                    FALCONTECH <span class="text-emerald-500">/</span> SISTEMA DE PUNTO DE VENTA <span
+                    INKAPOS <span class="text-emerald-500">/</span> SISTEMA DE PUNTO DE VENTA <span
                         class="text-emerald-500">/</span>
                     PERÚ
                 </p>

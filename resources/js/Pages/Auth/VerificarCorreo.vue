@@ -44,8 +44,8 @@ function cerrarSesion() {
 
                 <!-- Logo solo móvil -->
                 <div class="mb-10 flex justify-center lg:hidden">
-                    <div class="rounded-2xl bg-[#050807] px-5 py-4">
-                        <img :src="'/images/falcontech_oscuro.png'" alt="FalconTech" class="h-8 w-auto" />
+                    <div>
+                        <img :src="'/images/inkanet_logo.png'" alt="inkaPos" class="h-14 w-auto" />
                     </div>
                 </div>
 
@@ -91,7 +91,7 @@ function cerrarSesion() {
 
                 <p
                     class="font-receipt mt-10 text-center text-[11px] tracking-wider text-neutral-400 dark:text-neutral-600">
-                    FALCONTECH <span class="text-emerald-500">/</span> SISTEMA DE PUNTO DE VENTA <span
+                    INKAPOS <span class="text-emerald-500">/</span> SISTEMA DE PUNTO DE VENTA <span
                         class="text-emerald-500">/</span> PERÚ
                 </p>
             </div>

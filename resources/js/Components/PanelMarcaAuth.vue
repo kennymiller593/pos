@@ -23,7 +23,7 @@ defineProps({
 
         <!-- Logo -->
         <div class="anim relative">
-            <img :src="'/images/falcontech_oscuro.png'" alt="FalconTech" class="h-20 w-auto" />
+            <img :src="'/images/inkanet_logo.png'" alt="inkaPos" class="h-24 w-auto" />
         </div>
 
         <!-- Mensaje central + firma visual -->
@@ -47,7 +47,7 @@ defineProps({
                         <div
                             class="ticket w-64 -rotate-2 bg-[#FAFAF8] px-5 pt-5 pb-8 text-neutral-800 shadow-2xl shadow-black/60">
                             <div class="font-receipt text-[11px] leading-relaxed">
-                                <p class="text-center font-semibold tracking-wide">FALCONTECH POS</p>
+                                <p class="text-center font-semibold tracking-wide">INKAPOS</p>
                                 <p class="text-center text-neutral-500">BOLETA ELECTRÓNICA</p>
                                 <p class="text-center text-neutral-500">B001-00042381</p>
                                 <div class="my-2.5 border-t border-dashed border-neutral-300" />

@@ -15,8 +15,7 @@ import {
     CheckCircle2,
     ChevronDown,
     CreditCard,
-    ChevronsLeft,
-    ChevronsRight,
+    CirclePlay,
     HandCoins,
     LayoutDashboard,
     LogOut,
@@ -25,6 +24,8 @@ import {
     Menu,
     Moon,
     Package,
+    PanelLeftClose,
+    PanelLeftOpen,
     ReceiptText,
     ScrollText,
     Settings,
@@ -347,16 +348,17 @@ watch(
                 </div>
             </nav>
 
-            <!-- Colapsar (solo escritorio) -->
-            <button
-                class="mx-3 mb-2 hidden h-9 shrink-0 items-center justify-center gap-2 rounded-xl text-sm text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] lg:flex dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                @click="colapsado = !colapsado">
-                <ChevronsRight v-if="colapsado" class="size-5" />
-                <template v-else>
-                    <ChevronsLeft class="size-5" />
-                    <span>Colapsar</span>
-                </template>
-            </button>
+            <!-- Tutorial en video (Google Drive) -->
+            <div class="shrink-0 border-t border-[#E2E8F0] px-3 py-2 dark:border-neutral-800">
+                <a href="https://drive.google.com/file/d/1hYoMYGBuDAQrONiq-qCskFmwnAArj1G8/view?usp=sharing"
+                    target="_blank" rel="noopener noreferrer"
+                    class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                    :title="colapsado && !abiertoMovil ? 'Tutorial' : undefined">
+                    <CirclePlay class="size-4.5 shrink-0" />
+                    <span v-if="!colapsado || abiertoMovil" class="truncate">Tutorial</span>
+                </a>
+            </div>
+
         </aside>
 
         <!-- Contenido -->
@@ -369,6 +371,16 @@ watch(
                     class="grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] hover:text-[#0F172A] lg:hidden dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                     @click="abiertoMovil = true">
                     <Menu class="size-5" />
+                </button>
+
+                <!-- Colapsar / expandir el menú lateral (solo escritorio) -->
+                <button
+                    class="-ml-2 hidden size-9 place-items-center rounded-lg text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] lg:grid dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                    :title="colapsado ? 'Expandir menú' : 'Colapsar menú'"
+                    :aria-label="colapsado ? 'Expandir menú' : 'Colapsar menú'"
+                    @click="colapsado = !colapsado">
+                    <PanelLeftOpen v-if="colapsado" class="size-5" />
+                    <PanelLeftClose v-else class="size-5" />
                 </button>
 
                 <h1 class="truncate text-xl font-semibold tracking-tight">{{ titulo }}</h1>
