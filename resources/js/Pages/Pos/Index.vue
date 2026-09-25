@@ -774,7 +774,7 @@ const claseInput =
                                 :src="p.imagen_url"
                                 :alt="p.nombre"
                                 loading="lazy"
-                                class="size-full object-cover transition-transform duration-200 group-hover:scale-105"
+                                class="size-full bg-white object-contain transition-transform duration-200 group-hover:scale-105"
                             />
                             <div v-else class="grid size-full place-items-center text-[#CBD5E1] dark:text-neutral-600">
                                 <Package class="size-10" />

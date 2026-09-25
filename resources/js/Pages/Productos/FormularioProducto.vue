@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
-import { ImagePlus, Package, Plus, Trash2, X } from '@lucide/vue'
+import { ImagePlus, LoaderCircle, Package, Plus, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
+import { optimizarImagenProducto } from '@/composables/imagenProducto'
 
 const props = defineProps({
     abierto: { type: Boolean, default: false },
@@ -36,6 +37,7 @@ const form = useForm({
 
 // ---- imagen ----
 const inputImagen = ref(null)
+const optimizando = ref(false)
 
 const vistaPrevia = computed(() => {
     if (form.imagen) return URL.createObjectURL(form.imagen)
@@ -43,11 +45,18 @@ const vistaPrevia = computed(() => {
     return null
 })
 
-function seleccionarImagen(evento) {
+// la foto se ajusta a 4:3 y máx. 800x600 antes de subirla, para que todas se vean parejas
+async function seleccionarImagen(evento) {
     const archivo = evento.target.files?.[0]
     if (!archivo) return
-    form.imagen = archivo
-    form.imagen_eliminar = false
+    optimizando.value = true
+    try {
+        form.imagen = await optimizarImagenProducto(archivo)
+        form.imagen_eliminar = false
+        form.clearErrors('imagen')
+    } finally {
+        optimizando.value = false
+    }
 }
 
 function quitarImagen() {
@@ -185,8 +194,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <div class="max-h-[70vh] overflow-y-auto px-6 py-5">
                         <!-- Imagen -->
                         <div class="mb-5 flex items-center gap-4">
-                            <div class="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-stone-200 bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950">
-                                <img v-if="vistaPrevia" :src="vistaPrevia" alt="" class="size-full object-cover" />
+                            <div class="grid aspect-[4/3] w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-stone-200 bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950">
+                                <LoaderCircle v-if="optimizando" class="size-6 animate-spin text-neutral-400" />
+                                <img v-else-if="vistaPrevia" :src="vistaPrevia" alt="" class="size-full object-contain" />
                                 <Package v-else class="size-8 text-neutral-300 dark:text-neutral-600" />
                             </div>
                             <div>
@@ -194,10 +204,11 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-1.5 rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        :disabled="optimizando"
                                         @click="inputImagen?.click()"
                                     >
                                         <ImagePlus class="size-4" />
-                                        {{ vistaPrevia ? 'Cambiar imagen' : 'Subir imagen' }}
+                                        {{ optimizando ? 'Optimizando…' : vistaPrevia ? 'Cambiar imagen' : 'Subir imagen' }}
                                     </button>
                                     <button
                                         v-if="vistaPrevia"
@@ -209,7 +220,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         Quitar
                                     </button>
                                 </div>
-                                <p class="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">JPG, PNG o WEBP · máx. 2 MB (opcional)</p>
+                                <p class="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">JPG, PNG o WEBP (opcional) · se ajusta sola para verse bien en el POS</p>
                                 <p v-if="form.errors.imagen" :class="claseError">{{ form.errors.imagen }}</p>
                             </div>
                             <input ref="inputImagen" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" @change="seleccionarImagen" />
@@ -415,7 +426,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </button>
                         <button
                             type="submit"
-                            :disabled="form.processing"
+                            :disabled="form.processing || optimizando"
                             class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             {{ form.processing ? 'Guardando...' : 'Guardar' }}

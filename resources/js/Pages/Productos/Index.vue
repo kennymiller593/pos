@@ -165,7 +165,7 @@ function claseStock(producto) {
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-3">
                                     <div class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-stone-100 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
-                                        <img v-if="p.imagen_url" :src="p.imagen_url" alt="" class="size-full object-cover" />
+                                        <img v-if="p.imagen_url" :src="p.imagen_url" alt="" class="size-full bg-white object-contain" />
                                         <Package v-else class="size-5" />
                                     </div>
                                     <div>

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Producto;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
+use App\Services\ImagenProductoService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\CreaEscenarioPos;
@@ -101,6 +102,62 @@ class ProductoTest extends TestCase
 
         $this->assertNull($producto->fresh()->imagen_url);
         Storage::disk('public')->assertMissing($archivo);
+    }
+
+    public function test_las_fotos_se_ajustan_a_4_3_sin_recortarse(): void
+    {
+        Storage::fake('public');
+
+        // una foto muy alta (botella) de 600x2400
+        $this->actingAs($this->admin)->post('/productos', $this->payload([
+            'imagen' => UploadedFile::fake()->image('botella.jpg', 600, 2400),
+        ]))->assertSessionHas('success');
+
+        $producto = Producto::where('empresa_id', $this->empresa->id)->firstOrFail();
+        $this->assertStringEndsWith('.webp', $producto->imagen_url);
+        [$ancho, $alto] = getimagesizefromstring(Storage::disk('public')->get(substr($producto->imagen_url, strlen('/storage/'))));
+        $this->assertSame([800, 600], [$ancho, $alto]);
+    }
+
+    public function test_optimizar_respeta_la_proporcion_y_no_agranda_fotos_chicas(): void
+    {
+        $servicio = app(ImagenProductoService::class);
+        $medidas = function (int $w, int $h) use ($servicio): array {
+            $img = imagecreatetruecolor($w, $h);
+            ob_start();
+            imagepng($img);
+            [$binario] = $servicio->optimizar(ob_get_clean());
+
+            return array_slice(getimagesizefromstring($binario), 0, 2);
+        };
+
+        $this->assertSame([800, 600], $medidas(3000, 300));   // muy ancha
+        $this->assertSame([800, 600], $medidas(4000, 3000));  // foto de celular grande
+        $this->assertSame([200, 150], $medidas(200, 150));    // chica: no se agranda
+        $this->assertSame([400, 300], $medidas(300, 300));    // cuadrada chica: margen a los lados
+    }
+
+    public function test_el_comando_optimiza_las_fotos_ya_subidas(): void
+    {
+        Storage::fake('public');
+        $img = imagecreatetruecolor(500, 1500);
+        ob_start();
+        imagepng($img);
+        Storage::disk('public')->put('productos/vieja.png', ob_get_clean());
+
+        $producto = $this->crearProducto();
+        $producto->update(['imagen_url' => '/storage/productos/vieja.png']);
+
+        $this->artisan('productos:optimizar-imagenes')->assertSuccessful();
+
+        $nueva = $producto->fresh()->imagen_url;
+        $this->assertStringEndsWith('.webp', $nueva);
+        Storage::disk('public')->assertMissing('productos/vieja.png');
+        $this->assertSame([800, 600], array_slice(getimagesizefromstring(Storage::disk('public')->get(substr($nueva, strlen('/storage/')))), 0, 2));
+
+        // idempotente: la segunda vez no toca nada
+        $this->artisan('productos:optimizar-imagenes')->assertSuccessful();
+        $this->assertSame($nueva, $producto->fresh()->imagen_url);
     }
 
     public function test_rechaza_archivos_que_no_son_imagen(): void

@@ -10,6 +10,7 @@ use App\Models\Marca;
 use App\Models\Producto;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
+use App\Services\ImagenProductoService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -106,7 +107,7 @@ class ProductoController extends Controller
         $datos['stock_minimo'] = $datos['stock_minimo'] ?? 0;
 
         if ($request->hasFile('imagen')) {
-            $ruta = $request->file('imagen')->store('productos', 'public');
+            $ruta = app(ImagenProductoService::class)->guardar($request->file('imagen'));
             $this->eliminarImagenLocal($producto->imagen_url);
             $datos['imagen_url'] = Storage::url($ruta);
         } elseif ($request->boolean('imagen_eliminar')) {
