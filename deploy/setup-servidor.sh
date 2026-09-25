@@ -40,6 +40,8 @@ sudo -u postgres psql -d "$BD" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" -c 
 
 echo "== 3. .env"
 cd "$RUTA"
+# artisan necesita vendor/ (en el primer alta el deploy aun no llego a composer install)
+[ -d vendor ] || $PHP /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress
 if [ ! -f .env ]; then
     cp .env.example .env
     sed -i "s|^APP_ENV=.*|APP_ENV=production|; s|^APP_DEBUG=.*|APP_DEBUG=false|; s|^APP_URL=.*|APP_URL=https://$DOMINIO|" .env
