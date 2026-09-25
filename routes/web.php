@@ -34,6 +34,11 @@ use App\Http\Controllers\UsuarioController;
 use App\Http\Middleware\Superadmin;
 use Illuminate\Support\Facades\Route;
 
+// PDF de un comprobante para el cliente final (enlace firmado que se envia por WhatsApp)
+Route::get('/c/{comprobante}', [ComprobanteController::class, 'publico'])
+    ->middleware(['signed', 'throttle:30,1'])
+    ->name('comprobantes.publico');
+
 // pagina publica del producto (un usuario con sesion va directo a su dashboard)
 Route::get('/', [LandingController::class, 'index'])->name('landing');
 
@@ -171,6 +176,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/comprobantes/{comprobante}/a4', [ComprobanteController::class, 'a4'])->name('comprobantes.a4');
         Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');
         Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
+        Route::get('/comprobantes/{comprobante}/a5', [ComprobanteController::class, 'a5'])->name('comprobantes.a5');
+        Route::get('/comprobantes/{comprobante}/estado-sunat', [ComprobanteController::class, 'estadoSunat'])->name('comprobantes.estado-sunat');
         Route::post('/comprobantes/{comprobante}/correo', [ComprobanteController::class, 'correo'])->middleware('throttle:30,1')->name('comprobantes.correo');
     });
     Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->middleware('can:comprobantes.sunat')->name('comprobantes.sunat');

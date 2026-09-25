@@ -18,8 +18,11 @@ use Barryvdh\Snappy\PdfWrapper;
  */
 class ComprobantePdfService
 {
-    /** PDF A4 listo para ->inline(), ->download() u ->output(). */
-    public function a4(Comprobante $comprobante): PdfWrapper
+    /**
+     * Representación impresa en hoja A4 (o A5: la misma plantilla reducida)
+     * lista para ->inline(), ->download() u ->output().
+     */
+    public function a4(Comprobante $comprobante, string $hoja = 'A4'): PdfWrapper
     {
         $comprobante->loadMissing([
             'empresa',
@@ -43,11 +46,13 @@ class ComprobantePdfService
             'letras' => NumeroALetras::enSoles((float) $comprobante->total),
             'motivoNota' => NotaCreditoService::MOTIVOS[trim((string) $comprobante->motivo_nota)] ?? null,
         ])
-            ->setOption('page-size', 'A4')
-            ->setOption('margin-top', '12')
-            ->setOption('margin-bottom', '12')
-            ->setOption('margin-left', '14')
-            ->setOption('margin-right', '14')
+            ->setOption('page-size', $hoja === 'A5' ? 'A5' : 'A4')
+            // en A5 la plantilla A4 entra reducida al 70 %
+            ->setOption('zoom', $hoja === 'A5' ? 0.7 : 1)
+            ->setOption('margin-top', $hoja === 'A5' ? '8' : '12')
+            ->setOption('margin-bottom', $hoja === 'A5' ? '8' : '12')
+            ->setOption('margin-left', $hoja === 'A5' ? '8' : '14')
+            ->setOption('margin-right', $hoja === 'A5' ? '8' : '14')
             ->setOption('encoding', 'utf-8');
     }
 

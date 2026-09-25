@@ -242,8 +242,23 @@ class PosController extends Controller
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $total = number_format((float) $comprobante->total, 2);
 
+        $comprobante->loadMissing(['cliente:id,email,telefono', 'empresa:id,razon_social,nombre_comercial,facturacion_electronica']);
+
         return back()
             ->with('ticket', route('comprobantes.ticket', $comprobante))
+            // datos para el modal de venta exitosa: vistas previas, estado SUNAT y envio al cliente
+            ->with('venta', [
+                'id' => $comprobante->id,
+                'numero' => $numero,
+                'tipo' => ['00' => 'Nota de venta', '01' => 'Factura', '03' => 'Boleta'][$comprobante->tipo_comprobante_codigo] ?? 'Comprobante',
+                'electronico' => in_array($comprobante->tipo_comprobante_codigo, ['01', '03'], true),
+                'envio_automatico' => (bool) $comprobante->empresa->facturacion_electronica,
+                'total' => (float) $comprobante->total,
+                'empresa' => $comprobante->empresa->nombre_comercial ?: $comprobante->empresa->razon_social,
+                'cliente_email' => $comprobante->cliente?->email,
+                'cliente_telefono' => $comprobante->cliente?->telefono,
+                'enlace_publico' => ComprobanteController::enlacePublico($comprobante),
+            ])
             ->with('success', $esCredito
                 ? "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\"."
                 : "Venta {$numero} registrada por S/ {$total}.");

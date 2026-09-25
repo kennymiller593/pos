@@ -13,9 +13,11 @@ use App\Services\NotaCreditoService;
 use App\Services\SunatService;
 use App\Services\VentaService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -152,6 +154,47 @@ class ComprobanteController extends Controller
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
 
         return $this->pdf->a4($comprobante)->inline("{$numero}.pdf");
+    }
+
+    /** Versión A5 (media hoja): la plantilla A4 reducida. */
+    public function a5(Request $request, Comprobante $comprobante)
+    {
+        abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
+
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+
+        return $this->pdf->a4($comprobante, 'A5')->inline("{$numero}-A5.pdf");
+    }
+
+    /** Estado SUNAT del comprobante, para el modal de venta exitosa (se consulta cada pocos segundos). */
+    public function estadoSunat(Request $request, Comprobante $comprobante): JsonResponse
+    {
+        abort_unless($comprobante->empresa_id === $request->user()->empresa_id, 403);
+
+        $registro = $comprobante->sunat;
+
+        return response()->json([
+            'electronico' => in_array($comprobante->tipo_comprobante_codigo, ['01', '03', '07'], true),
+            'estado' => $registro?->estado, // null = aun no se envia
+            'mensaje' => $registro?->mensaje_sunat,
+        ]);
+    }
+
+    /**
+     * PDF A4 accesible sin sesion mediante un enlace firmado (se comparte por WhatsApp).
+     * La firma cubre el id y la fecha de vencimiento: no se puede adivinar ni alterar.
+     */
+    public function publico(Comprobante $comprobante)
+    {
+        $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
+
+        return $this->pdf->a4($comprobante)->inline("{$numero}.pdf");
+    }
+
+    /** Enlace firmado de 90 dias al PDF del comprobante. */
+    public static function enlacePublico(Comprobante $comprobante): string
+    {
+        return URL::temporarySignedRoute('comprobantes.publico', now()->addDays(90), ['comprobante' => $comprobante->id]);
     }
 
     /** Manda el comprobante (PDF y XML) al correo indicado; opcionalmente lo guarda en la ficha del cliente. */

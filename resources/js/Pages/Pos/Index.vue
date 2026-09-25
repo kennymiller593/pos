@@ -1,15 +1,17 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { StorageSerializers, useStorage, watchDebounced } from '@vueuse/core'
 import {
     Banknote,
     CheckCircle2,
     CircleHelp,
+    ExternalLink,
     History,
     LoaderCircle,
     LockOpen,
     Mail,
+    MessageCircle,
     Minus,
     Package,
     Plus,
@@ -432,10 +434,133 @@ function abrirCobro() {
     modalCobro.value = true
 }
 
-const ventaExitosa = ref(null) // { mensaje, ticket }
+const ventaExitosa = ref(null) // { mensaje, ticket, venta }
 const formCorreoVenta = useForm({ email: '', guardar_en_cliente: false })
-const mostrarCorreoVenta = ref(false)
 const correoVentaEnviado = ref(false)
+const inputBuscar = ref(null)
+
+// ---- datos de la venta para el modal ----
+const datosVenta = computed(() => ventaExitosa.value?.venta ?? null)
+const idVenta = computed(() => datosVenta.value?.id ?? idComprobanteVenta())
+
+// ---- vista previa PDF ----
+const formatosPdf = [
+    { v: 'ticket', label: 'Ticket' },
+    { v: 'a4', label: 'A4' },
+    { v: 'a5', label: 'A5' },
+]
+const formatoPdf = ref('ticket')
+const cargandoPdf = ref(true)
+const urlPdf = computed(() => (idVenta.value ? `/comprobantes/${idVenta.value}/${formatoPdf.value}` : null))
+watch(urlPdf, () => (cargandoPdf.value = true))
+
+function abrirPdfEnPestana() {
+    if (urlPdf.value) window.open(urlPdf.value, '_blank', 'noopener')
+}
+
+// ---- estado SUNAT (sondeo cada 2 s, máx ~30 s) ----
+const ESTADOS_FINALES = ['aceptado', 'observado', 'rechazado', 'baja_pendiente', 'baja']
+const estadoSunat = ref({ estado: null, mensaje: null })
+const sondeoTerminado = ref(false)
+let timerSondeo = null
+let sondeoToken = 0
+
+function detenerSondeo() {
+    sondeoToken++
+    if (timerSondeo) clearTimeout(timerSondeo)
+    timerSondeo = null
+}
+
+function iniciarSondeo(id) {
+    detenerSondeo()
+    const token = sondeoToken
+    const inicio = Date.now()
+    estadoSunat.value = { estado: null, mensaje: null }
+    sondeoTerminado.value = false
+
+    const consultar = async () => {
+        try {
+            const r = await fetch(`/comprobantes/${id}/estado-sunat`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            })
+            if (token !== sondeoToken) return
+            if (r.ok) {
+                const data = await r.json()
+                if (token !== sondeoToken) return
+                estadoSunat.value = { estado: data.estado ?? null, mensaje: data.mensaje ?? null }
+                if (ESTADOS_FINALES.includes(data.estado)) {
+                    sondeoTerminado.value = true
+                    return
+                }
+            }
+        } catch {
+            if (token !== sondeoToken) return
+        }
+        if (Date.now() - inicio >= 30000) {
+            sondeoTerminado.value = true
+            return
+        }
+        timerSondeo = setTimeout(consultar, 2000)
+    }
+    consultar()
+}
+
+const badgeSunat = computed(() => {
+    const { estado, mensaje } = estadoSunat.value
+    if (estado === 'aceptado') return { texto: 'Aceptado', clase: 'bg-[#10B981]/10 text-[#047857] ring-[#10B981]/30 dark:text-emerald-400' }
+    if (estado === 'observado') return { texto: 'Observado', clase: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-900' }
+    if (estado === 'rechazado') return { texto: 'Rechazado', clase: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-400 dark:ring-red-900', detalle: mensaje }
+    if (estado === 'baja_pendiente') return { texto: 'Baja pendiente', clase: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-900' }
+    if (estado === 'baja') return { texto: 'De baja', clase: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/40 dark:text-red-400 dark:ring-red-900' }
+    if (!sondeoTerminado.value) return { texto: 'Enviando…', clase: 'bg-slate-100 text-[#64748B] ring-[#E2E8F0] dark:bg-neutral-800 dark:text-neutral-400 dark:ring-neutral-700', spinner: true }
+    return {
+        texto: 'Pendiente',
+        clase: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-900',
+        detalle: 'Se reintentará automáticamente.',
+    }
+})
+
+// ---- WhatsApp ----
+const telefonoVenta = ref('')
+const errorTelefono = ref('')
+
+function limpiarTelefono(t) {
+    let d = String(t ?? '').replace(/\D/g, '')
+    if (d.length === 11 && d.startsWith('51')) d = d.slice(2)
+    return d
+}
+
+function enviarWhatsapp() {
+    errorTelefono.value = ''
+    const numero = limpiarTelefono(telefonoVenta.value)
+    if (!/^9\d{8}$/.test(numero)) {
+        errorTelefono.value = 'Número de celular no válido'
+        return
+    }
+    const v = datosVenta.value ?? {}
+    const tipo = String(v.tipo ?? 'comprobante').toLowerCase()
+    const texto = `Hola, gracias por tu compra en ${v.empresa ?? ''}. Aquí está tu ${tipo} ${v.numero ?? ''} por S/ ${Number(v.total ?? 0).toFixed(2)}: ${v.enlace_publico ?? ''}`
+    window.open(`https://wa.me/51${numero}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener')
+}
+
+// al abrir / cerrar el modal
+watch(ventaExitosa, (v) => {
+    detenerSondeo()
+    if (!v) return
+    formatoPdf.value = 'ticket'
+    cargandoPdf.value = true
+    errorTelefono.value = ''
+    telefonoVenta.value = limpiarTelefono(v.venta?.cliente_telefono)
+    const id = v.venta?.id ?? idComprobanteVenta()
+    if (v.venta?.electronico && id) iniciarSondeo(id)
+})
+onBeforeUnmount(detenerSondeo)
+
+function nuevaVenta() {
+    ventaExitosa.value = null
+    nextTick(() => inputBuscar.value?.focus())
+}
 
 // En modo directa el ticket sale solo al registrar la venta (una vez por venta)
 let ticketAutoImpreso = null
@@ -493,19 +618,20 @@ function cobrar() {
         onSuccess: () => {
             // solo limpiamos si la venta fue aceptada (flash success)
             if (page.props.flash?.success) {
-                const emailCliente = clienteSeleccionado.value?.email ?? ''
+                const venta = page.props.flash.venta ?? null
+                const emailCliente = venta?.cliente_email ?? clienteSeleccionado.value?.email ?? ''
                 carrito.value = []
                 clienteSeleccionado.value = null
                 modalCobro.value = false
-                ventaExitosa.value = {
-                    mensaje: page.props.flash.success,
-                    ticket: page.props.flash.ticket ?? null,
-                }
                 formCorreoVenta.clearErrors()
                 formCorreoVenta.email = emailCliente
                 formCorreoVenta.guardar_en_cliente = false
-                mostrarCorreoVenta.value = false
                 correoVentaEnviado.value = false
+                ventaExitosa.value = {
+                    mensaje: page.props.flash.success,
+                    ticket: page.props.flash.ticket ?? null,
+                    venta,
+                }
             }
         },
         onFinish: () => (procesando.value = false),
@@ -543,6 +669,7 @@ const claseInput =
                 <div class="relative">
                     <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                     <input
+                        ref="inputBuscar"
                         v-model="buscar"
                         type="text"
                         placeholder="Buscar o escanear código de barras... (Enter agrega)"
@@ -900,60 +1027,166 @@ const claseInput =
 
         <!-- ============ Modal venta exitosa ============ -->
         <Teleport to="body">
-            <div v-if="ventaExitosa" class="fixed inset-0 z-50 grid place-items-center p-4">
-                <div class="fixed inset-0 bg-neutral-950/60" @click="ventaExitosa = null" />
-                <div class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-center text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
-                    <div class="mx-auto grid size-14 place-items-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-                        <CheckCircle2 class="size-8" />
-                    </div>
-                    <h3 class="mt-4 text-lg font-semibold tracking-tight">¡Venta registrada!</h3>
-                    <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
+            <div v-if="ventaExitosa" class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="nuevaVenta" />
+                <div class="relative flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-[#0F172A] shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                    <button
+                        type="button"
+                        class="absolute top-3 right-3 grid size-8 place-items-center rounded-xl text-[#64748B] hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                        title="Cerrar"
+                        @click="nuevaVenta"
+                    >
+                        <X class="size-4" />
+                    </button>
 
-                    <div class="mt-5 grid gap-2">
-                        <button
-                            v-if="ventaExitosa.ticket"
-                            type="button"
-                            class="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-                            @click="imprimirTicket(ventaExitosa.ticket)"
-                        >
-                            <Printer class="size-4" />
-                            {{ modoImpresion === 'directa' ? 'Reimprimir ticket' : 'Imprimir ticket' }}
-                        </button>
-                        <button
-                            v-if="!mostrarCorreoVenta && !correoVentaEnviado"
-                            type="button"
-                            class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                            @click="mostrarCorreoVenta = true"
-                        >
-                            <Mail class="size-4" />
-                            Enviar por correo
-                        </button>
-                        <p v-else-if="correoVentaEnviado" class="inline-flex h-10 items-center justify-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle2 class="size-4" />
-                            Enviado
-                        </p>
-                        <form v-else class="text-left" @submit.prevent="enviarCorreoVenta">
-                            <div class="flex items-center gap-2">
-                                <input
-                                    v-model="formCorreoVenta.email"
-                                    type="email"
-                                    placeholder="cliente@correo.com"
-                                    autofocus
-                                    class="h-10 min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
-                                />
-                                <button
-                                    type="submit"
-                                    :disabled="formCorreoVenta.processing"
-                                    class="h-10 shrink-0 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    {{ formCorreoVenta.processing ? 'Enviando...' : 'Enviar' }}
-                                </button>
+                    <div class="min-h-0 flex-1 overflow-y-auto">
+                        <!-- Cabecera -->
+                        <div class="grid gap-4 border-b border-[#E2E8F0] px-5 py-4 pr-12 sm:px-6 md:grid-cols-2 dark:border-neutral-800">
+                            <div class="flex items-start gap-3">
+                                <div class="grid size-11 shrink-0 place-items-center rounded-full bg-[#10B981]/10 text-[#10B981] dark:bg-emerald-950/60 dark:text-emerald-400">
+                                    <CheckCircle2 class="size-6" />
+                                </div>
+                                <div class="min-w-0">
+                                    <h3 class="text-lg font-semibold tracking-tight sm:text-xl">
+                                        <template v-if="datosVenta">Venta exitosa: {{ datosVenta.tipo }} {{ datosVenta.numero }}</template>
+                                        <template v-else>¡Venta registrada!</template>
+                                    </h3>
+                                    <p v-if="datosVenta" class="mt-0.5 text-2xl font-bold tracking-tight text-[#10B981] dark:text-emerald-400">{{ soles(datosVenta.total) }}</p>
+                                    <p v-else class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
+                                </div>
                             </div>
-                            <p v-if="formCorreoVenta.errors.email" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formCorreoVenta.errors.email }}</p>
-                        </form>
+                            <div v-if="datosVenta" class="space-y-1.5 text-sm md:justify-self-end md:text-right">
+                                <template v-if="datosVenta.electronico">
+                                    <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                                        <span class="text-[#64748B] dark:text-neutral-400">Estado SUNAT:</span>
+                                        <span class="inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-semibold ring-1" :class="badgeSunat.clase">
+                                            <LoaderCircle v-if="badgeSunat.spinner" class="size-3.5 animate-spin" />
+                                            {{ badgeSunat.texto }}
+                                        </span>
+                                    </div>
+                                    <p v-if="badgeSunat.detalle" class="text-xs text-[#64748B] dark:text-neutral-400">{{ badgeSunat.detalle }}</p>
+                                    <p>
+                                        <span class="text-[#64748B] dark:text-neutral-400">Envío automático:</span>
+                                        <span class="font-medium" :class="datosVenta.envio_automatico ? 'text-[#10B981] dark:text-emerald-400' : 'text-[#64748B] dark:text-neutral-400'">
+                                            {{ datosVenta.envio_automatico ? 'Activado' : 'Desactivado' }}
+                                        </span>
+                                    </p>
+                                </template>
+                                <p v-else class="text-[#64748B] dark:text-neutral-400">Nota de venta interna (no se envía a SUNAT)</p>
+                            </div>
+                        </div>
+
+                        <!-- Vista previa -->
+                        <div v-if="urlPdf" class="px-5 pt-3 sm:px-6">
+                            <div class="flex flex-wrap items-end justify-between gap-2 border-b border-[#E2E8F0] dark:border-neutral-800">
+                                <div class="flex gap-1">
+                                    <button
+                                        v-for="f in formatosPdf"
+                                        :key="f.v"
+                                        type="button"
+                                        class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors"
+                                        :class="formatoPdf === f.v
+                                            ? 'border-[#4F46E5] text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
+                                            : 'border-transparent text-[#64748B] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:text-neutral-100'"
+                                        @click="formatoPdf = f.v"
+                                    >
+                                        {{ f.label }}
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2 pb-1.5">
+                                    <button
+                                        v-if="modoImpresion === 'directa' && ventaExitosa.ticket"
+                                        type="button"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[#E2E8F0] px-3 text-xs font-medium text-[#0F172A] hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                                        @click="imprimirTicket(ventaExitosa.ticket)"
+                                    >
+                                        <Printer class="size-3.5" />
+                                        Reimprimir ticket
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[#E2E8F0] px-3 text-xs font-medium text-[#0F172A] hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                                        @click="abrirPdfEnPestana"
+                                    >
+                                        <ExternalLink class="size-3.5" />
+                                        Abrir en pestaña
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="relative mt-3 h-[60vh] overflow-hidden rounded-xl border border-[#E2E8F0] bg-slate-50 dark:border-neutral-800 dark:bg-neutral-950">
+                                <div v-if="cargandoPdf" class="absolute inset-0 grid place-items-center text-sm text-[#64748B] dark:text-neutral-400">
+                                    <span class="inline-flex items-center gap-2">
+                                        <LoaderCircle class="size-4 animate-spin" />
+                                        Cargando vista previa…
+                                    </span>
+                                </div>
+                                <iframe
+                                    :key="urlPdf"
+                                    :src="urlPdf"
+                                    title="Vista previa del comprobante"
+                                    class="relative size-full"
+                                    :class="cargandoPdf ? 'opacity-0' : 'opacity-100'"
+                                    @load="cargandoPdf = false"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Correo / WhatsApp -->
+                        <div v-if="idVenta" class="grid gap-4 px-5 py-4 sm:px-6 md:grid-cols-2">
+                            <form @submit.prevent="enviarCorreoVenta">
+                                <label class="mb-1 block text-xs font-medium text-[#64748B] dark:text-neutral-400">Enviar por correo</label>
+                                <div class="flex">
+                                    <input
+                                        v-model="formCorreoVenta.email"
+                                        type="email"
+                                        placeholder="cliente@correo.com"
+                                        class="h-10 min-w-0 flex-1 rounded-l-xl border border-r-0 border-[#E2E8F0] bg-white px-3 text-sm placeholder-neutral-400 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                                        @input="correoVentaEnviado = false"
+                                    />
+                                    <button
+                                        type="submit"
+                                        :disabled="formCorreoVenta.processing"
+                                        class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-r-xl bg-[#4F46E5] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <LoaderCircle v-if="formCorreoVenta.processing" class="size-4 animate-spin" />
+                                        <Mail v-else class="size-4" />
+                                        Enviar
+                                    </button>
+                                </div>
+                                <p v-if="formCorreoVenta.errors.email" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ formCorreoVenta.errors.email }}</p>
+                                <p v-else-if="correoVentaEnviado" class="mt-1 text-xs font-medium text-[#10B981] dark:text-emerald-400">Enviado ✓</p>
+                            </form>
+                            <form v-if="datosVenta" @submit.prevent="enviarWhatsapp">
+                                <label class="mb-1 block text-xs font-medium text-[#64748B] dark:text-neutral-400">Enviar por WhatsApp</label>
+                                <div class="flex">
+                                    <span class="inline-flex h-10 shrink-0 items-center rounded-l-xl border border-r-0 border-[#E2E8F0] bg-slate-50 px-3 text-sm text-[#64748B] dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">+51</span>
+                                    <input
+                                        v-model="telefonoVenta"
+                                        type="tel"
+                                        inputmode="numeric"
+                                        maxlength="11"
+                                        placeholder="987654321"
+                                        class="h-10 min-w-0 flex-1 border border-r-0 border-[#E2E8F0] bg-white px-3 text-sm placeholder-neutral-400 focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
+                                        @input="errorTelefono = ''"
+                                    />
+                                    <button
+                                        type="submit"
+                                        class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-r-xl bg-[#10B981] px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-600"
+                                    >
+                                        <MessageCircle class="size-4" />
+                                        Enviar
+                                    </button>
+                                </div>
+                                <p v-if="errorTelefono" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ errorTelefono }}</p>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center border-t border-[#E2E8F0] px-5 py-3 dark:border-neutral-800">
                         <button
-                            class="inline-flex h-11 items-center justify-center rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                            @click="ventaExitosa = null"
+                            type="button"
+                            class="inline-flex h-11 min-w-48 items-center justify-center rounded-xl bg-[#4F46E5] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA]"
+                            @click="nuevaVenta"
                         >
                             Nueva venta
                         </button>
