@@ -286,7 +286,7 @@ watch(
 
         <!-- Sidebar -->
         <aside
-            class="fixed inset-y-0 left-0 z-40 flex flex-col border-r border-stone-200 bg-white transition-all duration-200 lg:translate-x-0 dark:border-neutral-800 dark:bg-neutral-900"
+            class="fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[#E2E8F0] bg-white transition-all duration-200 lg:translate-x-0 dark:border-neutral-800 dark:bg-neutral-900"
             :class="[
                 colapsado ? 'lg:w-[4.5rem]' : 'lg:w-64',
                 abiertoMovil ? 'w-64 translate-x-0' : 'w-64 -translate-x-full',
@@ -294,8 +294,8 @@ watch(
             <!-- Logo y nombre de la empresa -->
             <div class="flex h-16 shrink-0 items-center gap-3 px-4">
                 <div class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl" :class="empresa?.logo_url
-                    ? 'border border-stone-200 bg-white dark:border-neutral-700'
-                    : 'bg-neutral-900 font-bold text-emerald-400 dark:bg-emerald-500 dark:text-white'"
+                    ? 'border border-[#E2E8F0] bg-white dark:border-neutral-700'
+                    : 'bg-[#4F46E5] font-bold text-white dark:bg-emerald-500 dark:text-white'"
                     :title="colapsado && !abiertoMovil ? nombreEmpresa : undefined">
                     <img v-if="empresa?.logo_url" :src="empresa.logo_url" :alt="nombreEmpresa"
                         class="size-full object-contain" />
@@ -306,9 +306,9 @@ watch(
                         {{ nombreEmpresa }}
                     </span>
                     <span v-if="sucursalActiva"
-                        class="flex items-center gap-1 text-[11px] text-neutral-500 dark:text-neutral-400"
+                        class="flex items-center gap-1 text-[11px] text-[#64748B] dark:text-neutral-400"
                         :title="sucursalActiva.caja ? `Operando en ${sucursalActiva.nombre} (${sucursalActiva.caja})` : `Sucursal ${sucursalActiva.nombre}`">
-                        <MapPin class="size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <MapPin class="size-3 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
                         <span class="truncate">
                             {{ sucursalActiva.nombre }}<template v-if="sucursalActiva.caja"> · {{ sucursalActiva.caja
                                 }}</template>
@@ -316,7 +316,7 @@ watch(
                     </span>
                 </div>
                 <button
-                    class="ml-auto rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 lg:hidden dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                    class="ml-auto rounded-lg p-1.5 text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] lg:hidden dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                     @click="abiertoMovil = false">
                     <X class="size-5" />
                 </button>
@@ -326,7 +326,7 @@ watch(
             <nav class="nav-scroll flex-1 space-y-3 overflow-y-auto px-3 py-3">
                 <div v-for="grupo in menu" :key="grupo.seccion">
                     <p v-if="!colapsado || abiertoMovil"
-                        class="mb-1 px-2.5 text-[10px] font-semibold tracking-wider text-neutral-400 uppercase dark:text-neutral-500">
+                        class="mb-1 px-2.5 text-[10px] font-semibold tracking-wider text-[#64748B] uppercase dark:text-neutral-500">
                         {{ grupo.seccion }}
                     </p>
                     <ul class="space-y-0.5">
@@ -334,12 +334,12 @@ watch(
                             <Link :href="item.href"
                                 class="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
                                 :class="esActivo(item)
-                                        ? 'bg-neutral-900 text-white dark:bg-emerald-500 dark:text-white'
-                                        : 'text-neutral-600 hover:bg-stone-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
+                                        ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA] dark:bg-emerald-500 dark:text-white'
+                                        : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
                                     " :title="colapsado && !abiertoMovil ? item.label : undefined"
                                 @click="abiertoMovil = false">
                                 <component :is="item.icon" class="size-4.5 shrink-0"
-                                    :class="esActivo(item) ? 'text-emerald-400 dark:text-white' : ''" />
+                                    :class="esActivo(item) ? 'text-white dark:text-white' : ''" />
                                 <span v-if="!colapsado || abiertoMovil" class="truncate">{{ item.label }}</span>
                             </Link>
                         </li>
@@ -349,7 +349,7 @@ watch(
 
             <!-- Colapsar (solo escritorio) -->
             <button
-                class="mx-3 mb-2 hidden h-9 shrink-0 items-center justify-center gap-2 rounded-xl text-sm text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 lg:flex dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                class="mx-3 mb-2 hidden h-9 shrink-0 items-center justify-center gap-2 rounded-xl text-sm text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] lg:flex dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                 @click="colapsado = !colapsado">
                 <ChevronsRight v-if="colapsado" class="size-5" />
                 <template v-else>
@@ -364,9 +364,9 @@ watch(
             :class="colapsado ? 'lg:pl-[4.5rem]' : 'lg:pl-64'">
             <!-- Barra superior -->
             <header
-                class="sticky top-0 z-20 flex h-16 items-center gap-3 bg-white px-4 backdrop-blur-md sm:px-6 dark:bg-[#171717]">
+                class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-[#E2E8F0] bg-white px-4 backdrop-blur-md sm:px-6 dark:border-transparent dark:bg-[#171717]">
                 <button
-                    class="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-neutral-600 hover:text-neutral-900 lg:hidden dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                    class="grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] hover:text-[#0F172A] lg:hidden dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                     @click="abiertoMovil = true">
                     <Menu class="size-5" />
                 </button>
@@ -381,7 +381,7 @@ watch(
                         :href="puede('empresa.gestionar') ? '/empresa' : undefined"
                         class="hidden h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold tracking-wide uppercase sm:flex"
                         :class="empresa.entorno_sunat === 'produccion'
-                            ? 'bg-emerald-600 text-white'
+                            ? 'bg-[#10B981] text-white'
                             : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'"
                         :title="empresa.entorno_sunat === 'produccion'
                             ? 'Facturación electrónica activa (SUNAT real)'
@@ -394,45 +394,45 @@ watch(
                     <!-- Selector de sucursal -->
                     <div v-if="mostrarSelector" ref="selectorRef" class="relative">
                         <button
-                            class="flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-medium text-neutral-600 transition-colors hover:border-stone-300 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
+                            class="flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm font-medium text-[#64748B] transition-colors hover:border-[#CBD5E1] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
                             title="Cambiar de sucursal" @click="selectorAbierto = !selectorAbierto">
-                            <Store class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            <Store class="size-4 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
                             <span class="hidden max-w-44 truncate sm:block">{{ etiquetaSelector }}</span>
-                            <ChevronDown class="hidden size-4 shrink-0 text-neutral-400 sm:block" />
+                            <ChevronDown class="hidden size-4 shrink-0 text-[#64748B] sm:block" />
                         </button>
 
                         <div v-if="selectorAbierto"
-                            class="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-stone-200 bg-white py-1 shadow-lg shadow-neutral-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
+                            class="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white py-1 shadow-lg shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
                             <p
-                                class="px-4 pt-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-neutral-400 uppercase dark:text-neutral-500">
+                                class="px-4 pt-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-[#64748B] uppercase dark:text-neutral-500">
                                 Viendo datos de
                             </p>
                             <button v-if="puedeVerTodas"
-                                class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-stone-50 dark:hover:bg-neutral-800"
+                                class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="cambiarSucursal(null)">
                                 Todas las sucursales
                                 <CheckCircle2 v-if="!sucursalConsultaId"
-                                    class="size-4 text-emerald-600 dark:text-emerald-400" />
+                                    class="size-4 text-[#4F46E5] dark:text-emerald-400" />
                             </button>
                             <button v-for="s in sucursalesAccesibles" :key="s.id"
-                                class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-stone-50 dark:hover:bg-neutral-800"
+                                class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="cambiarSucursal(s.id)">
                                 <span class="truncate">{{ s.nombre }}</span>
                                 <CheckCircle2 v-if="sucursalConsultaId === s.id"
-                                    class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                    class="size-4 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
                             </button>
                         </div>
                     </div>
 
                     <button
-                        class="grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-neutral-600 transition-colors hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                        class="grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                         :title="esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'" @click="alternarTema()">
                         <Sun v-if="esOscuro" class="size-5" />
                         <Moon v-else class="size-5" />
                     </button>
                     <div ref="notiRef" class="relative">
                         <button
-                            class="relative grid size-10 place-items-center rounded-xl border border-stone-200 bg-white text-neutral-600 transition-colors hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                            class="relative grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                             title="Notificaciones" @click="alternarNotificaciones">
                             <Bell class="size-5" />
                             <span v-if="notificaciones.total > 0"
@@ -442,18 +442,18 @@ watch(
                         </button>
 
                         <div v-if="notiAbierto"
-                            class="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-stone-200 bg-white py-1 shadow-lg shadow-neutral-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
+                            class="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white py-1 shadow-lg shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
                             <p
                                 class="border-b border-stone-100 px-4 py-2.5 text-sm font-semibold tracking-tight dark:border-neutral-800">
                                 Notificaciones
                             </p>
                             <div v-if="!notificaciones.items.length"
-                                class="px-4 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                <CheckCircle2 class="mx-auto mb-2 size-7 text-emerald-500" />
+                                class="px-4 py-8 text-center text-sm text-[#64748B] dark:text-neutral-400">
+                                <CheckCircle2 class="mx-auto mb-2 size-7 text-[#10B981]" />
                                 Todo en orden, sin pendientes.
                             </div>
                             <Link v-for="item in notificaciones.items" :key="item.clave" :href="item.url"
-                                class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800"
+                                class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="notiAbierto = false">
                                 <div
                                     class="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
@@ -461,7 +461,7 @@ watch(
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium">{{ item.titulo }}</p>
-                                    <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ item.detalle }}</p>
+                                    <p class="text-xs text-[#64748B] dark:text-neutral-400">{{ item.detalle }}</p>
                                 </div>
                             </Link>
                         </div>
@@ -470,25 +470,25 @@ watch(
                     <!-- Menú de usuario -->
                     <div ref="menuUsuarioRef" class="relative">
                         <button
-                            class="flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white p-1 transition-colors hover:border-stone-300 sm:pr-3 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+                            class="flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white p-1 transition-colors hover:border-[#CBD5E1] sm:pr-3 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
                             @click="menuUsuarioAbierto = !menuUsuarioAbierto">
                             <div
-                                class="grid size-8 place-items-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+                                class="grid size-8 place-items-center rounded-full bg-[#4F46E5] text-sm font-bold text-white">
                                 {{ (usuario?.nombre_completo ?? 'U').charAt(0).toUpperCase() }}
                             </div>
                             <span class="hidden max-w-40 truncate text-sm font-medium sm:block">
                                 {{ usuario?.nombre_completo ?? 'Usuario' }}
                             </span>
-                            <ChevronDown class="hidden size-4 text-neutral-400 sm:block" />
+                            <ChevronDown class="hidden size-4 text-[#64748B] sm:block" />
                         </button>
 
                         <div v-if="menuUsuarioAbierto"
-                            class="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-stone-200 bg-white py-1 shadow-lg shadow-neutral-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
+                            class="absolute right-0 mt-2 w-56 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white py-1 shadow-lg shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
                             <div class="border-b border-stone-100 px-4 py-2.5 dark:border-neutral-800">
                                 <p class="truncate text-sm font-medium">
                                     {{ usuario?.nombre_completo ?? 'Usuario' }}
                                 </p>
-                                <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">{{ usuario?.email ??
+                                <p class="truncate text-xs text-[#64748B] dark:text-neutral-400">{{ usuario?.email ??
                                     '' }}
                                 </p>
                             </div>
