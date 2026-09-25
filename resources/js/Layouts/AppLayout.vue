@@ -104,11 +104,20 @@ const menuBase = [
             { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
         ],
     },
+    {
+        seccion: 'Plataforma',
+        soloSuperadmin: true,
+        items: [
+            { label: 'Empresas', href: '/admin/empresas', icon: Building2 },
+            { label: 'Planes', href: '/admin/planes', icon: CreditCard },
+        ],
+    },
 ]
 
 // cada item se muestra solo si el usuario tiene su permiso (sin permiso = visible para todos)
 const { puede } = usePermisos()
 const menu = computed(() => menuBase
+    .filter((grupo) => !grupo.soloSuperadmin || usuario.value?.es_superadmin)
     .map((grupo) => ({
         ...grupo,
         items: grupo.items.filter((item) => !item.permiso || puede(item.permiso)),

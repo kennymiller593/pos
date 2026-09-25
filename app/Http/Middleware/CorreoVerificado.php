@@ -17,7 +17,7 @@ class CorreoVerificado
     {
         $usuario = $request->user();
 
-        if (! $usuario || $usuario->email_verificado_en || $request->routeIs('verificacion.*', 'logout')) {
+        if (! $usuario || $usuario->email_verificado_en || $usuario->es_superadmin || $request->routeIs('verificacion.*', 'logout')) {
             return $next($request);
         }
 

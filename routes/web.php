@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
+use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RecuperacionPasswordController;
@@ -28,6 +30,7 @@ use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\SuscripcionController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Middleware\Superadmin;
 use Illuminate\Support\Facades\Route;
 
 // pagina publica del producto (un usuario con sesion va directo a su dashboard)
@@ -81,6 +84,18 @@ Route::middleware('auth')->group(function () {
 
     // accesible aunque la suscripcion haya vencido (ver SuscripcionVigente)
     Route::get('/suscripcion', [SuscripcionController::class, 'index'])->name('suscripcion.index');
+
+    // ---- panel de la plataforma (superadmin) ----
+    Route::prefix('admin')->name('admin.')->middleware(Superadmin::class)->group(function () {
+        Route::get('/', fn () => redirect()->route('admin.empresas.index'));
+        Route::get('/empresas', [AdminEmpresaController::class, 'index'])->name('empresas.index');
+        Route::get('/empresas/{empresa}', [AdminEmpresaController::class, 'show'])->name('empresas.show');
+        Route::post('/empresas/{empresa}/plan', [AdminEmpresaController::class, 'activarPlan'])->name('empresas.plan');
+        Route::post('/empresas/{empresa}/extender', [AdminEmpresaController::class, 'extender'])->name('empresas.extender');
+        Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
+        Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
+        Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');
+    });
 
     // ---- configuracion (solo admin) ----
     Route::middleware('can:empresa.gestionar')->group(function () {

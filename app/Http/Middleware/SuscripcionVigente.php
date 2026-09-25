@@ -34,7 +34,8 @@ class SuscripcionVigente
             return redirect('/login')->with('error', 'La cuenta de tu empresa está desactivada. Escríbenos para reactivarla.');
         }
 
-        if ($request->routeIs('suscripcion.*', 'logout') || $this->suscripciones->vigente($empresa)) {
+        // el superadmin de la plataforma no depende de la suscripcion de su propia empresa
+        if ($usuario->es_superadmin || $request->routeIs('suscripcion.*', 'logout') || $this->suscripciones->vigente($empresa)) {
             return $next($request);
         }
 
