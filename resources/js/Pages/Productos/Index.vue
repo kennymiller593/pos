@@ -2,11 +2,12 @@
 import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
+import { FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
 import FormularioProducto from './FormularioProducto.vue'
+import ImportarProductos from './ImportarProductos.vue'
 
 const props = defineProps({
     productos: { type: Object, required: true },
@@ -35,6 +36,7 @@ watch([categoriaId, estado], aplicarFiltros)
 
 const modalAbierto = ref(false)
 const productoEditar = ref(null)
+const importarAbierto = ref(false)
 
 function nuevo() {
     productoEditar.value = null
@@ -110,14 +112,22 @@ function claseStock(producto) {
                     <option value="inactivo">Inactivos</option>
                 </select>
             </div>
-            <button
-                v-if="puede('productos.gestionar')"
-                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-                @click="nuevo"
-            >
-                <Plus class="size-4" />
-                Nuevo producto
-            </button>
+            <div v-if="puede('productos.gestionar')" class="flex flex-col gap-2 sm:flex-row">
+                <button
+                    class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    @click="importarAbierto = true"
+                >
+                    <FileSpreadsheet class="size-4" />
+                    Importar Excel
+                </button>
+                <button
+                    class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                    @click="nuevo"
+                >
+                    <Plus class="size-4" />
+                    Nuevo producto
+                </button>
+            </div>
         </div>
 
         <!-- Tabla -->
@@ -239,6 +249,12 @@ function claseStock(producto) {
             :producto="productoEditar"
             :catalogos="catalogos"
             @cerrar="modalAbierto = false"
+        />
+
+        <ImportarProductos
+            v-if="puede('productos.gestionar')"
+            :abierto="importarAbierto"
+            @cerrar="importarAbierto = false"
         />
     </AppLayout>
 </template>

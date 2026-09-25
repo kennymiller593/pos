@@ -17,6 +17,7 @@ use App\Http\Controllers\ConsultaController;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\ImportacionProductoController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MarcaController;
@@ -129,6 +130,11 @@ Route::middleware('auth')->group(function () {
     // ---- productos y catalogos ----
     Route::get('/productos', [ProductoController::class, 'index'])->middleware('can:productos.ver')->name('productos.index');
     Route::post('/productos', [ProductoController::class, 'store'])->middleware('can:productos.gestionar')->name('productos.store');
+    Route::middleware('can:productos.gestionar')->group(function () {
+        Route::get('/productos/importar/plantilla', [ImportacionProductoController::class, 'plantilla'])->name('productos.importar.plantilla');
+        Route::post('/productos/importar/previsualizar', [ImportacionProductoController::class, 'previsualizar'])->middleware('throttle:20,1')->name('productos.importar.previsualizar');
+        Route::post('/productos/importar', [ImportacionProductoController::class, 'importar'])->name('productos.importar');
+    });
     Route::put('/productos/{producto}', [ProductoController::class, 'update'])->middleware('can:productos.gestionar')->name('productos.update');
     Route::delete('/productos/{producto}', [ProductoController::class, 'destroy'])->middleware('can:productos.eliminar')->name('productos.destroy');
 
