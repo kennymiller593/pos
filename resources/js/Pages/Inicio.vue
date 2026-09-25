@@ -49,14 +49,14 @@ const esOscuro = useDark()
 // paletas categoricas validadas (accesibilidad y daltonismo) por modo
 const PALETA = computed(() => (esOscuro.value
     ? ['#059669', '#0284c7', '#8b5cf6', '#d97706', '#e11d48']
-    : ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#f43f5e']))
+    : ['#10B981', '#4F46E5', '#8b5cf6', '#f59e0b', '#f43f5e']))
 
-const colorTexto = computed(() => (esOscuro.value ? '#a3a3a3' : '#737373'))
-const colorGrilla = computed(() => (esOscuro.value ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'))
+const colorTexto = computed(() => (esOscuro.value ? '#a3a3a3' : '#64748B'))
+const colorGrilla = computed(() => (esOscuro.value ? 'rgba(255,255,255,0.06)' : '#E2E8F0'))
 const superficie = computed(() => (esOscuro.value ? '#171717' : '#ffffff'))
 
 const estiloTooltip = computed(() => ({
-    backgroundColor: esOscuro.value ? '#262626' : '#171717',
+    backgroundColor: esOscuro.value ? '#262626' : '#0F172A',
     titleColor: '#fafafa',
     bodyColor: '#d4d4d4',
     padding: 10,
@@ -222,12 +222,13 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
 
 <template>
     <AppLayout titulo="Inicio">
+        <div class="-m-4 min-h-[calc(100vh-4rem)] bg-[#F8FAFC] p-4 text-[#0F172A] sm:-m-6 sm:p-6 dark:bg-transparent dark:text-inherit">
         <!-- Tarjetas de resumen -->
         <div class="grid gap-4 sm:grid-cols-2" :class="mes ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
             <!-- Ventas de hoy -->
-            <div class="rounded-2xl bg-emerald-600 p-5 text-white">
+            <div class="rounded-2xl bg-[#4F46E5] p-5 text-white">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm text-emerald-50">Ventas de hoy</p>
+                    <p class="text-sm text-indigo-50">Ventas de hoy</p>
                     <div class="grid size-9 place-items-center rounded-full bg-white/15">
                         <TrendingUp class="size-5" />
                     </div>
@@ -244,14 +245,14 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         {{ Math.abs(hoy.variacion) }}%
                     </span>
                 </div>
-                <p v-if="hoy.margen != null" class="mt-1 text-sm text-emerald-100">Margen: {{ soles(hoy.margen) }}</p>
+                <p v-if="hoy.margen != null" class="mt-1 text-sm text-indigo-100">Margen: {{ soles(hoy.margen) }}</p>
             </div>
 
             <!-- Este mes -->
-            <div v-if="mes" class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div v-if="mes" class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Este mes</p>
-                    <div class="grid size-9 place-items-center rounded-full bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                    <p class="text-sm font-medium text-[#64748B] dark:text-neutral-400">Este mes</p>
+                    <div class="grid size-9 place-items-center rounded-full bg-[#F8FAFC] text-[#64748B] dark:bg-neutral-800 dark:text-neutral-300">
                         <CalendarRange class="size-5" />
                     </div>
                 </div>
@@ -261,7 +262,7 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         v-if="mes.variacion !== null"
                         class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
                         :class="mes.variacion >= 0
-                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400'
+                            ? 'bg-[#10B981]/15 text-[#047857] dark:bg-emerald-500/15 dark:text-emerald-400'
                             : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'"
                         title="Comparado con el mismo tramo del mes pasado"
                     >
@@ -270,36 +271,36 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         {{ Math.abs(mes.variacion) }}%
                     </span>
                 </div>
-                <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">vs. mismo tramo del mes pasado</p>
+                <p class="mt-1 text-sm text-[#64748B] dark:text-neutral-400">vs. mismo tramo del mes pasado</p>
             </div>
 
             <!-- Tickets -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Tickets de hoy</p>
-                    <div class="grid size-9 place-items-center rounded-full bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                    <p class="text-sm font-medium text-[#64748B] dark:text-neutral-400">Tickets de hoy</p>
+                    <div class="grid size-9 place-items-center rounded-full bg-[#F8FAFC] text-[#64748B] dark:bg-neutral-800 dark:text-neutral-300">
                         <ReceiptText class="size-5" />
                     </div>
                 </div>
                 <p class="mt-3 text-3xl font-bold tracking-tight">{{ hoy.tickets }}</p>
-                <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Ticket promedio {{ soles(hoy.promedio) }}</p>
+                <p class="mt-1 text-sm text-[#64748B] dark:text-neutral-400">Ticket promedio {{ soles(hoy.promedio) }}</p>
             </div>
 
             <!-- Pendientes -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-                <p class="px-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">Pendientes</p>
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+                <p class="px-1 text-sm font-medium text-[#64748B] dark:text-neutral-400">Pendientes</p>
                 <div class="mt-2 space-y-0.5">
                     <Link
                         v-for="p in PENDIENTES"
                         :key="p.label"
                         :href="p.url"
-                        class="flex items-center justify-between rounded-lg px-1.5 py-1 text-sm transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800"
+                        class="flex items-center justify-between rounded-lg px-1.5 py-1 text-sm transition-colors hover:bg-[#F8FAFC] dark:hover:bg-neutral-800"
                     >
-                        <span class="flex items-center gap-2 text-neutral-600 dark:text-neutral-300">
+                        <span class="flex items-center gap-2 text-[#64748B] dark:text-neutral-300">
                             <component :is="p.icon" class="size-3.5" :class="p.alerta ? 'text-amber-500' : 'text-neutral-300 dark:text-neutral-600'" />
                             {{ p.label }}
                         </span>
-                        <span class="font-semibold" :class="p.alerta ? '' : 'text-neutral-400 dark:text-neutral-500'">{{ p.valor }}</span>
+                        <span class="font-semibold" :class="p.alerta ? '' : 'text-[#64748B] dark:text-neutral-500'">{{ p.valor }}</span>
                     </Link>
                 </div>
             </div>
@@ -308,7 +309,7 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
         <!-- Gráficas -->
         <div class="mt-4 grid items-start gap-4 xl:grid-cols-3">
             <!-- Ventas 14 días -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 xl:col-span-2 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 xl:col-span-2 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas de los últimos 14 días</h2>
                 <div class="mt-4 h-64">
                     <Bar :data="datosSerie" :options="opcionesSerie" />
@@ -316,13 +317,13 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
             </div>
 
             <!-- Medios de pago -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas por medio de pago</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500">Últimos 7 días</p>
+                <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 7 días</p>
                 <div v-if="mediosPago.length" class="mt-4 h-64">
                     <Doughnut :data="datosMedios" :options="opcionesMedios" />
                 </div>
-                <div v-else class="mt-4 grid h-64 place-items-center text-sm text-neutral-400 dark:text-neutral-500">
+                <div v-else class="mt-4 grid h-64 place-items-center text-sm text-[#64748B] dark:text-neutral-500">
                     <div class="text-center">
                         <Wallet class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                         Sin ventas cobradas esta semana.
@@ -333,17 +334,17 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
 
         <!-- Tendencia anual y estacionalidad semanal -->
         <div class="mt-4 grid items-start gap-4 xl:grid-cols-2">
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas por mes</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500">Últimos 12 meses</p>
+                <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 12 meses</p>
                 <div class="mt-4 h-64">
                     <Bar :data="datosMeses" :options="opcionesMeses" />
                 </div>
             </div>
 
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Venta promedio por día de la semana</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500">Últimos 90 días · promedio por día con ventas</p>
+                <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 90 días · promedio por día con ventas</p>
                 <div class="mt-4 h-64">
                     <Bar :data="datosDias" :options="opcionesDias" />
                 </div>
@@ -355,25 +356,25 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
             <!-- Ventas por sucursal -->
             <div
                 v-if="ventasSucursales.length"
-                class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
+                class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
             >
                 <h2 class="font-semibold tracking-tight">Ventas por sucursal</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500">Este mes · todas tus sedes</p>
+                <p class="text-xs text-[#64748B] dark:text-neutral-500">Este mes · todas tus sedes</p>
                 <div class="mt-4 space-y-4">
                     <div v-for="s in ventasSucursales" :key="s.nombre">
                         <div class="mb-1 flex items-baseline justify-between gap-3 text-sm">
                             <span class="flex min-w-0 items-center gap-1.5 font-medium">
-                                <Store class="size-3.5 shrink-0 text-neutral-400" />
+                                <Store class="size-3.5 shrink-0 text-[#64748B]" />
                                 <span class="truncate">{{ s.nombre }}</span>
                             </span>
-                            <span class="shrink-0 text-neutral-500 dark:text-neutral-400">
+                            <span class="shrink-0 text-[#64748B] dark:text-neutral-400">
                                 hoy {{ soles(s.hoy) }} ·
-                                <span class="font-semibold text-neutral-800 dark:text-neutral-100">{{ soles(s.mes) }}</span>
+                                <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(s.mes) }}</span>
                             </span>
                         </div>
-                        <div class="h-2.5 overflow-hidden rounded-full bg-stone-100 dark:bg-neutral-800">
+                        <div class="h-2.5 overflow-hidden rounded-full bg-[#F8FAFC] dark:bg-neutral-800">
                             <div
-                                class="h-full rounded-full bg-sky-500 transition-all duration-500 dark:bg-sky-600"
+                                class="h-full rounded-full bg-[#4F46E5] transition-all duration-500 dark:bg-sky-600"
                                 :style="{ width: `${(s.mes / maxSucursal) * 100}%` }"
                             />
                         </div>
@@ -383,39 +384,39 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
 
             <!-- Top productos -->
             <div
-                class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
+                class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
                 :class="ventasSucursales.length ? '' : 'xl:col-span-2'"
             >
                 <h2 class="font-semibold tracking-tight">Productos más vendidos</h2>
-                <p class="text-xs text-neutral-400 dark:text-neutral-500">Últimos 30 días</p>
+                <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 30 días</p>
 
                 <div v-if="topProductos.length" class="mt-4 space-y-3">
                     <div v-for="(p, i) in topProductos" :key="p.nombre">
                         <div class="mb-1 flex items-baseline justify-between gap-3 text-sm">
                             <span class="truncate font-medium">{{ i + 1 }}. {{ p.nombre }}</span>
-                            <span class="shrink-0 text-neutral-500 dark:text-neutral-400">
+                            <span class="shrink-0 text-[#64748B] dark:text-neutral-400">
                                 {{ Number(p.cantidad).toLocaleString('es-PE', { maximumFractionDigits: 3 }) }} vend. ·
-                                <span class="font-semibold text-neutral-800 dark:text-neutral-100">{{ soles(p.total) }}</span>
+                                <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(p.total) }}</span>
                             </span>
                         </div>
-                        <div class="h-2.5 overflow-hidden rounded-full bg-stone-100 dark:bg-neutral-800">
+                        <div class="h-2.5 overflow-hidden rounded-full bg-[#F8FAFC] dark:bg-neutral-800">
                             <div
-                                class="h-full rounded-full bg-emerald-500 transition-all duration-500 dark:bg-emerald-600"
+                                class="h-full rounded-full bg-[#10B981] transition-all duration-500 dark:bg-emerald-600"
                                 :style="{ width: `${(p.total / maxTop) * 100}%` }"
                             />
                         </div>
                     </div>
                 </div>
-                <p v-else class="mt-6 pb-2 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                <p v-else class="mt-6 pb-2 text-center text-sm text-[#64748B] dark:text-neutral-500">
                     Aún no hay ventas registradas en los últimos 30 días.
                 </p>
             </div>
 
             <!-- Últimas ventas -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-baseline justify-between">
                     <h2 class="font-semibold tracking-tight">Últimas ventas</h2>
-                    <Link href="/comprobantes" class="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+                    <Link href="/comprobantes" class="text-xs font-medium text-[#4F46E5] hover:underline dark:text-emerald-400">
                         Ver todas
                     </Link>
                 </div>
@@ -426,20 +427,21 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                                 {{ v.cliente }}
                                 <span v-if="v.es_credito" class="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">Crédito</span>
                             </p>
-                            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                            <p class="text-xs text-[#64748B] dark:text-neutral-400">
                                 <span class="font-mono">{{ v.numero }}</span>
                                 · {{ esHoy(v.fecha) ? v.hora : etiquetaDia(v.fecha) }}<template v-if="v.sucursal && ventasSucursales.length"> · {{ v.sucursal }}</template>
                             </p>
                         </div>
-                        <p class="shrink-0 font-semibold" :class="v.estado === 'anulado' ? 'text-neutral-400 line-through dark:text-neutral-500' : ''">
+                        <p class="shrink-0 font-semibold" :class="v.estado === 'anulado' ? 'text-[#64748B] line-through dark:text-neutral-500' : ''">
                             {{ soles(v.total) }}
                         </p>
                     </div>
                 </div>
-                <p v-else class="mt-6 pb-2 text-center text-sm text-neutral-400 dark:text-neutral-500">
+                <p v-else class="mt-6 pb-2 text-center text-sm text-[#64748B] dark:text-neutral-500">
                     Todavía no hay ventas. ¡Abre caja y registra la primera!
                 </p>
             </div>
+        </div>
         </div>
     </AppLayout>
 </template>
