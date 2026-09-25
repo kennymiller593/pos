@@ -1,0 +1,142 @@
+name: ci-y-deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DB_CONNECTION: pgsql
+  DB_HOST: 127.0.0.1
+  DB_PORT: '5432'
+  DB_DATABASE: inkapos_test
+  DB_USERNAME: postgres
+  DB_PASSWORD: postgres
+
+jobs:
+  # 1) Tests contra un Postgres efimero (esquema desde database/schema) y build del frontend.
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: inkapos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pgsql, pdo_pgsql, mbstring, intl, bcmath, gd, zip, soap
+          tools: composer:v2
+          coverage: none
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: wkhtmltopdf (tickets y PDF en los tests)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq wkhtmltopdf
+
+      - name: Dependencias
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci --no-audit --no-fund
+
+      - name: Esquema de la base de pruebas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/schema/pgsql-schema.sql
+          psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/schema/catalogos.sql
+          psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/catalogos/ubigeos.sql
+          for f in database/sql/*.sql; do psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f "$f"; done
+
+      - name: Entorno de pruebas
+        run: |
+          cp .env.example .env
+          sed -i 's/^DB_USERNAME=.*/DB_USERNAME=postgres/; s/^DB_PASSWORD=.*/DB_PASSWORD=postgres/; s/^DB_DATABASE=.*/DB_DATABASE=inkapos_test/' .env
+          sed -i 's|^WKHTML_PDF_BINARY=.*|WKHTML_PDF_BINARY=/usr/bin/wkhtmltopdf|' .env
+          php artisan key:generate --force
+
+      - name: Frontend
+        run: npm run build
+
+      - name: Tests
+        run: php artisan test --compact
+
+      - name: Guardar el build para el deploy
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: public/build
+          retention-days: 1
+
+  # 2) Sube el codigo y el build al VPS y ejecuta deploy/deploy.sh alli.
+  deploy:
+    needs: ci
+    # Se activa creando la variable de repositorio DEPLOY_HABILITADO=true (Settings → Variables)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_HABILITADO == 'true'
+    runs-on: ubuntu-latest
+    environment: produccion
+    concurrency:
+      group: deploy-produccion
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: public/build
+
+      - name: Clave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Subir codigo (rsync)
+        # Solo esta carpeta del servidor. Nunca toca .env, storage/, vendor/ ni public/storage.
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy" \
+            --exclude '.git' --exclude '.github' --exclude 'node_modules' --exclude 'tests' \
+            --exclude '.env' --exclude '.env.*' --exclude 'storage/' --exclude 'vendor/' \
+            --exclude 'public/storage' --exclude 'public/hot' --exclude 'bootstrap/cache/' \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Ejecutar deploy.sh en el servidor
+        run: |
+          ssh -i ~/.ssh/deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "bash ${{ secrets.DEPLOY_PATH }}/deploy/deploy.sh"
+
+      - name: Comprobar salud
+        run: |
+          sleep 3
+          curl -fsS --max-time 20 "https://pos.inkanet.pro/up" > /dev/null && echo "OK https://pos.inkanet.pro/up"

@@ -1,0 +1,7 @@
+# inkaPos — /etc/cron.d/inkapos  (formato cron.d: el tercer campo es el usuario)
+# Scheduler: reenvía comprobantes pendientes a SUNAT cada 10 min, confirma bajas, vence suscripciones.
+* * * * * root cd /var/www/inkapos && /usr/bin/php8.4 artisan schedule:run >> /dev/null 2>&1
+
+# Backup diario (base + storage/app con los XML/CDR + .env) con prefijo propio "inkapos-":
+# el find -delete de otros proyectos no debe tocar estos archivos ni al revés.
+30 3 * * * root DESTINO=/root/backups/inkapos RETENCION_DIAS=14 bash /var/www/inkapos/deploy/backup.sh >> /var/log/inkapos-backup.log 2>&1

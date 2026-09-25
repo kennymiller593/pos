@@ -57,14 +57,17 @@ Corren contra la base de `.env` dentro de una transacción por test (`DatabaseTr
 | `php artisan suscripciones:vencer` | Marca vencidas las suscripciones pasadas (diario) |
 | `php artisan empresa:cifrar-certificados` | Cifra certificados guardados en claro y registra su vencimiento |
 
-## Despliegue (VPS Linux)
+## Despliegue (pos.inkanet.pro, VPS compartido con otros proyectos)
 
-1. `git clone` en `/var/www/pos-app`, `.env` con los valores de producción (ver comentarios en `.env.example`: `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` https, `SESSION_SECURE_COOKIE=true`, `LOG_STACK=daily`, SMTP real, `TRUSTED_PROXIES` si hay proxy).
-2. Base de datos como en la instalación local. Guarda `APP_KEY` en un lugar seguro: cifra las claves SOL y los certificados; si se pierde, se pierden.
-3. `deploy/nginx.conf.example` → nginx apuntando a `public/`; `deploy/supervisor-pos.conf.example` → worker de colas; `deploy/crontab.example` → scheduler y backups.
-4. `sudo -u www-data ./deploy/deploy.sh` en cada actualización (dependencias, build, scripts SQL, caches, `queue:restart`).
-5. Backups: `deploy/backup.sh` (pg_dump + `storage/app` + `.env`) y cópialos fuera del servidor. Los XML/CDR viven en `storage/app/private/sunat/{empresa}/{entorno}`.
-6. Salud: `GET /up`.
+El despliegue es automático con GitHub Actions (`.github/workflows/deploy.yml`): en cada push a `main` corre los tests contra un Postgres efímero (cargando `database/schema/`), compila el frontend y, si la variable de repositorio `DEPLOY_HABILITADO` es `true`, sube el código y `public/build` por **rsync** al servidor y ejecuta `deploy/deploy.sh` allí. En el servidor no se compila nada ni se hace `git pull`.
+
+Secrets del repositorio: `SSH_HOST`, `SSH_USER` (root), `SSH_KEY` (clave privada), `DEPLOY_PATH` (`/var/www/inkapos`), dentro del environment `produccion`.
+
+Alta inicial (una vez, como root, con el código ya en `/var/www/inkapos`): `bash deploy/setup-servidor.sh`. Instala wkhtmltopdf, crea base y rol `inkapos` con `pgcrypto`/`pg_trgm`, genera `.env` (revisar `MAIL_*`, `API_TOKEN_SUNAT`, `APP_SOPORTE_*`), carga esquema y catálogos, enlaza `storage`, y da de alta el vhost (`deploy/nginx-inkapos.conf`), el worker (`deploy/supervisor-inkapos.conf`, programa `inkapos-queue`) y el cron (`deploy/cron-inkapos`: scheduler y backup diario a `/root/backups/inkapos`). Luego `certbot --nginx -d pos.inkanet.pro` y en Cloudflare SSL/TLS en "Full (strict)".
+
+Lo que el deploy **nunca** hace, porque el servidor aloja otros proyectos: reiniciar `php-fpm`, `nginx`, `postgres` o supervisor completos, cambiar la versión de PHP por defecto, ni tocar el pool compartido (los límites de subida van por vhost con `fastcgi_param PHP_VALUE`). Solo `reload` de nginx en el alta y `supervisorctl restart inkapos-queue`.
+
+Guarda `APP_KEY` fuera del servidor: cifra las claves SOL y los certificados; si se pierde, se pierden. Salud: `GET /up`.
 
 ### Facturación electrónica
 
