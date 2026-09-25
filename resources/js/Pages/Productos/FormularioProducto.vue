@@ -60,7 +60,7 @@ function presentacionNueva(esDefault = false) {
     return {
         id: null,
         nombre: esDefault ? 'Unidad' : '',
-        unidad_codigo: form.unidad_base_codigo || props.catalogos.unidades[0]?.codigo || '',
+        unidad_codigo: form.unidad_base_codigo || unidadPorDefecto(),
         factor_conversion: 1,
         precio_venta: '',
         precio_mayorista: '',
@@ -70,6 +70,10 @@ function presentacionNueva(esDefault = false) {
     }
 }
 
+// un producto nuevo arranca en "Unidad" (NIU, catalogo SUNAT); si no existiera, la primera de la lista
+const unidadPorDefecto = () =>
+    props.catalogos.unidades.find((u) => u.codigo === 'NIU')?.codigo ?? props.catalogos.unidades[0]?.codigo ?? ''
+
 function cargar() {
     const p = props.producto
     form.clearErrors()
@@ -77,7 +81,7 @@ function cargar() {
     form.nombre = p?.nombre ?? ''
     form.categoria_id = p?.categoria_id ?? ''
     form.marca_id = p?.marca_id ?? ''
-    form.unidad_base_codigo = p?.unidad_base_codigo ?? (props.catalogos.unidades[0]?.codigo ?? '')
+    form.unidad_base_codigo = p?.unidad_base_codigo ?? unidadPorDefecto()
     form.tipo_afectacion_codigo = p?.tipo_afectacion_codigo ?? (props.catalogos.tiposAfectacion[0]?.codigo ?? '')
     form.permite_fraccion = p?.permite_fraccion ?? false
     form.controla_lote = p?.controla_lote ?? false
