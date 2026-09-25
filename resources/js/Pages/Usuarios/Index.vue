@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Link, useForm, usePage } from '@inertiajs/vue3'
-import { Eye, EyeOff, Pencil, Plus, UserCog, X } from '@lucide/vue'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
+import { Eye, EyeOff, Pencil, Plus, Trash2, UserCog, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useConfirmar } from '@/composables/confirmar'
 
 const props = defineProps({
     usuarios: { type: Object, required: true },
@@ -41,6 +42,7 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     activo: true,
+    enviar_correo: true,
 })
 
 function abrir(usuario = null) {
@@ -54,6 +56,7 @@ function abrir(usuario = null) {
     form.password = ''
     form.password_confirmation = ''
     form.activo = usuario?.activo ?? true
+    form.enviar_correo = true
     modalAbierto.value = true
 }
 
@@ -73,6 +76,26 @@ function guardar() {
     } else {
         form.transform(transformar).post('/usuarios', opciones)
     }
+}
+
+// ---- eliminar: solo usuarios sin historial (ventas, cajas, compras...); al resto se les desactiva ----
+const { confirmar } = useConfirmar()
+
+function motivoNoEliminable(u) {
+    if (u.id === miId.value) return 'No puedes eliminarte a ti mismo'
+    if (u.es_superadmin) return 'Administra la plataforma'
+    if (u.con_historial) return 'Ya tiene movimientos registrados: desactívalo en lugar de eliminarlo'
+    return null
+}
+
+async function eliminar(u) {
+    const ok = await confirmar({
+        titulo: `Eliminar a ${u.nombre_completo}`,
+        mensaje: 'Se borrará su cuenta y ya no podrá ingresar. Esta acción no se puede deshacer.',
+        textoConfirmar: 'Eliminar',
+        peligro: true,
+    })
+    if (ok) router.delete(`/usuarios/${u.id}`, { preserveScroll: true })
 }
 
 const claseInput =
@@ -163,6 +186,15 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     @click="abrir(u)"
                                 >
                                     <Pencil class="size-4" />
+                                </button>
+                                <button
+                                    class="rounded-lg p-2 text-neutral-500 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-500 dark:text-neutral-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                    :title="motivoNoEliminable(u) ?? 'Eliminar'"
+                                    :aria-label="`Eliminar a ${u.nombre_completo}`"
+                                    :disabled="!!motivoNoEliminable(u)"
+                                    @click="eliminar(u)"
+                                >
+                                    <Trash2 class="size-4" />
                                 </button>
                             </td>
                         </tr>
@@ -304,6 +336,30 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </label>
                             <span v-if="usuarioEditar?.id === miId" class="ml-2 text-xs text-neutral-400 dark:text-neutral-500">
                                 (no puedes desactivarte a ti mismo)
+                            </span>
+                        </div>
+                        <div v-if="!usuarioEditar" class="flex items-start gap-3 rounded-xl bg-stone-50 p-3 sm:col-span-2 dark:bg-neutral-800/60">
+                            <button
+                                type="button"
+                                role="switch"
+                                :aria-checked="form.enviar_correo"
+                                aria-label="Enviar datos de acceso por correo"
+                                class="relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors"
+                                :class="form.enviar_correo ? 'bg-indigo-600 dark:bg-emerald-600' : 'bg-slate-300 dark:bg-neutral-700'"
+                                @click="form.enviar_correo = !form.enviar_correo"
+                            >
+                                <span
+                                    class="inline-block size-5 rounded-full bg-white shadow transition-transform"
+                                    :class="form.enviar_correo ? 'translate-x-5' : 'translate-x-0.5'"
+                                />
+                            </button>
+                            <span class="cursor-pointer text-sm select-none" @click="form.enviar_correo = !form.enviar_correo">
+                                <span class="font-medium">Enviar datos de acceso por correo</span>
+                                <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                    {{ form.enviar_correo
+                                        ? 'Le llegará su correo, su contraseña y un botón para ingresar.'
+                                        : 'No se enviará nada; compártele sus datos tú mismo.' }}
+                                </span>
                             </span>
                         </div>
                     </div>

@@ -104,4 +104,42 @@ class Usuario extends Authenticatable
 
         return $ids ?: null;
     }
+
+    /**
+     * Tablas donde queda registro de lo que hizo un usuario (tabla => columna).
+     * Si aparece en cualquiera, no se puede eliminar: solo desactivar.
+     */
+    public const TABLAS_HISTORIAL = [
+        'comprobantes' => ['usuario_id', 'anulado_por'],
+        'pagos' => ['usuario_id'],
+        'cobros' => ['usuario_id'],
+        'aperturas_caja' => ['usuario_id'],
+        'movimientos_caja' => ['usuario_id'],
+        'movimientos_inventario' => ['usuario_id'],
+        'compras' => ['usuario_id', 'anulada_por'],
+        'pagos_proveedor' => ['usuario_id'],
+        'transferencias' => ['usuario_id'],
+        'auditoria' => ['usuario_id'],
+    ];
+
+    /** SQL que vale TRUE si el usuario de la fila ("usuarios.id") tiene historial. */
+    public static function sqlTieneHistorial(): string
+    {
+        $existe = [];
+        foreach (self::TABLAS_HISTORIAL as $tabla => $columnas) {
+            foreach ($columnas as $columna) {
+                $existe[] = "EXISTS (SELECT 1 FROM {$tabla} WHERE {$tabla}.{$columna} = usuarios.id)";
+            }
+        }
+
+        return '('.implode(' OR ', $existe).')';
+    }
+
+    public function tieneHistorial(): bool
+    {
+        return (bool) static::query()
+            ->whereKey($this->id)
+            ->selectRaw(static::sqlTieneHistorial().' AS con_historial')
+            ->value('con_historial');
+    }
 }

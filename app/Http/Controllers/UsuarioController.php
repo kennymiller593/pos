@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Mail\BienvenidaUsuario;
 use App\Models\Auditoria;
 use App\Models\Rol;
 use App\Models\Sucursal;
@@ -11,6 +12,8 @@ use App\Services\SuscripcionService;
 use App\Support\Permisos;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -26,6 +29,8 @@ class UsuarioController extends Controller
             'usuarios' => Usuario::query()
                 ->where('empresa_id', $empresaId)
                 ->with(['rol:id,codigo,nombre', 'sucursales:sucursales.id,nombre'])
+                ->select('usuarios.*')
+                ->selectRaw(Usuario::sqlTieneHistorial().' AS con_historial')
                 ->orderBy('nombre_completo')
                 ->paginate(10),
             'roles' => Rol::orderBy('id')->get(['id', 'codigo', 'nombre']),
@@ -37,6 +42,7 @@ class UsuarioController extends Controller
     public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
     {
         $datos = $this->validar($request);
+        $enviarCorreo = $request->boolean('enviar_correo');
         $sucursales = $datos['sucursal_ids'] ?? [];
 
         try {
@@ -59,13 +65,38 @@ class UsuarioController extends Controller
 
         $usuario->sucursales()->sync($sucursales);
 
+        $rol = Rol::find($datos['rol_id'])?->nombre;
+
         Auditoria::registrar($request->user(), 'usuario.creado', 'usuario', $usuario->id, [
             'nombre' => $usuario->nombre_completo,
             'email' => $usuario->email,
-            'rol' => Rol::find($datos['rol_id'])?->nombre,
+            'rol' => $rol,
+            'correo_enviado' => $enviarCorreo,
         ]);
 
-        return back()->with('success', 'Usuario creado.');
+        if (! $enviarCorreo) {
+            return back()->with('success', 'Usuario creado.');
+        }
+
+        // el usuario ya existe: si el correo falla se avisa, pero no se deshace la creacion
+        try {
+            $empresa = $request->user()->empresa;
+            Mail::to($usuario->email)->send(new BienvenidaUsuario(
+                nombre: $usuario->nombre_completo,
+                email: $usuario->email,
+                password: $datos['password'],
+                empresa: $empresa->nombre_comercial ?: $empresa->razon_social,
+                rol: $rol,
+                urlLogin: route('login'),
+                creadoPor: $request->user()->nombre_completo,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', "Usuario creado, pero no se pudo enviar el correo a {$usuario->email}. Compártele sus datos de acceso por otro medio.");
+        }
+
+        return back()->with('success', "Usuario creado. Le enviamos sus datos de acceso a {$usuario->email}.");
     }
 
     public function update(Request $request, Usuario $usuario): RedirectResponse
@@ -134,6 +165,41 @@ class UsuarioController extends Controller
         }
 
         return back()->with('success', 'Usuario actualizado.');
+    }
+
+    /**
+     * Elimina un usuario que nunca trabajo en el sistema (por ejemplo, creado por error).
+     * Si ya tiene ventas, cajas, compras, etc., solo se puede desactivar para no perder el historial.
+     */
+    public function destroy(Request $request, Usuario $usuario): RedirectResponse
+    {
+        abort_unless($usuario->empresa_id === $request->user()->empresa_id, 403);
+
+        if ($usuario->id === $request->user()->id) {
+            return back()->with('error', 'No puedes eliminarte a ti mismo.');
+        }
+
+        if ($usuario->es_superadmin) {
+            return back()->with('error', 'Este usuario administra la plataforma y no se puede eliminar.');
+        }
+
+        if ($usuario->tieneHistorial()) {
+            return back()->with('error', "{$usuario->nombre_completo} ya tiene movimientos registrados, por eso no se puede eliminar. Desactívalo para que ya no pueda ingresar.");
+        }
+
+        DB::transaction(function () use ($usuario) {
+            $usuario->sucursales()->detach();
+            DB::table('recuperaciones_password')->where('email', $usuario->email)->delete();
+            $usuario->delete();
+        });
+
+        Auditoria::registrar($request->user(), 'usuario.eliminado', 'usuario', $usuario->id, [
+            'nombre' => $usuario->nombre_completo,
+            'email' => $usuario->email,
+            'rol' => $usuario->rol?->nombre,
+        ]);
+
+        return back()->with('success', "Usuario {$usuario->nombre_completo} eliminado.");
     }
 
     private function validar(Request $request, ?Usuario $usuario = null): array
