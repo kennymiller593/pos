@@ -60,7 +60,9 @@ echo "== 4. Esquema y catálogos"
 leer() { grep "^$1=" .env | cut -d= -f2- | tr -d '"'; }
 export PGPASSWORD="$(leer DB_PASSWORD)"
 if ! psql -h 127.0.0.1 -U "$ROL" -d "$BD" -tAc "SELECT 1 FROM pg_tables WHERE tablename='empresas'" | grep -q 1; then
-    psql -h 127.0.0.1 -U "$ROL" -d "$BD" -v ON_ERROR_STOP=1 -q -f database/schema/pgsql-schema.sql
+    # las extensiones ya las creo el superusuario (paso 2); el rol de la app no puede tocarlas
+    grep -vE '^(CREATE EXTENSION|COMMENT ON EXTENSION)' database/schema/pgsql-schema.sql \
+        | psql -h 127.0.0.1 -U "$ROL" -d "$BD" -v ON_ERROR_STOP=1 -q
     psql -h 127.0.0.1 -U "$ROL" -d "$BD" -v ON_ERROR_STOP=1 -q -f database/schema/catalogos.sql
     psql -h 127.0.0.1 -U "$ROL" -d "$BD" -v ON_ERROR_STOP=1 -q -f database/catalogos/ubigeos.sql
 fi
