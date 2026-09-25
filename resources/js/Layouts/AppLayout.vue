@@ -334,12 +334,12 @@ watch(
                             <Link :href="item.href"
                                 class="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
                                 :class="esActivo(item)
-                                        ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA] dark:bg-emerald-500 dark:text-white'
+                                        ? 'bg-[#EEF2FF] font-semibold text-[#4338CA] dark:bg-emerald-500 dark:text-white'
                                         : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
                                     " :title="colapsado && !abiertoMovil ? item.label : undefined"
                                 @click="abiertoMovil = false">
                                 <component :is="item.icon" class="size-4.5 shrink-0"
-                                    :class="esActivo(item) ? 'text-white dark:text-white' : ''" />
+                                    :class="esActivo(item) ? 'text-[#4338CA] dark:text-white' : ''" />
                                 <span v-if="!colapsado || abiertoMovil" class="truncate">{{ item.label }}</span>
                             </Link>
                         </li>
