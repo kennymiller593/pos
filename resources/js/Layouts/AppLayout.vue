@@ -360,7 +360,7 @@ watch(
         </aside>
 
         <!-- Contenido -->
-        <div class="flex min-h-screen flex-col transition-all duration-200"
+        <div class="flex min-h-screen min-w-0 flex-col transition-all duration-200"
             :class="colapsado ? 'lg:pl-[4.5rem]' : 'lg:pl-64'">
             <!-- Barra superior -->
             <header
@@ -503,7 +503,7 @@ watch(
             </header>
 
             <!-- Página -->
-            <main class="flex-1 p-4 sm:p-6">
+            <main class="min-w-0 flex-1 p-4 sm:p-6">
                 <!-- Aviso de suscripción -->
                 <div v-if="avisoSuscripcion"
                     class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-4 py-2.5 text-sm"

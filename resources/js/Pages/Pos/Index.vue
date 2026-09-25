@@ -536,9 +536,10 @@ const claseInput =
         </div>
 
         <!-- POS -->
-        <div v-else class="grid items-start gap-4 xl:grid-cols-[1fr_400px]">
+        <div v-else class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
             <!-- ============ Catálogo ============ -->
-            <div>
+            <!-- min-w-0: la fila de categorias hace scroll propio en vez de ensanchar la pagina -->
+            <div class="min-w-0">
                 <div class="relative">
                     <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                     <input
