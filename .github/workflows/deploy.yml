@@ -92,7 +92,19 @@ jobs:
         run: npm run build
 
       - name: Tests
-        run: php artisan test --compact
+        shell: bash
+        run: |
+          set -o pipefail
+          php artisan test --compact 2>&1 | tee storage/logs/tests.log
+
+      - name: Resumen de fallos como anotaciones (visibles sin abrir el log)
+        if: failure()
+        shell: bash
+        run: |
+          # ultima linea del reporte compacto (JSON) troceada en anotaciones de 900 caracteres
+          tail -c 20000 storage/logs/tests.log | tr -d '\r' | grep -E '"result"|Error|error|FAIL' | tail -c 8000 > /tmp/resumen.txt || true
+          [ -s /tmp/resumen.txt ] || tail -c 8000 storage/logs/tests.log > /tmp/resumen.txt
+          fold -w 900 /tmp/resumen.txt | head -n 9 | while IFS= read -r linea; do echo "::error::${linea}"; done
 
       - name: Guardar el build para el deploy
         if: github.event_name == 'push'
