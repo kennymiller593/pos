@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useForm } from '@inertiajs/vue3'
+import { useForm, usePage } from '@inertiajs/vue3'
 import { ImagePlus, LoaderCircle, Package, Plus, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
 import { optimizarImagenProducto } from '@/composables/imagenProducto'
@@ -12,6 +12,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['cerrar'])
+
+// Nuevo RUS: no discrimina IGV, sus productos van como exonerados (el servidor tambien lo fuerza)
+const page = usePage()
+const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 
 // al editar, los precios de las presentaciones existentes solo los cambia quien tiene productos.precios
 const { puede } = usePermisos()
@@ -91,7 +95,7 @@ function cargar() {
     form.categoria_id = p?.categoria_id ?? ''
     form.marca_id = p?.marca_id ?? ''
     form.unidad_base_codigo = p?.unidad_base_codigo ?? unidadPorDefecto()
-    form.tipo_afectacion_codigo = p?.tipo_afectacion_codigo ?? (props.catalogos.tiposAfectacion[0]?.codigo ?? '')
+    form.tipo_afectacion_codigo = p?.tipo_afectacion_codigo ?? (esRus.value ? '20' : props.catalogos.tiposAfectacion[0]?.codigo ?? '')
     form.permite_fraccion = p?.permite_fraccion ?? false
     form.controla_lote = p?.controla_lote ?? false
     form.controla_stock = p?.controla_stock ?? true
@@ -279,6 +283,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <select id="afectacion" v-model="form.tipo_afectacion_codigo" :class="claseInput">
                                     <option v-for="t in catalogos.tiposAfectacion" :key="t.codigo" :value="t.codigo">{{ t.nombre }}</option>
                                 </select>
+                                <p v-if="esRus" class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Nuevo RUS: se vende sin IGV (exonerado).</p>
                                 <p v-if="form.errors.tipo_afectacion_codigo" :class="claseError">{{ form.errors.tipo_afectacion_codigo }}</p>
                             </div>
                             <div>

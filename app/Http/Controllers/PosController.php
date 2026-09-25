@@ -198,7 +198,9 @@ class PosController extends Controller
         $esCredito = $request->boolean('es_credito');
 
         // sin facturacion electronica activa solo se emiten notas de venta internas
-        $tiposPermitidos = $request->user()->empresa->facturacion_electronica ? 'in:00,03,01' : 'in:00';
+        // y el Nuevo RUS no emite facturas
+        $empresa = $request->user()->empresa;
+        $tiposPermitidos = ! $empresa->facturacion_electronica ? 'in:00' : ($empresa->esRus() ? 'in:00,03' : 'in:00,03,01');
 
         $datos = $request->validate([
             'tipo_comprobante_codigo' => ['required', $tiposPermitidos],

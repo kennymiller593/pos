@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\ErrorDeNegocio;
 use App\Models\Auditoria;
 use App\Models\Categoria;
+use App\Models\Empresa;
 use App\Models\Marca;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
@@ -320,6 +321,7 @@ class ImportacionProductosService
 
         return [
             'empresa_id' => $empresaId,
+            'es_rus' => (bool) Empresa::find($empresaId)?->esRus(),
             'unidades' => $unidades,
             'por_barras' => ProductoPresentacion::query()
                 ->where('empresa_id', $empresaId)->whereNotNull('codigo_barras')->where('codigo_barras', '!=', '')
@@ -357,6 +359,8 @@ class ImportacionProductosService
         $afectacion = $afectoTexto === '' ? '10' : (self::AFECTACION[$afectoTexto] ?? null);
         if (! $afectacion) {
             $errores[] = "afecto_igv debe ser SI, EXONERADO o INAFECTO (vino \"{$c['afecto_igv']}\").";
+        } elseif ($ctx['es_rus'] && $afectacion === '10') {
+            $afectacion = Empresa::AFECTACION_RUS; // el Nuevo RUS no discrimina IGV
         }
 
         $fraccionTexto = mb_strtoupper(Str::ascii($c['permite_fraccion'] ?? ''));

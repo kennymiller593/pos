@@ -13,7 +13,7 @@ const form = useForm({
     razon_social: '',
     nombre_comercial: '',
     rubro_codigo: '',
-    regimen_tributario: 'RUS',
+    regimen_tributario: '',
     direccion: '',
     ubigeo: '',
     nombre_completo: '',
@@ -47,6 +47,10 @@ function avanzar() {
     }
     if (!form.rubro_codigo) {
         form.setError('rubro_codigo', 'Elige el rubro de tu negocio.')
+        valido = false
+    }
+    if (!form.regimen_tributario) {
+        form.setError('regimen_tributario', 'Elige tu régimen tributario (figura en tu ficha RUC).')
         valido = false
     }
 
@@ -226,11 +230,13 @@ const claseError = 'mt-1.5 text-sm text-red-600 dark:text-red-400'
                         <div>
                             <label :class="claseLabel" for="regimen">Régimen tributario *</label>
                             <select id="regimen" v-model="form.regimen_tributario" :class="claseInput">
-                                <option value="RUS">RUS</option>
+                                <option value="" disabled>Elige tu régimen</option>
+                                <option value="RUS">Nuevo RUS (solo boletas, sin IGV)</option>
                                 <option value="RER">RER</option>
-                                <option value="MYPE">MYPE</option>
-                                <option value="GENERAL">General</option>
+                                <option value="MYPE">MYPE Tributario</option>
+                                <option value="GENERAL">Régimen General</option>
                             </select>
+                            <p v-if="form.errors.regimen_tributario" :class="claseError">{{ form.errors.regimen_tributario }}</p>
                         </div>
                         <div class="sm:col-span-2">
                             <label :class="claseLabel" for="direccion">Dirección fiscal</label>

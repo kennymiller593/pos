@@ -178,7 +178,9 @@
                     @if ((float) $comprobante->total_descuentos > 0)
                         <tr><td class="etiqueta">Descuentos</td><td class="num">-S/ {{ number_format($comprobante->total_descuentos, 2) }}</td></tr>
                     @endif
-                    <tr><td class="etiqueta">IGV (18%)</td><td class="num">S/ {{ number_format($comprobante->total_igv, 2) }}</td></tr>
+                    @if ((float) $comprobante->total_gravado > 0)
+                        <tr><td class="etiqueta">IGV (18%)</td><td class="num">S/ {{ number_format($comprobante->total_igv, 2) }}</td></tr>
+                    @endif
                     <tr class="fila-total"><td>TOTAL</td><td class="num">S/ {{ number_format($comprobante->total, 2) }}</td></tr>
                 </table>
             </td>

@@ -71,6 +71,7 @@ class RegistroController extends Controller
             'ruc.unique' => 'Este RUC ya está registrado.',
             'razon_social.required' => 'Ingresa la razón social.',
             'rubro_codigo.required' => 'Elige el rubro de tu negocio.',
+            'regimen_tributario.required' => 'Elige tu régimen tributario (figura en tu ficha RUC).',
             'ubigeo.digits' => 'El ubigeo debe tener 6 dígitos.',
             'nombre_completo.required' => 'Ingresa tu nombre.',
             'email.required' => 'Ingresa tu correo.',

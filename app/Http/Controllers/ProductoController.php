@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Http\Requests\ProductoRequest;
 use App\Models\Auditoria;
 use App\Models\Categoria;
+use App\Models\Empresa;
 use App\Models\Marca;
 use App\Models\Producto;
 use App\Models\TipoAfectacionIgv;
@@ -105,6 +106,11 @@ class ProductoController extends Controller
             unset($datos['codigo_interno']);
         }
         $datos['stock_minimo'] = $datos['stock_minimo'] ?? 0;
+
+        // el Nuevo RUS no discrimina IGV: lo gravado se guarda como exonerado
+        if ($request->user()->empresa->esRus() && ($datos['tipo_afectacion_codigo'] ?? null) === '10') {
+            $datos['tipo_afectacion_codigo'] = Empresa::AFECTACION_RUS;
+        }
 
         if ($request->hasFile('imagen')) {
             $ruta = app(ImagenProductoService::class)->guardar($request->file('imagen'));

@@ -41,6 +41,8 @@ const props = defineProps({
 })
 
 const page = usePage()
+// el Nuevo RUS solo emite boletas (nunca facturas)
+const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 const { puede } = usePermisos()
 const { modo: modoImpresion, imprimirTicket } = useImpresion()
 const ayudaImpresion = ref(false)
@@ -1462,7 +1464,7 @@ const claseInput =
 
                     <!-- Tipo de comprobante -->
                     <p class="mb-1.5 text-sm font-medium">Comprobante</p>
-                    <div class="grid gap-2" :class="facturacionElectronica ? 'grid-cols-3' : 'grid-cols-1'">
+                    <div class="grid gap-2" :class="!facturacionElectronica ? 'grid-cols-1' : esRus ? 'grid-cols-2' : 'grid-cols-3'">
                         <button
                             class="h-10 rounded-xl border text-sm font-medium transition-colors"
                             :class="tipoComprobante === '00'
@@ -1483,7 +1485,7 @@ const claseInput =
                             Boleta
                         </button>
                         <button
-                            v-if="facturacionElectronica"
+                            v-if="facturacionElectronica && !esRus"
                             class="h-10 rounded-xl border text-sm font-medium transition-colors"
                             :class="tipoComprobante === '01'
                                 ? 'border-emerald-600 bg-emerald-600 text-white'

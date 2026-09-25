@@ -32,6 +32,7 @@ const props = defineProps({
 
 const { puede } = usePermisos()
 const page = usePage()
+const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 const facturacionElectronica = computed(() => !!page.props.auth?.user?.empresa?.facturacion_electronica)
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
@@ -118,7 +119,7 @@ const ticketConversion = ref(null) // { mensaje, ticket }
 
 function abrirConversion(c) {
     comprobanteConvertir.value = c
-    tipoConversion.value = c.cliente_tipo_doc?.trim() === '6' ? '01' : '03'
+    tipoConversion.value = !esRus.value && c.cliente_tipo_doc?.trim() === '6' ? '01' : '03'
     clienteConversion.value = c.cliente_id
         ? {
             id: c.cliente_id,
@@ -786,9 +787,9 @@ const claseInput =
 
                     <!-- Tipo -->
                     <p class="mb-1 text-sm font-medium">Tipo *</p>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div class="grid gap-2" :class="esRus ? 'grid-cols-1' : 'grid-cols-2'">
                         <button
-                            v-for="t in [{ codigo: '03', nombre: 'Boleta' }, { codigo: '01', nombre: 'Factura' }]"
+                            v-for="t in esRus ? [{ codigo: '03', nombre: 'Boleta' }] : [{ codigo: '03', nombre: 'Boleta' }, { codigo: '01', nombre: 'Factura' }]"
                             :key="t.codigo"
                             type="button"
                             class="h-10 rounded-xl border text-sm font-medium transition-colors"

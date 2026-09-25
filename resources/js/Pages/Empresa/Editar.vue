@@ -162,10 +162,10 @@ const certificadoVencimiento = computed(() => {
                     <div>
                         <label :class="claseLabel" for="regimen">Régimen tributario *</label>
                         <select id="regimen" v-model="form.regimen_tributario" :class="claseInput">
-                            <option value="RUS">RUS</option>
+                            <option value="RUS">Nuevo RUS (solo boletas, sin IGV)</option>
                             <option value="RER">RER</option>
-                            <option value="MYPE">MYPE</option>
-                            <option value="GENERAL">General</option>
+                            <option value="MYPE">MYPE Tributario</option>
+                            <option value="GENERAL">Régimen General</option>
                         </select>
                     </div>
                     <div class="sm:col-span-2">
@@ -221,6 +221,13 @@ const certificadoVencimiento = computed(() => {
                             <h2 class="font-semibold tracking-tight">Facturación electrónica (SUNAT)</h2>
                             <p class="text-sm text-neutral-500 dark:text-neutral-400">
                                 Con el interruptor apagado, el POS emite solo notas de venta internas.
+                            </p>
+                            <p
+                                v-if="form.regimen_tributario === 'RUS'"
+                                class="mt-2 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs text-sky-800 dark:bg-sky-500/10 dark:text-sky-300"
+                            >
+                                Régimen Nuevo RUS: solo se emiten <strong>boletas</strong> (no facturas) y sin IGV; las ventas van
+                                como exoneradas.
                             </p>
                         </div>
                     </div>

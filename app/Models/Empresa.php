@@ -12,6 +12,9 @@ class Empresa extends Model
 {
     use HasUuids;
 
+    /** Afectacion con la que el Nuevo RUS emite lo gravado (catalogo 07: exonerado, operacion onerosa). */
+    public const AFECTACION_RUS = '20';
+
     protected $table = 'empresas';
 
     public const CREATED_AT = 'creado_en';
@@ -136,5 +139,11 @@ class Empresa extends Model
     public function suscripciones(): HasMany
     {
         return $this->hasMany(Suscripcion::class, 'empresa_id');
+    }
+
+    /** Nuevo RUS: solo boletas (nunca facturas) y sin discriminar IGV. */
+    public function esRus(): bool
+    {
+        return $this->regimen_tributario === 'RUS';
     }
 }

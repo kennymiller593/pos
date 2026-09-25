@@ -10,6 +10,7 @@ use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\CuentaPorCobrar;
 use App\Models\DetalleConsumoCapa;
+use App\Models\Empresa;
 use App\Models\Pago;
 use App\Models\ProductoPresentacion;
 use App\Models\SerieCorrelativo;
@@ -53,7 +54,12 @@ class VentaService
 
         $cliente = $this->resolverCliente($empresaId, $datos['cliente_id'] ?? null, $esCredito);
 
-        [$lineas, $totales] = $this->calcularLineas($empresaId, $datos['items']);
+        $esRus = $usuario->empresa->esRus();
+        if ($esRus && $datos['tipo_comprobante_codigo'] === '01') {
+            throw new ErrorDeNegocio('Tu empresa está en el Nuevo RUS: solo puede emitir boletas, no facturas.');
+        }
+
+        [$lineas, $totales] = $this->calcularLineas($empresaId, $datos['items'], $esRus);
         $totalVenta = round($totales['total'], 2);
 
         $this->validarClienteParaTipo($datos['tipo_comprobante_codigo'], $cliente, $totalVenta);
@@ -231,6 +237,15 @@ class VentaService
 
         if (! $comprobante->empresa->facturacion_electronica) {
             throw new ErrorDeNegocio('Activa la facturación electrónica en Empresa para emitir boletas y facturas.');
+        }
+
+        if ($comprobante->empresa->esRus()) {
+            if ($tipo === '01') {
+                throw new ErrorDeNegocio('Tu empresa está en el Nuevo RUS: solo puede emitir boletas, no facturas.');
+            }
+            if ((float) $comprobante->total_igv > 0) {
+                throw new ErrorDeNegocio('Esta nota de venta se registró con IGV (antes de pasar al Nuevo RUS). Registra una venta nueva para emitir la boleta.');
+            }
         }
 
         $dias = $comprobante->fecha_emision->startOfDay()->diffInDays(now()->startOfDay());
@@ -475,7 +490,7 @@ class VentaService
      *
      * @return array{0: list<array<string, mixed>>, 1: array<string, float>}
      */
-    private function calcularLineas(string $empresaId, array $items): array
+    private function calcularLineas(string $empresaId, array $items, bool $esRus = false): array
     {
         $presentaciones = ProductoPresentacion::query()
             ->where('empresa_id', $empresaId)
@@ -523,7 +538,14 @@ class VentaService
             // el IGV se calcula sobre el importe ya rebajado
             $totalLinea = round($bruto - $descuento, 2);
             $totales['descuentos'] += $descuento;
-            $esGravado = (bool) ($afectaciones->get($producto->tipo_afectacion_codigo)?->afecto);
+            $afectacion = $producto->tipo_afectacion_codigo;
+            $esGravado = (bool) ($afectaciones->get($afectacion)?->afecto);
+
+            // Nuevo RUS: no discrimina IGV, lo gravado se emite como exonerado
+            if ($esRus && $esGravado) {
+                $afectacion = Empresa::AFECTACION_RUS;
+                $esGravado = false;
+            }
 
             if ($esGravado) {
                 $base = round($totalLinea / (1 + self::IGV), 2);
@@ -534,7 +556,7 @@ class VentaService
             } else {
                 $igvLinea = 0.0;
                 $valorUnitario = $precio;
-                $clave = $producto->tipo_afectacion_codigo === '20' ? 'exonerado' : 'inafecto';
+                $clave = $afectacion === '20' ? 'exonerado' : 'inafecto';
                 $totales[$clave] += $totalLinea;
             }
 
@@ -543,6 +565,7 @@ class VentaService
             $lineas[] = [
                 'presentacion' => $presentacion,
                 'producto' => $producto,
+                'afectacion' => $afectacion,
                 'cantidad' => $cantidad,
                 'cantidad_base' => round($cantidad * (float) $presentacion->factor_conversion, 3),
                 'precio_unitario' => $precio,
@@ -698,7 +721,7 @@ class VentaService
             'lote_id' => $consumo['consumos'][0]['lote_id'] ?? null,
             'descripcion' => $producto->nombre.($linea['presentacion']->nombre !== 'Unidad' ? " ({$linea['presentacion']->nombre})" : ''),
             'unidad_codigo' => $producto->unidad_base_codigo,
-            'tipo_afectacion_codigo' => $producto->tipo_afectacion_codigo,
+            'tipo_afectacion_codigo' => $linea['afectacion'],
             'cantidad' => $linea['cantidad'],
             'valor_unitario' => $linea['valor_unitario'],
             'precio_unitario' => $linea['precio_unitario'],

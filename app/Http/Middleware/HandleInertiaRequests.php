@@ -94,6 +94,7 @@ class HandleInertiaRequests extends Middleware
                             'nombre_comercial' => $usuario->empresa->nombre_comercial,
                             'logo_url' => $usuario->empresa->logo_url,
                             'facturacion_electronica' => (bool) $usuario->empresa->facturacion_electronica,
+                            'regimen_tributario' => $usuario->empresa->regimen_tributario,
                             'entorno_sunat' => $usuario->empresa->entorno_sunat,
                         ],
                         'sucursal' => $usuario->sucursal ? [

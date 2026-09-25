@@ -40,7 +40,7 @@ trait CreaEscenarioPos
         $this->empresa = Empresa::create([
             'ruc' => "20{$sufijo}7",
             'razon_social' => "Empresa Test {$sufijo}",
-            'regimen_tributario' => 'RUS',
+            'regimen_tributario' => 'MYPE',
             'rubro_codigo' => Rubro::query()->value('codigo'),
             'activo' => true,
         ]);
