@@ -19,7 +19,8 @@ env:
 jobs:
   # 1) Tests contra un Postgres efimero (esquema desde database/schema) y build del frontend.
   ci:
-    runs-on: ubuntu-latest
+    # 22.04 (jammy): existe el .deb oficial de wkhtmltopdf con Qt parcheado, igual que en el servidor
+    runs-on: ubuntu-22.04
 
     services:
       postgres:
@@ -56,7 +57,13 @@ jobs:
           cache: npm
 
       - name: wkhtmltopdf (tickets y PDF en los tests)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq wkhtmltopdf
+        # el paquete de apt no trae Qt parcheado y exige un servidor X; el oficial funciona sin pantalla
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fontconfig libjpeg-turbo8 libxrender1 xfonts-75dpi xfonts-base
+          curl -fsSL -o /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb
+          sudo dpkg -i /tmp/wkhtmltox.deb || sudo apt-get install -f -y -qq
+          wkhtmltopdf --version
 
       - name: Dependencias
         run: |
@@ -67,6 +74,8 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
+          # la app y la BD del servidor trabajan en hora de Lima; el contenedor arranca en UTC
+          psql -h 127.0.0.1 -U postgres -d postgres -c "ALTER DATABASE inkapos_test SET timezone TO 'America/Lima';"
           psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/schema/pgsql-schema.sql
           psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/schema/catalogos.sql
           psql -h 127.0.0.1 -U postgres -d inkapos_test -v ON_ERROR_STOP=1 -q -f database/catalogos/ubigeos.sql
