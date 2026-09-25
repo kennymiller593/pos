@@ -167,6 +167,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
         Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
         Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
+        Route::get('/caja/turnos/{apertura}/ticket', [CajaController::class, 'ticketCierre'])->name('caja.turnos.ticket');
     });
 
     // ---- comprobantes ----

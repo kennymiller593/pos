@@ -8,6 +8,7 @@ use App\Models\Auditoria;
 use App\Models\Caja;
 use App\Models\MovimientoCaja;
 use App\Services\CajaService;
+use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,7 +41,7 @@ class CajaController extends Controller
             ->where('empresa_id', $usuario->empresa_id)
             ->whereNotNull('cerrada_en')
             ->when(! $veTodas, fn ($q) => $q->where('usuario_id', $usuario->id))
-            ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo'])
+            ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo', 'cierresMedios.medioPago:codigo,nombre'])
             ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['pagos as ventas_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
@@ -64,6 +65,15 @@ class CajaController extends Controller
                 'monto_sistema' => (float) $turno->monto_sistema,
                 'monto_cierre' => (float) $turno->monto_cierre,
                 'diferencia' => round((float) $turno->monto_cierre - (float) $turno->monto_sistema, 2),
+                // cuadre por medio (turnos cerrados antes de esta funcion no lo tienen)
+                'medios' => $turno->cierresMedios->map(fn ($m) => [
+                    'codigo' => $m->medio_pago_codigo,
+                    'nombre' => $m->medioPago?->nombre ?? $m->medio_pago_codigo,
+                    'esperado' => (float) $m->esperado,
+                    'declarado' => $m->declarado !== null ? (float) $m->declarado : null,
+                    'diferencia' => (float) $m->diferencia,
+                ])->values(),
+                'diferencia_total' => round((float) $turno->cierresMedios->sum('diferencia') ?: ((float) $turno->monto_cierre - (float) $turno->monto_sistema), 2),
             ]);
 
         return Inertia::render('Caja/Index', [
@@ -81,12 +91,14 @@ class CajaController extends Controller
                 'abierta_en' => $apertura->abierta_en,
                 'monto_inicial' => (float) $apertura->monto_inicial,
                 'resumen' => $this->caja->resumen($apertura),
+                'medios' => $this->caja->resumenPorMedio($apertura),
                 'movimientos' => $apertura->movimientos()
                     ->with('usuario:id,nombre_completo')
                     ->latest('creado_en')
                     ->limit(50)
                     ->get(['id', 'tipo', 'concepto', 'monto', 'medio_pago_codigo', 'referencia', 'usuario_id', 'creado_en']),
             ] : null,
+            'denominaciones' => CajaService::DENOMINACIONES,
         ]);
     }
 
@@ -198,52 +210,108 @@ class CajaController extends Controller
         }
 
         $datos = $request->validate([
-            'monto_cierre' => ['required', 'numeric', 'min:0'],
+            'monto_cierre' => ['required_without:conteo', 'nullable', 'numeric', 'min:0'],
+            'conteo' => ['nullable', 'array'],
+            'conteo.*' => ['nullable', 'integer', 'min:0'],
+            'declarados' => ['nullable', 'array'],
+            'declarados.*' => ['nullable', 'numeric', 'min:0'],
         ], [
-            'monto_cierre.required' => 'Ingresa el efectivo contado.',
+            'monto_cierre.required_without' => 'Ingresa el efectivo contado.',
             'monto_cierre.min' => 'El monto no puede ser negativo.',
+            'declarados.*.min' => 'El monto no puede ser negativo.',
         ]);
 
+        // el conteo por billetes/monedas, si viene, manda sobre el total escrito a mano
+        $conteo = collect($datos['conteo'] ?? [])
+            ->only(CajaService::DENOMINACIONES)
+            ->map(fn ($n) => (int) $n)
+            ->filter();
+        $efectivo = $conteo->isNotEmpty()
+            ? round($conteo->reduce(fn ($total, $n, $valor) => $total + $n * (float) $valor, 0.0), 2)
+            : (float) $datos['monto_cierre'];
+
+        $declarados = collect($datos['declarados'] ?? [])
+            ->map(fn ($v) => $v === null || $v === '' ? null : (float) $v)
+            ->put('efectivo', $efectivo)
+            ->all();
+
         try {
-            $esperado = DB::transaction(function () use ($apertura, $datos) {
-                // con la apertura bloqueada, las ventas en curso esperan y el esperado es el real
+            $cuadre = DB::transaction(function () use ($apertura, $declarados, $conteo) {
+                // con la apertura bloqueada, las ventas en curso esperan y lo esperado es lo real
                 $bloqueada = AperturaCaja::lockForUpdate()->findOrFail($apertura->id);
 
                 if ($bloqueada->cerrada_en) {
                     throw new ErrorDeNegocio('Esta caja ya fue cerrada.');
                 }
 
-                $esperado = $this->caja->resumen($bloqueada)['esperado'];
-
-                $bloqueada->update([
-                    'monto_cierre' => $datos['monto_cierre'],
-                    'monto_sistema' => $esperado,
-                    'cerrada_en' => now(),
-                ]);
-
-                return $esperado;
+                return $this->caja->cerrar($bloqueada, $declarados, $conteo->isNotEmpty() ? $conteo->all() : null);
             });
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        $diferencia = round($datos['monto_cierre'] - $esperado, 2);
+        $conDiferencia = collect($cuadre)->filter(fn ($m) => abs($m['diferencia']) >= 0.005);
 
-        if ($diferencia != 0) {
+        if ($conDiferencia->isNotEmpty()) {
+            $efectivoCuadre = collect($cuadre)->firstWhere('codigo', 'efectivo');
             Auditoria::registrar($request->user(), 'caja.cierre_con_diferencia', 'apertura_caja', $apertura->id, [
                 'caja' => $apertura->caja?->nombre,
-                'esperado' => round($esperado, 2),
-                'contado' => round((float) $datos['monto_cierre'], 2),
-                'diferencia' => $diferencia,
+                'esperado' => $efectivoCuadre['esperado'],
+                'contado' => $efectivoCuadre['declarado'],
+                'diferencia' => $efectivoCuadre['diferencia'],
+                'medios' => $conDiferencia->map(fn ($m) => [
+                    'medio' => $m['nombre'],
+                    'esperado' => $m['esperado'],
+                    'declarado' => $m['declarado'],
+                    'diferencia' => $m['diferencia'],
+                ])->values()->all(),
             ]);
         }
 
-        $detalle = $diferencia == 0
+        $detalle = $conDiferencia->isEmpty()
             ? 'Caja cuadrada, sin diferencias.'
-            : ($diferencia > 0
-                ? 'Sobran S/ '.number_format($diferencia, 2).'.'
-                : 'Faltan S/ '.number_format(abs($diferencia), 2).'.');
+            : $conDiferencia->map(fn ($m) => ($m['diferencia'] > 0 ? 'sobran' : 'faltan').' S/ '.number_format(abs($m['diferencia']), 2)." en {$m['nombre']}")
+                ->implode(', ').'.';
 
-        return back()->with('success', "Caja cerrada. {$detalle}");
+        return back()
+            ->with('success', 'Caja cerrada. '.ucfirst($detalle))
+            ->with('ticket', route('caja.turnos.ticket', $apertura));
+    }
+
+    /** Ticket de cierre del turno (resumen por medio, conteo y diferencias) para la impresora térmica. */
+    public function ticketCierre(Request $request, AperturaCaja $apertura)
+    {
+        $usuario = $request->user();
+
+        abort_unless($apertura->empresa_id === $usuario->empresa_id, 403);
+        abort_unless($apertura->usuario_id === $usuario->id || $usuario->can('caja.ver_todas'), 403);
+        abort_unless($apertura->cerrada_en !== null, 404);
+
+        $apertura->load(['caja:id,nombre,sucursal_id,ancho_ticket', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo', 'cierresMedios.medioPago:codigo,nombre']);
+
+        $medios = $this->caja->resumenPorMedio($apertura);
+        $cierres = $apertura->cierresMedios->keyBy('medio_pago_codigo');
+        $ancho = (int) ($apertura->caja?->ancho_ticket ?? 80);
+        $empresa = $usuario->empresa;
+
+        $pdf = SnappyPdf::loadView('pdf.cierre-caja', [
+            'apertura' => $apertura,
+            'empresa' => $empresa,
+            'medios' => $medios,
+            'cierres' => $cierres,
+            'ventas' => $apertura->comprobantes()->where('estado', 'emitido')->where('tipo_comprobante_codigo', '!=', '07')
+                ->selectRaw('COUNT(*) AS n, COALESCE(SUM(total), 0) AS total')->first(),
+            'anuladas' => $apertura->comprobantes()->where('estado', 'anulado')->count(),
+            'ancho' => $ancho,
+        ])
+            ->setOption('page-width', "{$ancho}mm")
+            ->setOption('page-height', (int) ceil(110 + count($medios) * 18 + count($apertura->conteo_efectivo ?? []) * 4).'mm')
+            ->setOption('margin-top', '3')
+            ->setOption('margin-bottom', '3')
+            ->setOption('margin-left', '4')
+            ->setOption('margin-right', '4')
+            ->setOption('encoding', 'utf-8');
+
+        return $pdf->inline('cierre-'.$apertura->cerrada_en->format('Y-m-d-His').'.pdf');
     }
 }

@@ -1,10 +1,14 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
+import { Link, useForm, usePage } from '@inertiajs/vue3'
 import {
     ArrowDownCircle,
     ArrowUpCircle,
     Banknote,
+    CheckCircle2,
+    ChevronDown,
+    ChevronRight,
+    Printer,
     Clock,
     Lock,
     LockOpen,
@@ -14,16 +18,18 @@ import {
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
-import { useConfirmar } from '@/composables/confirmar'
+import { useImpresion } from '@/composables/impresion'
+import CierreCajaModal from './CierreCajaModal.vue'
 import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     cajas: { type: Array, required: true },
     apertura: { type: Object, default: null },
     historial: { type: Object, required: true },
+    denominaciones: { type: Array, default: () => ['200', '100', '50', '20', '10', '5', '2', '1', '0.50', '0.20', '0.10'] },
 })
 
-const { confirmar } = useConfirmar()
+const { imprimirTicket } = useImpresion()
 const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
@@ -76,31 +82,49 @@ function guardarMovimiento() {
 
 // ---- cierre ----
 const modalCierre = ref(false)
-const formCierre = useForm({
-    monto_cierre: '',
+const ticketCierre = ref(null)
+
+function alCerrarCaja(ticket) {
+    modalCierre.value = false
+    if (ticket) ticketCierre.value = ticket
+}
+
+// si el componente del modal se desmonta antes de emitir (apertura pasa a null), tomamos el ticket del flash
+const page = usePage()
+watch(() => page.props.flash?.ticket, (url) => {
+    if (url) alCerrarCaja(url)
 })
 
-const diferencia = computed(() => {
-    if (formCierre.monto_cierre === '') return null
-    return Number(formCierre.monto_cierre) - (props.apertura?.resumen.esperado ?? 0)
-})
+// ---- cuadre por medio de pago (turno abierto) ----
+const COLUMNAS_CUADRE = [
+    { clave: 'inicial', titulo: 'Inicial' },
+    { clave: 'ventas', titulo: 'Ventas' },
+    { clave: 'cobros', titulo: 'Cobros' },
+    { clave: 'ingresos', titulo: 'Ingresos' },
+    { clave: 'egresos', titulo: 'Egresos/devol.', resta: true },
+    { clave: 'pagos_proveedor', titulo: 'Pagos prov.', resta: true },
+]
+const mediosTurno = computed(() => props.apertura?.medios ?? [])
+const columnasCuadre = computed(() =>
+    COLUMNAS_CUADRE.filter((c) => mediosTurno.value.some((m) => Math.abs(Number(m[c.clave] ?? 0)) >= 0.005)))
+const totalCuadre = (clave) => mediosTurno.value.reduce((s, m) => s + Number(m[clave] ?? 0), 0)
 
-async function cerrarCaja() {
-    const confirmado = await confirmar({
-        titulo: 'Cerrar caja',
-        mensaje: 'Se cerrará el turno actual y no podrás registrar más ventas ni movimientos en él.',
-        textoConfirmar: 'Cerrar caja',
-        peligro: true,
-    })
-    if (confirmado) {
-        formCierre.post('/caja/cerrar', {
-            preserveScroll: true,
-            onSuccess: () => {
-                modalCierre.value = false
-                formCierre.reset()
-            },
-        })
-    }
+// ---- historial ----
+const expandidos = ref(new Set())
+function alternarTurno(id) {
+    const s = new Set(expandidos.value)
+    s.has(id) ? s.delete(id) : s.add(id)
+    expandidos.value = s
+}
+const claseDiferencia = (d) => {
+    const n = Number(d ?? 0)
+    if (Math.abs(n) < 0.005) return 'text-emerald-600 dark:text-emerald-400'
+    return n > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+}
+const textoDiferencia = (d) => {
+    const n = Number(d ?? 0)
+    if (Math.abs(n) < 0.005) return soles(0)
+    return (n > 0 ? '+' : '−') + soles(Math.abs(n))
 }
 
 const claseInput =
@@ -111,6 +135,35 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
 <template>
     <AppLayout titulo="Caja">
+        <!-- Aviso de cierre con ticket -->
+        <div
+            v-if="ticketCierre"
+            class="mx-auto mb-4 flex max-w-5xl flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+        >
+            <p class="inline-flex items-center gap-2 font-medium">
+                <CheckCircle2 class="size-5 shrink-0 text-[#10B981]" />
+                Caja cerrada correctamente. Puedes imprimir el ticket de cierre.
+            </p>
+            <div class="flex gap-2">
+                <button
+                    type="button"
+                    class="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                    @click="imprimirTicket(ticketCierre)"
+                >
+                    <Printer class="size-4" />
+                    Imprimir cierre
+                </button>
+                <button
+                    type="button"
+                    class="rounded-xl p-2 text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-500/15"
+                    aria-label="Cerrar aviso"
+                    @click="ticketCierre = null"
+                >
+                    <X class="size-4" />
+                </button>
+            </div>
+        </div>
+
         <!-- ============ SIN CAJA ABIERTA ============ -->
         <div v-if="!apertura" class="mx-auto max-w-md">
             <form
@@ -234,6 +287,61 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </div>
             </div>
 
+            <!-- Cuadre por medio de pago -->
+            <div
+                v-if="mediosTurno.length"
+                class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-900"
+            >
+                <div class="border-b border-slate-200 px-5 py-4 dark:border-neutral-800">
+                    <h2 class="font-semibold tracking-tight text-slate-900 dark:text-neutral-100">Cuadre por medio de pago</h2>
+                    <p class="text-xs text-slate-500 dark:text-neutral-400">Lo que debería haber en cada medio al cerrar el turno</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[32rem] text-left text-sm">
+                        <thead class="border-b border-slate-200 text-xs text-slate-500 uppercase dark:border-neutral-800 dark:text-neutral-500">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold tracking-wider">Medio</th>
+                                <th v-for="c in columnasCuadre" :key="c.clave" class="px-3 py-3 text-right font-semibold tracking-wider whitespace-nowrap">
+                                    {{ c.titulo }}
+                                </th>
+                                <th class="px-4 py-3 text-right font-semibold tracking-wider">Esperado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 dark:divide-neutral-800">
+                            <tr v-for="m in mediosTurno" :key="m.codigo">
+                                <td class="px-4 py-3 font-medium whitespace-nowrap text-slate-900 dark:text-neutral-100">{{ m.nombre }}</td>
+                                <td
+                                    v-for="c in columnasCuadre"
+                                    :key="c.clave"
+                                    class="px-3 py-3 text-right whitespace-nowrap tabular-nums"
+                                    :class="Number(m[c.clave] ?? 0) === 0
+                                        ? 'text-slate-300 dark:text-neutral-600'
+                                        : c.resta ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-neutral-300'"
+                                >
+                                    <template v-if="Number(m[c.clave] ?? 0) === 0">—</template>
+                                    <template v-else>{{ c.resta ? '− ' : '' }}{{ soles(m[c.clave]) }}</template>
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums text-slate-900 dark:text-neutral-100">{{ soles(m.esperado) }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="border-t border-slate-200 bg-slate-50 dark:border-neutral-800 dark:bg-neutral-950/50">
+                            <tr>
+                                <td class="px-4 py-3 font-semibold text-slate-900 dark:text-neutral-100">Total</td>
+                                <td
+                                    v-for="c in columnasCuadre"
+                                    :key="c.clave"
+                                    class="px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums"
+                                    :class="c.resta ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-neutral-200'"
+                                >
+                                    {{ c.resta ? '− ' : '' }}{{ soles(totalCuadre(c.clave)) }}
+                                </td>
+                                <td class="px-4 py-3 text-right font-bold whitespace-nowrap tabular-nums text-indigo-600 dark:text-emerald-400">{{ soles(totalCuadre('esperado')) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
             <!-- Movimientos -->
             <div class="mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
@@ -298,34 +406,91 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Egresos</th>
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Esperado</th>
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Contado</th>
-                            <th class="px-4 py-3 text-center font-semibold tracking-wider">Arqueo</th>
+                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Diferencia</th>
+                            <th class="px-4 py-3"><span class="sr-only">Acciones</span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!historial.data.length">
-                            <td colspan="8" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                            <td colspan="9" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
                                 Aún no hay turnos cerrados.
                             </td>
                         </tr>
-                        <tr v-for="t in historial.data" :key="t.id" class="transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50">
-                            <td class="px-4 py-3">
-                                <p class="font-medium">{{ t.caja }} · {{ t.usuario ?? '—' }}</p>
-                                <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                                    {{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}
-                                </p>
-                            </td>
-                            <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.monto_inicial) }}</td>
-                            <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.ventas_efectivo) }}</td>
-                            <td class="px-3 py-3 text-right text-emerald-600 dark:text-emerald-400">{{ t.ingresos > 0 ? soles(t.ingresos) : '—' }}</td>
-                            <td class="px-3 py-3 text-right text-red-600 dark:text-red-400">{{ t.egresos > 0 ? soles(t.egresos) : '—' }}</td>
-                            <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_sistema) }}</td>
-                            <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_cierre) }}</td>
-                            <td class="px-4 py-3 text-center">
-                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="estadoDiferencia(t.diferencia).clase">
-                                    {{ estadoDiferencia(t.diferencia).texto }}
-                                </span>
-                            </td>
-                        </tr>
+                        <template v-for="t in historial.data" :key="t.id">
+                            <tr class="transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800/50">
+                                <td class="px-4 py-3">
+                                    <p class="font-medium whitespace-nowrap">{{ t.caja }} · {{ t.usuario ?? '—' }}</p>
+                                    <p class="text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">
+                                        {{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}
+                                    </p>
+                                </td>
+                                <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.monto_inicial) }}</td>
+                                <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.ventas_efectivo) }}</td>
+                                <td class="px-3 py-3 text-right text-emerald-600 dark:text-emerald-400">{{ t.ingresos > 0 ? soles(t.ingresos) : '—' }}</td>
+                                <td class="px-3 py-3 text-right text-red-600 dark:text-red-400">{{ t.egresos > 0 ? soles(t.egresos) : '—' }}</td>
+                                <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_sistema) }}</td>
+                                <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_cierre) }}</td>
+                                <td class="px-3 py-3 text-right">
+                                    <span
+                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
+                                        :class="estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).clase"
+                                    >
+                                        {{ estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).texto }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex justify-end gap-1">
+                                        <button
+                                            v-if="t.medios?.length"
+                                            type="button"
+                                            class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                            :aria-label="expandidos.has(t.id) ? 'Ocultar detalle por medio' : 'Ver detalle por medio'"
+                                            :title="expandidos.has(t.id) ? 'Ocultar detalle' : 'Detalle por medio de pago'"
+                                            @click="alternarTurno(t.id)"
+                                        >
+                                            <ChevronDown v-if="expandidos.has(t.id)" class="size-4" />
+                                            <ChevronRight v-else class="size-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                            aria-label="Imprimir ticket de cierre"
+                                            title="Imprimir ticket de cierre"
+                                            @click="imprimirTicket(`/caja/turnos/${t.id}/ticket`)"
+                                        >
+                                            <Printer class="size-4" />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="expandidos.has(t.id) && t.medios?.length" class="bg-slate-50 dark:bg-neutral-950/50">
+                                <td colspan="9" class="px-4 py-3">
+                                    <table class="w-full max-w-xl text-sm">
+                                        <thead class="text-xs text-slate-500 uppercase dark:text-neutral-500">
+                                            <tr>
+                                                <th class="py-1.5 pr-3 text-left font-semibold tracking-wider">Medio</th>
+                                                <th class="px-3 py-1.5 text-right font-semibold tracking-wider">Esperado</th>
+                                                <th class="px-3 py-1.5 text-right font-semibold tracking-wider">Declarado</th>
+                                                <th class="py-1.5 pl-3 text-right font-semibold tracking-wider">Diferencia</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-200/70 dark:divide-neutral-800">
+                                            <tr v-for="m in t.medios" :key="m.codigo">
+                                                <td class="py-1.5 pr-3 font-medium whitespace-nowrap">{{ m.nombre }}</td>
+                                                <td class="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">{{ soles(m.esperado) }}</td>
+                                                <td class="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">
+                                                    <template v-if="m.declarado !== null && m.declarado !== undefined">{{ soles(m.declarado) }}</template>
+                                                    <span v-else class="text-xs text-slate-400 italic dark:text-neutral-500">no verificado</span>
+                                                </td>
+                                                <td class="py-1.5 pl-3 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseDiferencia(m.diferencia)">
+                                                    {{ m.declarado === null || m.declarado === undefined ? '—' : textoDiferencia(m.diferencia) }}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                        </template>
                     </tbody>
                 </table>
             </div>
@@ -433,81 +598,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
             </div>
         </Teleport>
 
-        <!-- Modal: cerrar caja (arqueo) -->
-        <Teleport to="body">
-            <div v-if="modalCierre && apertura" class="fixed inset-0 z-50 grid place-items-center p-4">
-                <div class="fixed inset-0 bg-neutral-950/60" @click="modalCierre = false" />
-                <form
-                    class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
-                    @submit.prevent="cerrarCaja"
-                >
-                    <div class="mb-4 flex items-center justify-between">
-                        <h3 class="font-semibold tracking-tight">Cerrar caja · Arqueo</h3>
-                        <button
-                            type="button"
-                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                            @click="modalCierre = false"
-                        >
-                            <X class="size-5" />
-                        </button>
-                    </div>
-
-                    <div class="rounded-xl bg-stone-50 p-4 text-sm dark:bg-neutral-950">
-                        <div class="flex justify-between">
-                            <span class="text-neutral-500 dark:text-neutral-400">Efectivo esperado</span>
-                            <span class="font-semibold">{{ soles(apertura.resumen.esperado) }}</span>
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <label :class="claseLabel" for="monto_cierre">Efectivo contado en el cajón *</label>
-                        <input
-                            id="monto_cierre"
-                            v-model="formCierre.monto_cierre"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            :class="claseInput"
-                            placeholder="0.00"
-                            autofocus
-                        />
-                        <p v-if="formCierre.errors.monto_cierre" :class="claseError">{{ formCierre.errors.monto_cierre }}</p>
-                    </div>
-
-                    <p
-                        v-if="diferencia !== null"
-                        class="mt-3 rounded-xl px-4 py-2.5 text-sm font-medium"
-                        :class="diferencia === 0
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
-                            : diferencia > 0
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
-                                : 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'"
-                    >
-                        {{ diferencia === 0
-                            ? '✓ Caja cuadrada'
-                            : diferencia > 0
-                                ? `Sobran ${soles(diferencia)}`
-                                : `Faltan ${soles(Math.abs(diferencia))}` }}
-                    </p>
-
-                    <div class="mt-5 flex justify-end gap-2">
-                        <button
-                            type="button"
-                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                            @click="modalCierre = false"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            :disabled="formCierre.processing"
-                            class="rounded-xl bg-red-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {{ formCierre.processing ? 'Cerrando...' : 'Cerrar caja' }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </Teleport>
+        <!-- Modal: cerrar caja (arqueo por medio de pago) -->
+        <CierreCajaModal
+            v-if="apertura"
+            :abierto="modalCierre"
+            :apertura="apertura"
+            :denominaciones="denominaciones"
+            @cerrar="modalCierre = false"
+            @cerrado="alCerrarCaja"
+        />
     </AppLayout>
 </template>

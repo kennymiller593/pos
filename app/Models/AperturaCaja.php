@@ -24,6 +24,7 @@ class AperturaCaja extends Model
         'monto_sistema',
         'abierta_en',
         'cerrada_en',
+        'conteo_efectivo',
     ];
 
     protected function casts(): array
@@ -34,7 +35,13 @@ class AperturaCaja extends Model
             'monto_sistema' => 'decimal:2',
             'abierta_en' => 'datetime',
             'cerrada_en' => 'datetime',
+            'conteo_efectivo' => 'array',
         ];
+    }
+
+    public function cierresMedios(): HasMany
+    {
+        return $this->hasMany(CierreCajaMedio::class, 'apertura_id');
     }
 
     public function empresa(): BelongsTo
