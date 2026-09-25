@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
-import { StorageSerializers, useStorage, watchDebounced } from '@vueuse/core'
+import { StorageSerializers, useResizeObserver, useStorage, watchDebounced } from '@vueuse/core'
 import {
     Banknote,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     CircleHelp,
     ExternalLink,
     History,
@@ -638,6 +640,26 @@ function cobrar() {
     })
 }
 
+// ---- fila de categorias: flechas en vez de barra de desplazamiento ----
+const filaCategorias = ref(null)
+const puedeIzquierda = ref(false)
+const puedeDerecha = ref(false)
+
+function actualizarFlechas() {
+    const el = filaCategorias.value
+    if (!el) return
+    puedeIzquierda.value = el.scrollLeft > 4
+    puedeDerecha.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+}
+
+function desplazarCategorias(direccion) {
+    const el = filaCategorias.value
+    if (!el) return
+    el.scrollBy({ left: direccion * Math.max(200, el.clientWidth * 0.7), behavior: 'smooth' })
+}
+
+useResizeObserver(filaCategorias, actualizarFlechas)
+
 const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
 </script>
@@ -681,12 +703,38 @@ const claseInput =
                 </div>
 
                 <!-- Chips de categorías -->
-                <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
+                <div class="relative mt-3">
+                    <button
+                        v-show="puedeIzquierda"
+                        type="button"
+                        class="absolute top-1/2 left-0 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-[#E2E8F0] bg-white text-[#64748B] shadow-md hover:text-[#4F46E5] dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:text-emerald-400"
+                        title="Ver categorías anteriores"
+                        @click="desplazarCategorias(-1)"
+                    >
+                        <ChevronLeft class="size-4" />
+                    </button>
+                    <!-- degradados para indicar que hay mas categorias a los lados -->
+                    <div v-show="puedeIzquierda" class="pointer-events-none absolute inset-y-0 left-0 z-[5] w-12 bg-gradient-to-r from-[#F8FAFC] to-transparent dark:from-neutral-950" />
+                    <div v-show="puedeDerecha" class="pointer-events-none absolute inset-y-0 right-0 z-[5] w-12 bg-gradient-to-l from-[#F8FAFC] to-transparent dark:from-neutral-950" />
+                    <button
+                        v-show="puedeDerecha"
+                        type="button"
+                        class="absolute top-1/2 right-0 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-[#E2E8F0] bg-white text-[#64748B] shadow-md hover:text-[#4F46E5] dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:text-emerald-400"
+                        title="Ver más categorías"
+                        @click="desplazarCategorias(1)"
+                    >
+                        <ChevronRight class="size-4" />
+                    </button>
+                <div
+                    ref="filaCategorias"
+                    class="flex gap-2 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    @scroll.passive="actualizarFlechas"
+                >
                     <button
                         class="shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-medium transition-colors"
                         :class="categoriaActiva === null
-                            ? 'bg-neutral-900 text-white dark:bg-emerald-500'
-                            : 'border border-stone-200 bg-white text-neutral-600 hover:bg-stone-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                            ? 'bg-[#4F46E5] text-white dark:bg-emerald-500'
+                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
                         @click="categoriaActiva = null"
                     >
                         Todos
@@ -696,12 +744,13 @@ const claseInput =
                         :key="c.id"
                         class="shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-medium transition-colors"
                         :class="categoriaActiva === c.id
-                            ? 'bg-neutral-900 text-white dark:bg-emerald-500'
-                            : 'border border-stone-200 bg-white text-neutral-600 hover:bg-stone-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                            ? 'bg-[#4F46E5] text-white dark:bg-emerald-500'
+                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
                         @click="categoriaActiva = categoriaActiva === c.id ? null : c.id"
                     >
                         {{ c.nombre }}
                     </button>
+                </div>
                 </div>
 
                 <!-- Grilla de productos -->
