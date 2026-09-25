@@ -12,7 +12,7 @@ defineProps({
 const { puede } = usePermisos()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
-const fecha = (f) => new Date(`${f}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
+const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T00:00:00`) : null)?.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
 
 const compraVer = ref(null)
