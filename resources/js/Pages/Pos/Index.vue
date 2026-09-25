@@ -22,11 +22,13 @@ import {
     ShoppingCart,
     Tag,
     RotateCcw,
+    ScanBarcode,
     Trash2,
     UserRound,
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import EscanerCamara from '@/Components/EscanerCamara.vue'
 import { usePermisos } from '@/composables/permisos'
 import { useImpresion } from '@/composables/impresion'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
@@ -69,17 +71,24 @@ function presentacionDefault(producto) {
     return producto.presentaciones.find((p) => p.es_default) ?? producto.presentaciones[0]
 }
 
-// escaneo de código de barras: Enter en el buscador
+// producto y presentación con ese código de barras exacto (o null)
+function buscarPorCodigo(codigo) {
+    for (const producto of props.productos) {
+        const presentacion = producto.presentaciones.find((p) => p.codigo_barras === codigo)
+        if (presentacion) return { producto, presentacion }
+    }
+    return null
+}
+
+// escaneo de código de barras: Enter en el buscador (pistola lectora o teclado)
 function alPresionarEnter() {
     const texto = buscar.value.trim()
     if (!texto) return
-    for (const producto of props.productos) {
-        const pres = producto.presentaciones.find((p) => p.codigo_barras === texto)
-        if (pres) {
-            agregar(producto, pres)
-            buscar.value = ''
-            return
-        }
+    const encontrado = buscarPorCodigo(texto)
+    if (encontrado) {
+        agregar(encontrado.producto, encontrado.presentacion)
+        buscar.value = ''
+        return
     }
     // sin código exacto: si el filtro deja un solo producto, agrégalo
     if (productosFiltrados.value.length === 1) {
@@ -118,7 +127,7 @@ function agregar(producto, presentacion = null) {
             avisarSinStock(producto.stock <= 0
                 ? `"${producto.nombre}" no tiene stock.`
                 : `No hay más stock de "${producto.nombre}" (${producto.stock} disp. y ya tienes ${enCarrito} en el carrito).`)
-            return
+            return false
         }
     }
 
@@ -128,6 +137,32 @@ function agregar(producto, presentacion = null) {
     } else {
         carrito.value.push({ producto, presentacion, cantidad: 1, precio: '', descuento: '', conDescuento: false })
     }
+    return true
+}
+
+// ================= escáner con la cámara (celulares y tablets) =================
+const escanerAbierto = ref(false)
+// solo en pantallas táctiles con cámara: en la PC se usa la pistola lectora o el teclado
+const puedeEscanear = typeof window !== 'undefined'
+    && window.matchMedia?.('(pointer: coarse)').matches
+    && !!navigator.mediaDevices?.getUserMedia
+
+const resumenEscaner = computed(() => {
+    if (!carrito.value.length) return ''
+    const unidades = carrito.value.reduce((n, i) => n + Number(i.cantidad || 0), 0)
+    return `${unidades} ${unidades === 1 ? 'unidad' : 'unidades'} · ${soles(total.value)}`
+})
+
+function leerCodigoCamara(codigo) {
+    const encontrado = buscarPorCodigo(codigo)
+    if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+
+    const { producto, presentacion } = encontrado
+    if (!agregar(producto, presentacion)) return { ok: false, mensaje: avisoSinStock.value }
+
+    const cantidad = carrito.value.find((i) => i.presentacion.id === presentacion.id)?.cantidad ?? 1
+    const nombre = producto.nombre + (presentacion.nombre !== 'Unidad' ? ` (${presentacion.nombre})` : '')
+    return { ok: true, mensaje: `${nombre} · ${cantidad} en el carrito` }
 }
 
 function quitar(indice) {
@@ -698,11 +733,29 @@ const claseInput =
                         v-model="buscar"
                         type="text"
                         placeholder="Buscar o escanear código de barras... (Enter agrega)"
-                        class="h-11 w-full rounded-xl border border-stone-200 bg-white pr-4 pl-10 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500"
+                        :class="puedeEscanear ? 'pr-12' : 'pr-4'"
+                        class="h-11 w-full rounded-xl border border-stone-200 bg-white pl-10 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500"
                         autofocus
                         @keyup.enter="alPresionarEnter"
                     />
+                    <button
+                        v-if="puedeEscanear"
+                        type="button"
+                        class="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                        aria-label="Escanear con la cámara"
+                        title="Escanear con la cámara"
+                        @click="escanerAbierto = true"
+                    >
+                        <ScanBarcode class="size-5" />
+                    </button>
                 </div>
+                <EscanerCamara
+                    v-if="puedeEscanear"
+                    :abierto="escanerAbierto"
+                    :al-leer="leerCodigoCamara"
+                    :resumen="resumenEscaner"
+                    @cerrar="escanerAbierto = false"
+                />
 
                 <!-- Chips de categorías -->
                 <div class="relative mt-3">

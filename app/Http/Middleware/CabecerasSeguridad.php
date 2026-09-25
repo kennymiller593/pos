@@ -18,7 +18,8 @@ class CabecerasSeguridad
         $cabeceras->set('X-Frame-Options', 'SAMEORIGIN');
         $cabeceras->set('X-Content-Type-Options', 'nosniff');
         $cabeceras->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $cabeceras->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        // camera=(self): el POS escanea codigos de barras con la camara del celular (solo este sitio, nunca iframes ajenos)
+        $cabeceras->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=()');
 
         if ($request->isSecure()) {
             $cabeceras->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
