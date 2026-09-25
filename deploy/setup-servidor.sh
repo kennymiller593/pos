@@ -27,7 +27,10 @@ wkhtmltopdf --version
 
 echo "== 2. Base de datos y rol propios en el clúster compartido"
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$ROL'" | grep -q 1; then
-    read -r -s -p "Contraseña para el rol Postgres '$ROL': " CLAVE_BD; echo
+    # se puede pasar por entorno para ejecuciones no interactivas: CLAVE_BD=... bash setup-servidor.sh
+    if [ -z "${CLAVE_BD:-}" ]; then
+        read -r -s -p "Contraseña para el rol Postgres '$ROL': " CLAVE_BD; echo
+    fi
     sudo -u postgres psql -c "CREATE ROLE $ROL LOGIN PASSWORD '$CLAVE_BD';"
 fi
 sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$BD'" | grep -q 1 \
