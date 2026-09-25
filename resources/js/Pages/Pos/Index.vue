@@ -1122,7 +1122,7 @@ const claseInput =
                                         </span>
                                     </p>
                                 </template>
-                                <p v-else class="text-[#64748B] dark:text-neutral-400">Nota de venta interna (no se envía a SUNAT)</p>
+                                
                             </div>
                         </div>
 
