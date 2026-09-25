@@ -80,7 +80,7 @@ class ImportacionProductosTest extends TestCase
                 'nombre' => 'Cable UTP Cat6', 'precio_venta' => 1.20, 'stock_inicial' => 305, 'unidad' => 'Metro',
                 'permite_fraccion' => 'SI', 'categoria' => 'Redes', 'marca' => 'Dixon', 'stock_minimo' => 20,
                 'precio_mayorista' => 1.00, 'cantidad_mayorista' => 50,
-                'presentacion_2' => 'Caja 305 m', 'factor_2' => 305, 'precio_2' => 190, 'precio_compra_2' => 142.30,
+                'presentacion' => 'Caja 305 m', 'factor' => 305, 'precio_presentacion' => 190, 'precio_compra_presentacion' => 142.30,
             ],
             ['nombre' => 'Arroz 1 kg', 'precio_venta' => 4.80, 'precio_compra' => 3.90, 'afecto_igv' => 'EXONERADO', 'codigo_barras' => '7751234567890'],
             ['nombre' => '', 'precio_venta' => 1],

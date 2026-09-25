@@ -35,8 +35,7 @@ class ImportacionProductosService
     public const COLUMNAS = [
         'nombre', 'precio_venta', 'precio_compra', 'stock_inicial', 'codigo_barras', 'categoria', 'marca',
         'unidad', 'stock_minimo', 'afecto_igv', 'permite_fraccion', 'precio_mayorista', 'cantidad_mayorista',
-        'presentacion_2', 'factor_2', 'precio_2', 'precio_compra_2', 'codigo_barras_2',
-        'presentacion_3', 'factor_3', 'precio_3', 'codigo_barras_3',
+        'presentacion', 'factor', 'precio_presentacion', 'precio_compra_presentacion', 'codigo_barras_presentacion',
     ];
 
     private const OBLIGATORIAS = ['nombre', 'precio_venta'];
@@ -55,9 +54,9 @@ class ImportacionProductosService
 
         $hoja->fromArray(self::COLUMNAS, null, 'A1');
         $hoja->fromArray([
-            ['Cable UTP Cat6', 1.20, 0.4666, 305, '', 'Redes', 'Dixon', 'Metro', 20, 'SI', 'SI', 1.00, 50, 'Caja 305 m', 305, 190.00, 142.30, '', '', '', '', ''],
-            ['Gaseosa Inca Kola 500 ml', 2.50, 1.60, 48, '7750182001234', 'Bebidas', 'Inca Kola', 'Unidad', 12, 'SI', 'NO', '', '', 'Paquete x6', 6, 14.00, '', '', 'Caja x12', 12, 27.00, ''],
-            ['Arroz Costeño 1 kg', 4.80, 3.90, 0, '', 'Abarrotes', 'Costeño', 'Unidad', 0, 'EXONERADO', 'NO', '', '', '', '', '', '', '', '', '', '', ''],
+            ['Cable UTP Cat6', 1.20, '', 305, '', 'Redes', 'Dixon', 'Metro', 20, 'SI', 'SI', 1.00, 50, 'Caja 305 m', 305, 190.00, 142.30, ''],
+            ['Gaseosa Inca Kola 500 ml', 2.50, 1.60, 48, '7750182001234', 'Bebidas', 'Inca Kola', 'Unidad', 12, 'SI', 'NO', '', '', 'Paquete x6', 6, 14.00, '', ''],
+            ['Arroz Costeño 1 kg', 4.80, 3.90, 0, '', 'Abarrotes', 'Costeño', 'Unidad', 0, 'EXONERADO', 'NO', '', '', '', '', '', '', ''],
         ], null, 'A2');
 
         $ultima = chr(ord('A') + count(self::COLUMNAS) - 1);
@@ -96,8 +95,9 @@ class ImportacionProductosService
             'afecto_igv: SI (gravado), EXONERADO o INAFECTO. Vacío = SI.',
             'permite_fraccion: SI si vendes medios (metros de cable, arroz a granel). Vacío = NO.',
             'categoria y marca: si no existen, se crean solas.',
-            'presentacion_2 / _3: otra forma de vender (Caja, Paquete). factor = cuántas unidades base trae.',
-            'precio_compra_2: si solo conoces el precio de compra por caja, ponlo aquí y el sistema calcula el de la unidad.',
+            'presentacion: otra forma de vender el mismo producto (Caja, Paquete). factor = cuántas unidades base trae (Caja 305 m → 305).',
+            'precio_presentacion: precio de venta de esa caja/paquete completo.',
+            'precio_compra_presentacion: si solo conoces el precio de compra por caja, ponlo aquí y el sistema calcula el de la unidad.',
             'Si el código de barras o el nombre ya existen, la fila ACTUALIZA ese producto (no lo duplica).',
             'El código interno (P0001...) lo asigna el sistema. Máximo '.self::MAX_FILAS.' filas por archivo.',
             'Las filas de ejemplo se pueden borrar.',
@@ -394,33 +394,29 @@ class ImportacionProductosService
         // precio de compra de la unidad base; si solo vino el de la presentacion 2, se deriva
         $precioCompra = $num('precio_compra');
 
-        foreach ([2, 3] as $n) {
-            $nombreP = mb_substr($c["presentacion_{$n}"] ?? '', 0, 80);
-            $factor = $num("factor_{$n}");
-            $precio = $num("precio_{$n}");
+        // una sola presentacion extra (caja, paquete...) para no complicar la plantilla
+        $nombreP = mb_substr($c['presentacion'] ?? '', 0, 80);
+        $factor = $num('factor');
+        $precio = $num('precio_presentacion');
 
-            if ($nombreP === '' && $factor === null && $precio === null) {
-                continue;
-            }
+        if ($nombreP !== '' || $factor !== null || $precio !== null) {
             if ($nombreP === '' || ! $factor || $factor <= 0 || ! $precio || $precio <= 0) {
-                $errores[] = "Presentación {$n}: indica nombre, factor (> 0) y precio (> 0).";
+                $errores[] = 'Presentación: indica nombre, factor (> 0) y precio_presentacion (> 0).';
+            } else {
+                $presentaciones[] = [
+                    'nombre' => $nombreP,
+                    'unidad_codigo' => $unidad?->codigo ?? 'NIU',
+                    'factor_conversion' => $factor,
+                    'precio_venta' => $precio,
+                    'precio_mayorista' => null,
+                    'cantidad_mayorista' => null,
+                    'codigo_barras' => ($c['codigo_barras_presentacion'] ?? '') ?: null,
+                    'es_default' => false,
+                ];
 
-                continue;
-            }
-
-            $presentaciones[] = [
-                'nombre' => $nombreP,
-                'unidad_codigo' => $unidad?->codigo ?? 'NIU',
-                'factor_conversion' => $factor,
-                'precio_venta' => $precio,
-                'precio_mayorista' => null,
-                'cantidad_mayorista' => null,
-                'codigo_barras' => ($c["codigo_barras_{$n}"] ?? '') ?: null,
-                'es_default' => false,
-            ];
-
-            if ($n === 2 && $precioCompra === null && ($compra2 = $num('precio_compra_2')) !== null && $compra2 > 0) {
-                $precioCompra = round($compra2 / $factor, 6);
+                if ($precioCompra === null && ($compraCaja = $num('precio_compra_presentacion')) !== null && $compraCaja > 0) {
+                    $precioCompra = round($compraCaja / $factor, 6);
+                }
             }
         }
 
