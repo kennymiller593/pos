@@ -59,7 +59,6 @@ const menuBase = [
         seccion: 'General',
         items: [
             { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
-            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
         ],
     },
     {
@@ -97,6 +96,7 @@ const menuBase = [
     {
         seccion: 'Configuración',
         items: [
+            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
             { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
             { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
             { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
