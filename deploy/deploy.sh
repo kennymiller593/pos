@@ -23,6 +23,8 @@ echo "→ Mantenimiento"
 $PHP artisan down --retry=15 || true
 
 echo "→ Dependencias PHP"
+export COMPOSER_ALLOW_SUPERUSER=1
+mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
 $PHP "$COMPOSER" install --no-dev --optimize-autoloader --no-interaction --no-progress
 
 echo "→ Esquema: scripts de database/sql (idempotentes)"
