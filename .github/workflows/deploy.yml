@@ -95,16 +95,17 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          php artisan test --compact 2>&1 | tee storage/logs/tests.log
+          php artisan test --colors=never 2>&1 | tee storage/logs/tests.log
 
       - name: Resumen de fallos como anotaciones (visibles sin abrir el log)
         if: failure()
         shell: bash
         run: |
-          # ultima linea del reporte compacto (JSON) troceada en anotaciones de 900 caracteres
-          tail -c 20000 storage/logs/tests.log | tr -d '\r' | grep -E '"result"|Error|error|FAIL' | tail -c 8000 > /tmp/resumen.txt || true
-          [ -s /tmp/resumen.txt ] || tail -c 8000 storage/logs/tests.log > /tmp/resumen.txt
-          fold -w 900 /tmp/resumen.txt | head -n 9 | while IFS= read -r linea; do echo "::error::${linea}"; done
+          # cada test fallido con sus 10 lineas siguientes (mensaje y archivo:linea), una anotacion por test
+          grep -A10 "FAILED" storage/logs/tests.log | tr -d '\r' | sed 's/\x1b\[[0-9;]*m//g' > /tmp/fallos.txt || true
+          [ -s /tmp/fallos.txt ] || tail -c 6000 storage/logs/tests.log > /tmp/fallos.txt
+          awk 'BEGIN{RS="\n--\n"} {gsub(/[ \t]+/," "); gsub(/\n/," | "); print}' /tmp/fallos.txt \
+            | head -n 9 | cut -c1-950 | while IFS= read -r linea; do echo "::error::${linea}"; done
 
       - name: Guardar el build para el deploy
         if: github.event_name == 'push'
