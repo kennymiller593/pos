@@ -644,6 +644,7 @@ const claseInput =
 
 <template>
     <AppLayout titulo="Punto de venta">
+        <div class="-m-4 min-h-[calc(100vh-4rem)] bg-[#F8FAFC] p-4 sm:-m-6 sm:p-6 dark:bg-transparent">
         <!-- Sin caja abierta -->
         <div v-if="!apertura" class="mx-auto max-w-md rounded-2xl border border-stone-200 bg-white p-8 text-center dark:border-neutral-800 dark:bg-neutral-900">
             <div class="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
@@ -710,15 +711,15 @@ const claseInput =
                         :key="p.id"
                         role="button"
                         tabindex="0"
-                        class="group overflow-hidden rounded-2xl border border-stone-200 bg-white text-left transition-colors dark:border-neutral-800 dark:bg-neutral-900"
+                        class="group overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-left shadow-sm shadow-slate-900/[0.03] transition-all dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-none"
                         :class="p.controla_stock && p.stock <= 0
-                            ? 'cursor-not-allowed opacity-50'
-                            : 'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600'"
+                            ? 'cursor-not-allowed opacity-60'
+                            : 'cursor-pointer hover:border-[#4F46E5] hover:shadow-md dark:hover:border-emerald-600'"
                         @click="agregar(p)"
                         @keyup.enter="agregar(p)"
                     >
                         <!-- Imagen -->
-                        <div class="relative aspect-[4/3] w-full overflow-hidden bg-stone-100 dark:bg-neutral-800">
+                        <div class="relative aspect-[4/3] w-full overflow-hidden bg-[#F8FAFC] dark:bg-neutral-800">
                             <img
                                 v-if="p.imagen_url"
                                 :src="p.imagen_url"
@@ -726,7 +727,7 @@ const claseInput =
                                 loading="lazy"
                                 class="size-full object-cover transition-transform duration-200 group-hover:scale-105"
                             />
-                            <div v-else class="grid size-full place-items-center text-neutral-300 dark:text-neutral-600">
+                            <div v-else class="grid size-full place-items-center text-[#CBD5E1] dark:text-neutral-600">
                                 <Package class="size-10" />
                             </div>
                             <span
@@ -741,7 +742,7 @@ const claseInput =
                         </div>
                         <!-- Datos -->
                         <div class="p-3">
-                            <p class="line-clamp-2 min-h-10 text-sm font-medium">{{ p.nombre }}</p>
+                            <p class="line-clamp-2 min-h-10 text-sm font-medium text-[#0F172A] dark:text-neutral-100">{{ p.nombre }}</p>
                             <div class="mt-1 flex items-center justify-between gap-2">
                                 <p class="text-base font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
                                     {{ soles(presentacionDefault(p)?.precio_venta) }}
@@ -1615,5 +1616,6 @@ const claseInput =
                 </div>
             </div>
         </Teleport>
+        </div>
     </AppLayout>
 </template>
