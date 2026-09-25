@@ -90,7 +90,7 @@ class SuperadminTest extends TestCase
         $negocio = Plan::where('codigo', 'negocio')->firstOrFail();
         $super->put("/admin/planes/{$negocio->id}", [
             'nombre' => 'Negocio', 'descripcion' => 'Hasta 5 sucursales', 'precio_mensual' => 119,
-            'max_sucursales' => 5, 'max_usuarios' => 15, 'max_comprobantes_mes' => null, 'activo' => true, 'orden' => 2,
+            'max_sucursales' => 5, 'max_usuarios' => 15, 'max_comprobantes_mes' => null, 'activo' => true, 'publico' => true, 'orden' => 2,
         ])->assertSessionHas('success');
         $negocio->refresh();
         $this->assertSame(119.0, (float) $negocio->precio_mensual);
@@ -99,9 +99,44 @@ class SuperadminTest extends TestCase
         $prueba = Plan::where('codigo', 'prueba')->firstOrFail();
         $super->put("/admin/planes/{$prueba->id}", [
             'nombre' => 'Prueba gratuita', 'descripcion' => null, 'precio_mensual' => 0,
-            'max_sucursales' => 2, 'max_usuarios' => 5, 'max_comprobantes_mes' => 300, 'activo' => false, 'orden' => 0,
+            'max_sucursales' => 2, 'max_usuarios' => 5, 'max_comprobantes_mes' => 300, 'activo' => false, 'publico' => true, 'orden' => 0,
         ])->assertSessionHas('success');
         $this->assertTrue($prueba->fresh()->activo);
+    }
+
+    public function test_el_superadmin_crea_planes_y_los_privados_no_salen_en_la_landing(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $super = $this->actingAs($this->admin->fresh());
+
+        $plan = [
+            'nombre' => 'Corporativo', 'descripcion' => 'Plan a medida', 'precio_mensual' => 450,
+            'max_sucursales' => null, 'max_usuarios' => null, 'max_comprobantes_mes' => null,
+            'activo' => true, 'publico' => false, 'orden' => 4,
+        ];
+        $super->post('/admin/planes', $plan)->assertSessionHas('success');
+
+        $creado = Plan::where('nombre', 'Corporativo')->firstOrFail();
+        $this->assertSame('corporativo', $creado->codigo);
+        $this->assertFalse($creado->publico);
+        $this->assertNull($creado->max_sucursales); // ilimitado
+        $this->assertDatabaseHas('auditoria', ['accion' => 'plataforma.plan_creado', 'entidad_id' => $creado->id]);
+
+        // nombre repetido
+        $super->post('/admin/planes', $plan)->assertSessionHasErrors('nombre');
+
+        // privado: no aparece en la landing ni en Suscripción, pero sí se puede asignar desde el panel
+        $this->app['auth']->guard()->logout();
+        $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 3));
+        $this->actingAs($this->admin)->get('/suscripcion')
+            ->assertInertia(fn ($p) => $p->where('planes', fn ($planes) => collect($planes)->doesntContain('codigo', 'corporativo')));
+        $this->actingAs($this->admin)->get("/admin/empresas/{$this->otra->id}")
+            ->assertInertia(fn ($p) => $p->where('planes', fn ($planes) => collect($planes)->contains('codigo', 'corporativo')));
+
+        // al hacerlo público sale en la landing
+        $super->put("/admin/planes/{$creado->id}", ['publico' => true] + $plan)->assertSessionHas('success');
+        $this->app['auth']->guard()->logout();
+        $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 4)->where('planes.3.codigo', 'corporativo'));
     }
 
     public function test_el_superadmin_no_queda_bloqueado_por_su_propia_suscripcion(): void

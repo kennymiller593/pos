@@ -38,6 +38,7 @@ class SuscripcionController extends Controller
             ] : null,
             'planes' => Plan::query()
                 ->where('activo', true)
+                ->where('publico', true)
                 ->where('codigo', '!=', 'prueba')
                 ->orderBy('orden')
                 ->get(['id', 'codigo', 'nombre', 'descripcion', 'precio_mensual', 'max_sucursales', 'max_usuarios', 'max_comprobantes_mes']),

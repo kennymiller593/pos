@@ -100,6 +100,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/extender', [AdminEmpresaController::class, 'extender'])->name('empresas.extender');
         Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
         Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
+        Route::post('/planes', [AdminPlanController::class, 'store'])->name('planes.store');
         Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');
     });
 

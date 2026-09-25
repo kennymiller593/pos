@@ -23,6 +23,7 @@ class Plan extends Model
         'max_usuarios',
         'max_comprobantes_mes',
         'activo',
+        'publico',
         'orden',
     ];
 
@@ -31,6 +32,7 @@ class Plan extends Model
         return [
             'precio_mensual' => 'decimal:2',
             'activo' => 'boolean',
+            'publico' => 'boolean',
         ];
     }
 
