@@ -57,18 +57,21 @@ class InicioController extends Controller
             now()->subMonthNoOverflow()->toDateString(),
         );
 
-        // margen real de hoy: venta - costo FIFO registrado en cada detalle
+        // margen real: venta - costo FIFO registrado en cada detalle
         // (los detalles de una nota de credito revierten el margen de lo devuelto)
         $signo = "(CASE WHEN comprobantes.tipo_comprobante_codigo = '07' THEN -1 ELSE 1 END)";
 
-        $margenHoy = (float) ComprobanteDetalle::query()
+        $margenEnRango = fn (string $desde, string $hasta) => (float) ComprobanteDetalle::query()
             ->join('comprobantes', 'comprobantes.id', '=', 'comprobante_detalles.comprobante_id')
             ->where('comprobantes.empresa_id', $empresaId)
             ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
             ->where('comprobantes.estado', 'emitido')
-            ->whereDate('comprobantes.fecha_emision', $hoy)
+            ->whereBetween('comprobantes.fecha_emision', [$desde, $hasta])
             ->selectRaw("COALESCE(SUM({$signo} * (comprobante_detalles.total - comprobante_detalles.costo_unitario * comprobante_detalles.cantidad)), 0) as margen")
             ->value('margen');
+
+        $margenHoy = $margenEnRango($hoy, $hoy);
+        $margenMes = $margenEnRango(now()->startOfMonth()->toDateString(), $hoy);
 
         // ---- serie de ventas de los ultimos 14 dias ----
         $desde = now()->subDays(13)->toDateString();
@@ -239,6 +242,8 @@ class InicioController extends Controller
             ->count();
 
         $variacion = fn (float $actual, float $previo) => $previo > 0 ? round(($actual - $previo) / $previo * 100, 1) : null;
+        // margen como % de lo vendido
+        $porcentaje = fn (float $margen, float $venta) => $venta > 0 ? round($margen / $venta * 100, 1) : null;
 
         // margen, acumulado del mes y deudas con proveedores son datos del dueno
         $veFinanzas = $request->user()->can('dashboard.finanzas');
@@ -249,10 +254,13 @@ class InicioController extends Controller
                 'tickets' => (int) $ventasHoy->tickets,
                 'promedio' => $ventasHoy->tickets > 0 ? round($ventasHoy->total / $ventasHoy->tickets, 2) : 0.0,
                 'margen' => $veFinanzas ? round($margenHoy, 2) : null,
+                'margen_porcentaje' => $veFinanzas ? $porcentaje($margenHoy, (float) $ventasHoy->total) : null,
                 'variacion' => $variacion((float) $ventasHoy->total, $totalAyer),
             ],
             'mes' => $veFinanzas ? [
                 'total' => round($totalMes, 2),
+                'margen' => round($margenMes, 2),
+                'margen_porcentaje' => $porcentaje($margenMes, $totalMes),
                 'variacion' => $variacion($totalMes, $totalMesAnterior),
             ] : null,
             'serie' => $serie,

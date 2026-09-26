@@ -42,6 +42,27 @@ class InicioTest extends TestCase
         );
     }
 
+    public function test_el_margen_del_mes_suma_todas_las_ventas_del_mes(): void
+    {
+        // venta a S/3.50 con costo S/2.00: 2 hoy (margen 3.00) y 4 a inicio de mes (margen 6.00)
+        $producto = $this->crearProducto(precio: 3.50);
+        $this->darStock($producto, 50, 2.00);
+        $this->abrirCaja(100);
+        $this->venderContado($producto->presentaciones->first(), 4);
+        \App\Models\Comprobante::where('empresa_id', $this->empresa->id)->update(['fecha_emision' => now()->startOfMonth()->toDateString()]);
+        $this->venderContado($producto->presentaciones->first(), 2);
+
+        $hoyEsInicioDeMes = now()->isSameDay(now()->startOfMonth());
+
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina
+            ->where('hoy.margen', fn ($v) => abs($v - ($hoyEsInicioDeMes ? 9.0 : 3.0)) < 0.001)
+            ->where('hoy.margen_porcentaje', fn ($v) => abs($v - 42.9) < 0.001)
+            ->where('mes.total', fn ($v) => abs($v - 21.0) < 0.001)
+            ->where('mes.margen', fn ($v) => abs($v - 9.0) < 0.001)
+            ->where('mes.margen_porcentaje', fn ($v) => abs($v - 42.9) < 0.001)
+        );
+    }
+
     public function test_el_dashboard_carga_sin_datos(): void
     {
         $respuesta = $this->actingAs($this->admin)->get('/dashboard');

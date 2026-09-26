@@ -245,7 +245,9 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         {{ Math.abs(hoy.variacion) }}%
                     </span>
                 </div>
-                <p v-if="hoy.margen != null" class="mt-1 text-sm text-indigo-100">Margen: {{ soles(hoy.margen) }}</p>
+                <p v-if="hoy.margen != null" class="mt-1 text-sm text-indigo-100">
+                    Margen: {{ soles(hoy.margen) }}<template v-if="hoy.margen_porcentaje != null"> · {{ hoy.margen_porcentaje }}%</template>
+                </p>
             </div>
 
             <!-- Este mes -->
@@ -271,7 +273,10 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                         {{ Math.abs(mes.variacion) }}%
                     </span>
                 </div>
-                <p class="mt-1 text-sm text-[#64748B] dark:text-neutral-400">vs. mismo tramo del mes pasado</p>
+                <p class="mt-1 text-sm text-[#64748B] dark:text-neutral-400">
+                    Margen: <span class="font-semibold text-[#047857] dark:text-emerald-400">{{ soles(mes.margen) }}</span><template v-if="mes.margen_porcentaje != null"> · {{ mes.margen_porcentaje }}%</template>
+                </p>
+                <p v-if="mes.variacion !== null" class="mt-0.5 text-xs text-[#94A3B8] dark:text-neutral-500">vs. mismo tramo del mes pasado</p>
             </div>
 
             <!-- Tickets -->
