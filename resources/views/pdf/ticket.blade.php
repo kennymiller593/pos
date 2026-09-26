@@ -134,9 +134,9 @@
             <div class="fila"><span class="izq">OP. INAFECTA</span><span class="der">S/ {{ number_format($comprobante->total_inafecto, 2) }}</span></div>
         @endif
         <div class="fila total-final"><span class="izq">TOTAL</span><span class="der">S/ {{ number_format($comprobante->total, 2) }}</span></div>
-        @if ($comprobante->tipo_comprobante_codigo !== '00')
-            <div style="font-size: 8px;">SON: {{ \App\Support\NumeroALetras::enSoles((float) $comprobante->total) }}</div>
-        @endif
+        <div style="margin-top: 4px; font-size: 9px; font-weight: bold; line-height: 1.3;">
+            SON: {{ \App\Support\NumeroALetras::enSoles((float) $comprobante->total) }}
+        </div>
     </div>
 
     {{-- Pagos --}}

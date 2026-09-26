@@ -33,7 +33,9 @@
         .num { text-align: right; white-space: nowrap; }
         .centrado { text-align: center; }
 
-        .letras { margin-top: 10px; border: 1px solid #d6d3d1; border-radius: 6px; padding: 6px 10px; font-size: 10px; }
+        .letras { border: 1px solid #d6d3d1; border-radius: 6px; padding: 8px 12px; background: #fafaf9; }
+        .letras .rotulo { display: block; font-size: 9px; color: #78716c; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
+        .letras .monto { font-size: 12px; font-weight: 700; color: #1c1917; }
 
         .totales td { padding: 3px 8px; }
         .totales .fila-total td { border-top: 2px solid #1c1917; font-size: 13px; font-weight: 700; padding-top: 6px; }
@@ -157,14 +159,16 @@
         </table>
     </div>
 
-    {{-- Importe en letras --}}
-    <div class="letras"><strong>SON:</strong> {{ $letras }}</div>
-
-    {{-- Totales --}}
-    <table style="margin-top: 8px;">
+    {{-- Importe en letras (a la izquierda) y totales (a la derecha) --}}
+    <table style="margin-top: 10px;">
         <tr>
-            <td></td>
-            <td style="width: 240px;">
+            <td style="vertical-align: bottom; padding-right: 16px;">
+                <div class="letras">
+                    <span class="rotulo">Importe en letras</span>
+                    <span class="monto">SON: {{ $letras }}</span>
+                </div>
+            </td>
+            <td style="width: 240px; vertical-align: bottom;">
                 <table class="totales">
                     @if ((float) $comprobante->total_gravado > 0)
                         <tr><td class="etiqueta">Op. gravada</td><td class="num">S/ {{ number_format($comprobante->total_gravado, 2) }}</td></tr>
