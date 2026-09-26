@@ -18,3 +18,32 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/* Scroll fino y discreto (listas dentro de tarjetas): sin flechas, pulgar redondeado que se aclara al pasar el cursor */
+@utility scroll-fino {
+    &::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+        background: transparent;
+        margin-block: 8px;
+    }
+    &::-webkit-scrollbar-thumb {
+        border-radius: 9999px;
+        background: rgb(148 163 184 / 0.25);
+    }
+    &:hover::-webkit-scrollbar-thumb {
+        background: rgb(148 163 184 / 0.55);
+    }
+    &::-webkit-scrollbar-button {
+        display: none;
+    }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+    .scroll-fino {
+        scrollbar-width: thin;
+        scrollbar-color: rgb(148 163 184 / 0.4) transparent;
+    }
+}

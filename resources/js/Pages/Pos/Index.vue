@@ -29,6 +29,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
+import { useConfirmar } from '@/composables/confirmar'
 import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
 import { useImpresion } from '@/composables/impresion'
@@ -181,6 +182,41 @@ const resumenEscaner = computed(() => {
 const seccionCarrito = ref(null)
 const carritoALaVista = ref(false)
 useIntersectionObserver(seccionCarrito, ([entrada]) => (carritoALaVista.value = !!entrada?.isIntersecting))
+
+// ---- lista del carrito (PC): degradados que avisan que hay más arriba/abajo ----
+const listaCarrito = ref(null)
+const sombraArriba = ref(false)
+const sombraAbajo = ref(false)
+
+function actualizarSombras() {
+    const el = listaCarrito.value
+    if (!el) return
+    sombraArriba.value = el.scrollTop > 4
+    sombraAbajo.value = el.scrollTop + el.clientHeight < el.scrollHeight - 4
+}
+
+useResizeObserver(listaCarrito, actualizarSombras)
+
+// al agregar un producto nuevo, la lista baja para mostrarlo
+watch(
+    () => carrito.value.length,
+    (ahora, antes) => nextTick(() => {
+        if (ahora > antes && listaCarrito.value) listaCarrito.value.scrollTo({ top: listaCarrito.value.scrollHeight, behavior: 'smooth' })
+        actualizarSombras()
+    }),
+)
+
+const { confirmar } = useConfirmar()
+
+async function vaciarCarrito() {
+    const ok = await confirmar({
+        titulo: 'Vaciar el carrito',
+        mensaje: `Se quitarán los ${carrito.value.length} productos del carrito.`,
+        textoConfirmar: 'Vaciar',
+        peligro: true,
+    })
+    if (ok) carrito.value = []
+}
 
 function irAlCarrito() {
     saltandoAlCarrito = true
@@ -1009,138 +1045,167 @@ const claseInput =
                 </div>
 
                 <!-- Items -->
-                <div class="max-h-[45vh] overflow-y-auto">
-                    <div v-if="!carrito.length" class="px-4 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                        <ShoppingCart class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
-                        El carrito está vacío.<br />Haz clic en un producto para agregarlo.
-                    </div>
-                    <div
-                        v-for="(item, i) in carrito"
-                        :key="item.presentacion.id"
-                        class="border-b border-stone-100 p-3.5 last:border-0 dark:border-neutral-800"
+                <div v-if="carrito.length" class="flex items-center justify-between border-b border-stone-100 px-4 py-2.5 dark:border-neutral-800">
+                    <p class="text-xs font-semibold tracking-wider text-[#64748B] uppercase dark:text-neutral-400">
+                        Carrito · {{ carrito.length }} {{ carrito.length === 1 ? 'producto' : 'productos' }}
+                    </p>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-[#64748B] transition-colors hover:bg-red-50 hover:text-red-600 dark:text-neutral-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                        @click="vaciarCarrito"
                     >
-                        <div class="flex items-start justify-between gap-2">
-                            <p class="min-w-0 flex-1 text-sm leading-tight font-medium">{{ item.producto.nombre }}</p>
-                            <div class="shrink-0 text-right">
-                                <p class="text-sm font-semibold">{{ soles(subtotalItem(item)) }}</p>
-                                <p v-if="descuentoItem(item) > 0 && !descuentoInvalido(item)" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                    −{{ soles(descuentoItem(item)) }}
-                                </p>
-                            </div>
-                            <button
-                                class="shrink-0 rounded-lg p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                                @click="quitar(i)"
-                            >
-                                <Trash2 class="size-4" />
-                            </button>
+                        <Trash2 class="size-3.5" />
+                        Vaciar
+                    </button>
+                </div>
+                <div class="relative">
+                    <!-- en PC la lista usa el alto disponible de la pantalla; en celular crece con la página -->
+                    <div
+                        ref="listaCarrito"
+                        class="scroll-fino xl:max-h-[max(12rem,calc(100dvh-24rem))] xl:overflow-y-auto xl:overscroll-contain"
+                        @scroll.passive="actualizarSombras"
+                    >
+                        <div v-if="!carrito.length" class="px-4 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                            <ShoppingCart class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
+                            El carrito está vacío.<br />Haz clic en un producto para agregarlo.
                         </div>
-                        <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                            <select
-                                v-if="item.producto.presentaciones.length > 1"
-                                :value="item.presentacion.id"
-                                class="h-8 rounded-lg border border-stone-200 bg-white px-2 text-xs focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
-                                @change="cambiarPresentacion(item, $event.target.value)"
-                            >
-                                <option v-for="pres in item.producto.presentaciones" :key="pres.id" :value="pres.id">
-                                    {{ pres.nombre }} · {{ soles(pres.precio_venta) }}
-                                </option>
-                            </select>
-                            <span v-else class="text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ item.presentacion.nombre }}
-                            </span>
-
-                            <!-- Precio unitario editable (solo con permiso de precio manual) -->
-                            <span v-if="!puede('pos.precio_manual')" class="text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ soles(precioLista(item)) }} c/u
-                            </span>
-                            <div v-else class="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                <span>S/</span>
-                                <input
-                                    :value="precioEnEdicion.item === item ? precioEnEdicion.texto : textoPrecio(item)"
-                                    type="text"
-                                    inputmode="decimal"
-                                    autocomplete="off"
-                                    class="h-9 w-20 rounded-lg border bg-white px-2 text-base focus:outline-none sm:h-7 sm:w-16 sm:px-1.5 sm:text-xs dark:bg-neutral-950"
-                                    :class="precioManual(item)
-                                        ? 'border-amber-400 font-semibold text-amber-700 dark:border-amber-500 dark:text-amber-400'
-                                        : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
-                                    title="Precio unitario: escribe otro para cambiarlo en esta venta"
-                                    @focus="empezarEdicionPrecio(item, $event)"
-                                    @input="escribirPrecio(item, $event.target.value)"
-                                    @blur="terminarEdicionPrecio(item)"
-                                    @keyup.enter="$event.target.blur()"
-                                />
+                        <div
+                            v-for="(item, i) in carrito"
+                            :key="item.presentacion.id"
+                            class="border-b border-stone-100 p-3.5 last:border-0 dark:border-neutral-800"
+                        >
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="min-w-0 flex-1 text-sm leading-tight font-medium">{{ item.producto.nombre }}</p>
+                                <div class="shrink-0 text-right">
+                                    <p class="text-sm font-semibold">{{ soles(subtotalItem(item)) }}</p>
+                                    <p v-if="descuentoItem(item) > 0 && !descuentoInvalido(item)" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        −{{ soles(descuentoItem(item)) }}
+                                    </p>
+                                </div>
                                 <button
-                                    v-if="precioManual(item)"
-                                    class="grid size-6 place-items-center rounded-lg text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
-                                    :title="`Volver al precio de lista (${soles(precioLista(item))})`"
-                                    @click="item.precio = ''"
+                                    class="shrink-0 rounded-lg p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                    @click="quitar(i)"
                                 >
-                                    <RotateCcw class="size-3.5" />
+                                    <Trash2 class="size-4" />
                                 </button>
                             </div>
-
-                            <span
-                                v-if="esMayorista(item) && !precioManual(item)"
-                                class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
-                                :title="`Desde ${item.presentacion.cantidad_mayorista} unid. paga ${soles(item.presentacion.precio_mayorista)} c/u`"
-                            >
-                                Mayorista
-                            </span>
-
-                            <div class="ml-auto flex items-center gap-1">
-                                <button
-                                    class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                                    @click="item.cantidad = Math.max(0.001, Number(item.cantidad) - 1)"
+                            <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                <select
+                                    v-if="item.producto.presentaciones.length > 1"
+                                    :value="item.presentacion.id"
+                                    class="h-8 rounded-lg border border-stone-200 bg-white px-2 text-xs focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                    @change="cambiarPresentacion(item, $event.target.value)"
                                 >
-                                    <Minus class="size-3.5" />
-                                </button>
+                                    <option v-for="pres in item.producto.presentaciones" :key="pres.id" :value="pres.id">
+                                        {{ pres.nombre }} · {{ soles(pres.precio_venta) }}
+                                    </option>
+                                </select>
+                                <span v-else class="text-xs text-neutral-500 dark:text-neutral-400">
+                                    {{ item.presentacion.nombre }}
+                                </span>
+
+                                <!-- Precio unitario editable (solo con permiso de precio manual) -->
+                                <span v-if="!puede('pos.precio_manual')" class="text-xs text-neutral-500 dark:text-neutral-400">
+                                    {{ soles(precioLista(item)) }} c/u
+                                </span>
+                                <div v-else class="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                    <span>S/</span>
+                                    <input
+                                        :value="precioEnEdicion.item === item ? precioEnEdicion.texto : textoPrecio(item)"
+                                        type="text"
+                                        inputmode="decimal"
+                                        autocomplete="off"
+                                        class="h-9 w-20 rounded-lg border bg-white px-2 text-base focus:outline-none sm:h-7 sm:w-16 sm:px-1.5 sm:text-xs dark:bg-neutral-950"
+                                        :class="precioManual(item)
+                                            ? 'border-amber-400 font-semibold text-amber-700 dark:border-amber-500 dark:text-amber-400'
+                                            : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
+                                        title="Precio unitario: escribe otro para cambiarlo en esta venta"
+                                        @focus="empezarEdicionPrecio(item, $event)"
+                                        @input="escribirPrecio(item, $event.target.value)"
+                                        @blur="terminarEdicionPrecio(item)"
+                                        @keyup.enter="$event.target.blur()"
+                                    />
+                                    <button
+                                        v-if="precioManual(item)"
+                                        class="grid size-6 place-items-center rounded-lg text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                                        :title="`Volver al precio de lista (${soles(precioLista(item))})`"
+                                        @click="item.precio = ''"
+                                    >
+                                        <RotateCcw class="size-3.5" />
+                                    </button>
+                                </div>
+
+                                <span
+                                    v-if="esMayorista(item) && !precioManual(item)"
+                                    class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                    :title="`Desde ${item.presentacion.cantidad_mayorista} unid. paga ${soles(item.presentacion.precio_mayorista)} c/u`"
+                                >
+                                    Mayorista
+                                </span>
+
+                                <div class="ml-auto flex items-center gap-1">
+                                    <button
+                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        @click="item.cantidad = Math.max(0.001, Number(item.cantidad) - 1)"
+                                    >
+                                        <Minus class="size-3.5" />
+                                    </button>
+                                    <input
+                                        v-model="item.cantidad"
+                                        type="number"
+                                        :step="item.producto.permite_fraccion ? '0.001' : '1'"
+                                        min="0"
+                                        class="h-7 w-16 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                    />
+                                    <button
+                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        @click="item.cantidad = Number(item.cantidad) + 1"
+                                    >
+                                        <Plus class="size-3.5" />
+                                    </button>
+                                    <button
+                                        class="grid size-7 place-items-center rounded-lg transition-colors"
+                                        :class="item.conDescuento || descuentoItem(item) > 0
+                                            ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400'
+                                            : 'text-neutral-400 hover:bg-stone-100 hover:text-amber-600 dark:hover:bg-neutral-800 dark:hover:text-amber-400'"
+                                        title="Descuento"
+                                        @click="item.conDescuento = !item.conDescuento"
+                                    >
+                                        <Tag class="size-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="item.conDescuento || descuentoItem(item) > 0" class="mt-2 flex items-center gap-2">
+                                <label class="text-xs text-neutral-500 dark:text-neutral-400">Descuento S/</label>
                                 <input
-                                    v-model="item.cantidad"
+                                    v-model="item.descuento"
                                     type="number"
-                                    :step="item.producto.permite_fraccion ? '0.001' : '1'"
+                                    step="0.01"
                                     min="0"
-                                    class="h-7 w-16 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                    placeholder="0.00"
+                                    class="h-7 w-24 rounded-lg border bg-white px-2 text-right text-sm focus:outline-none dark:bg-neutral-950"
+                                    :class="descuentoInvalido(item)
+                                        ? 'border-red-400 focus:border-red-500 dark:border-red-600'
+                                        : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
                                 />
-                                <button
-                                    class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                                    @click="item.cantidad = Number(item.cantidad) + 1"
-                                >
-                                    <Plus class="size-3.5" />
-                                </button>
-                                <button
-                                    class="grid size-7 place-items-center rounded-lg transition-colors"
-                                    :class="item.conDescuento || descuentoItem(item) > 0
-                                        ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400'
-                                        : 'text-neutral-400 hover:bg-stone-100 hover:text-amber-600 dark:hover:bg-neutral-800 dark:hover:text-amber-400'"
-                                    title="Descuento"
-                                    @click="item.conDescuento = !item.conDescuento"
-                                >
-                                    <Tag class="size-3.5" />
-                                </button>
+                                <span v-if="descuentoInvalido(item)" class="text-xs font-medium text-red-600 dark:text-red-400">
+                                    No puede igualar o superar {{ soles(brutoItem(item)) }}
+                                </span>
                             </div>
+                            <p v-if="faltaStock(item)" class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+                                Stock insuficiente ({{ item.producto.stock }} disponibles en unidades base)
+                            </p>
                         </div>
-                        <div v-if="item.conDescuento || descuentoItem(item) > 0" class="mt-2 flex items-center gap-2">
-                            <label class="text-xs text-neutral-500 dark:text-neutral-400">Descuento S/</label>
-                            <input
-                                v-model="item.descuento"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
-                                class="h-7 w-24 rounded-lg border bg-white px-2 text-right text-sm focus:outline-none dark:bg-neutral-950"
-                                :class="descuentoInvalido(item)
-                                    ? 'border-red-400 focus:border-red-500 dark:border-red-600'
-                                    : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
-                            />
-                            <span v-if="descuentoInvalido(item)" class="text-xs font-medium text-red-600 dark:text-red-400">
-                                No puede igualar o superar {{ soles(brutoItem(item)) }}
-                            </span>
-                        </div>
-                        <p v-if="faltaStock(item)" class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-                            Stock insuficiente ({{ item.producto.stock }} disponibles en unidades base)
-                        </p>
                     </div>
+                    <!-- degradados: indican que hay más productos al desplazar (solo PC) -->
+                    <div
+                        class="pointer-events-none absolute inset-x-0 top-0 hidden h-8 bg-gradient-to-b from-white to-transparent transition-opacity duration-200 xl:block dark:from-neutral-900"
+                        :class="sombraArriba ? 'opacity-100' : 'opacity-0'"
+                    />
+                    <div
+                        class="pointer-events-none absolute inset-x-0 bottom-0 hidden h-10 bg-gradient-to-t from-white to-transparent transition-opacity duration-200 xl:block dark:from-neutral-900"
+                        :class="sombraAbajo ? 'opacity-100' : 'opacity-0'"
+                    />
                 </div>
 
                 <!-- Total y cobrar -->
