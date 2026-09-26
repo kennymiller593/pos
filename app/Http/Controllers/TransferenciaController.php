@@ -44,6 +44,9 @@ class TransferenciaController extends Controller
             ->where('activo', true)
             ->where('controla_stock', true)
             ->withSum(['stock as stock' => fn ($q) => $q->where('sucursal_id', $origenId)], 'cantidad')
+            // codigos de barras de cada presentacion: escanear una caja x25 transfiere 25 unidades
+            ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->whereNotNull('codigo_barras')->where('codigo_barras', '!=', '')
+                ->select('id', 'producto_id', 'codigo_barras', 'factor_conversion')])
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion']);
 
@@ -61,6 +64,10 @@ class TransferenciaController extends Controller
                 'codigo_interno' => $p->codigo_interno,
                 'permite_fraccion' => $p->permite_fraccion,
                 'stock' => (float) ($p->stock ?? 0),
+                'codigos' => $p->presentaciones->map(fn ($pres) => [
+                    'codigo' => $pres->codigo_barras,
+                    'factor' => (float) $pres->factor_conversion,
+                ])->values(),
             ]),
         ]);
     }

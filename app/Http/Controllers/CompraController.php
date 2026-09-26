@@ -94,6 +94,7 @@ class CompraController extends Controller
                     'nombre' => $pres->nombre,
                     'factor_conversion' => (float) $pres->factor_conversion,
                     'es_default' => $pres->es_default,
+                    'codigo_barras' => $pres->codigo_barras,
                 ]),
             ]),
             'tiposComprobante' => TipoComprobante::whereIn('codigo', ['01', '03', '00'])->orderBy('codigo')->get(['codigo', 'nombre']),

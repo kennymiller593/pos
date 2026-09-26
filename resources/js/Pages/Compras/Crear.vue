@@ -2,8 +2,10 @@
 import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { ArrowLeft, LoaderCircle, MapPin, Package, Plus, Search, Trash2, Truck, UserRound, X } from '@lucide/vue'
+import { ArrowLeft, LoaderCircle, MapPin, Package, Plus, ScanBarcode, Search, Trash2, Truck, UserRound, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import EscanerCamara from '@/Components/EscanerCamara.vue'
+import { puedeEscanear } from '@/composables/escaner'
 
 const props = defineProps({
     productos: { type: Array, required: true },
@@ -114,29 +116,64 @@ const resultadosProducto = computed(() => {
     const texto = buscarProducto.value.trim().toLowerCase()
     if (!texto) return []
     return props.productos
-        .filter((p) => p.nombre.toLowerCase().includes(texto) || p.codigo_interno.toLowerCase().includes(texto))
+        .filter((p) =>
+            p.nombre.toLowerCase().includes(texto)
+            || p.codigo_interno.toLowerCase().includes(texto)
+            || p.presentaciones.some((pres) => pres.codigo_barras === texto))
         .slice(0, 8)
 })
+
+// producto y presentación con ese código de barras exacto (o null)
+function buscarPorCodigo(codigo) {
+    for (const producto of props.productos) {
+        const presentacion = producto.presentaciones.find((p) => p.codigo_barras === codigo)
+        if (presentacion) return { producto, presentacion }
+    }
+    return null
+}
+
+// pistola lectora (o Enter al escribir): el código exacto se agrega directo
+function alPresionarEnter() {
+    const texto = buscarProducto.value.trim()
+    if (!texto) return
+    const encontrado = buscarPorCodigo(texto)
+    if (encontrado) return agregarProducto(encontrado.producto, encontrado.presentacion)
+    if (resultadosProducto.value.length === 1) agregarProducto(resultadosProducto.value[0])
+}
+
+// ---- escáner con la cámara (celulares) ----
+const escanerAbierto = ref(false)
+
+function leerCodigoCamara(codigo) {
+    const encontrado = buscarPorCodigo(codigo)
+    if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+    const fila = agregarProducto(encontrado.producto, encontrado.presentacion)
+    const pres = encontrado.presentacion.nombre !== 'Unidad' ? ` (${encontrado.presentacion.nombre})` : ''
+    return { ok: true, mensaje: `${encontrado.producto.nombre}${pres} · ${fila.cantidad} en la compra` }
+}
 
 // filas: { producto, presentacion_id, cantidad, costo_unitario }
 const filas = ref([])
 
-function agregarProducto(producto) {
-    const def = producto.presentaciones.find((p) => p.es_default) ?? producto.presentaciones[0]
-    const existente = filas.value.find((f) => f.presentacion_id === def.id)
-    if (existente) {
-        existente.cantidad = Number(existente.cantidad) + 1
+// con código de barras entra la presentación escaneada (p. ej. la caja); si no, la principal
+function agregarProducto(producto, presentacion = null) {
+    const def = presentacion ?? producto.presentaciones.find((p) => p.es_default) ?? producto.presentaciones[0]
+    let fila = filas.value.find((f) => f.presentacion_id === def.id)
+    if (fila) {
+        fila.cantidad = Number(fila.cantidad) + 1
     } else {
-        filas.value.push({
+        fila = {
             producto,
             presentacion_id: def.id,
             cantidad: 1,
             costo_unitario: '',
             numero_lote: '',
             fecha_vencimiento: '',
-        })
+        }
+        filas.value.push(fila)
     }
     buscarProducto.value = ''
+    return fila
 }
 
 function presentacionDe(fila) {
@@ -306,9 +343,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <input
                         v-model="buscarProducto"
                         type="text"
-                        placeholder="Busca un producto por nombre o código para agregarlo..."
-                        :class="[claseInput, 'h-11 pl-10']"
+                        placeholder="Busca o escanea un producto (nombre, código o código de barras)..."
+                        :class="[claseInput, 'h-11 pl-10', puedeEscanear ? 'pr-12' : '']"
+                        @keydown.enter.prevent="alPresionarEnter"
                     />
+                    <button
+                        v-if="puedeEscanear"
+                        type="button"
+                        class="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                        aria-label="Escanear con la cámara"
+                        title="Escanear con la cámara"
+                        @click="escanerAbierto = true"
+                    >
+                        <ScanBarcode class="size-5" />
+                    </button>
                     <div
                         v-if="resultadosProducto.length"
                         class="absolute top-12 right-0 left-0 z-10 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
@@ -326,6 +374,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </button>
                     </div>
                 </div>
+
+                <EscanerCamara
+                    v-if="puedeEscanear"
+                    :abierto="escanerAbierto"
+                    :al-leer="leerCodigoCamara"
+                    :resumen="filas.length ? `${filas.length} ${filas.length === 1 ? 'producto' : 'productos'} en la compra` : ''"
+                    @cerrar="escanerAbierto = false"
+                />
 
                 <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
 

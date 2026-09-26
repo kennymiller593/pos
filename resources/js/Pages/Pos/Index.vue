@@ -29,6 +29,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
+import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
 import { useImpresion } from '@/composables/impresion'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
@@ -165,10 +166,6 @@ function agregar(producto, presentacion = null) {
 
 // ================= escáner con la cámara (celulares y tablets) =================
 const escanerAbierto = ref(false)
-// solo en pantallas táctiles con cámara: en la PC se usa la pistola lectora o el teclado
-const puedeEscanear = typeof window !== 'undefined'
-    && window.matchMedia?.('(pointer: coarse)').matches
-    && !!navigator.mediaDevices?.getUserMedia
 
 const resumenEscaner = computed(() => {
     if (!carrito.value.length) return ''

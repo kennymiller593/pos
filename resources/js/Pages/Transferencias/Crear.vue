@@ -1,8 +1,10 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Package, Search, Trash2 } from '@lucide/vue'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Package, ScanBarcode, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import EscanerCamara from '@/Components/EscanerCamara.vue'
+import { puedeEscanear } from '@/composables/escaner'
 
 const props = defineProps({
     origen: { type: Object, default: null },
@@ -25,20 +27,54 @@ const resultados = computed(() => {
     const texto = buscarProducto.value.trim().toLowerCase()
     if (!texto) return []
     return props.productos
-        .filter((p) => p.nombre.toLowerCase().includes(texto) || p.codigo_interno.toLowerCase().includes(texto))
+        .filter((p) =>
+            p.nombre.toLowerCase().includes(texto)
+            || p.codigo_interno.toLowerCase().includes(texto)
+            || p.codigos.some((c) => c.codigo === texto))
         .slice(0, 8)
 })
 
+// producto con ese código de barras y cuántas unidades base representa (una caja x25 = 25)
+function buscarPorCodigo(codigo) {
+    for (const producto of props.productos) {
+        const c = producto.codigos.find((x) => x.codigo === codigo)
+        if (c) return { producto, unidades: c.factor || 1 }
+    }
+    return null
+}
+
+// pistola lectora (o Enter al escribir): el código exacto se agrega directo
+function alPresionarEnter() {
+    const texto = buscarProducto.value.trim()
+    if (!texto) return
+    const encontrado = buscarPorCodigo(texto)
+    if (encontrado) return agregar(encontrado.producto, encontrado.unidades)
+    if (resultados.value.length === 1) agregar(resultados.value[0])
+}
+
+// ---- escáner con la cámara (celulares) ----
+const escanerAbierto = ref(false)
+
+function leerCodigoCamara(codigo) {
+    const encontrado = buscarPorCodigo(codigo)
+    if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+    const fila = agregar(encontrado.producto, encontrado.unidades)
+    const aviso = excedeStock(fila) ? ` (solo hay ${cantidad(fila.producto.stock)} disp.)` : ''
+    return { ok: !aviso, mensaje: `${encontrado.producto.nombre} · ${cantidad(fila.cantidad)} a transferir${aviso}` }
+}
+
 const filas = ref([]) // { producto, cantidad }
 
-function agregar(producto) {
-    const existente = filas.value.find((f) => f.producto.id === producto.id)
-    if (existente) {
-        existente.cantidad = Number(existente.cantidad) + 1
+function agregar(producto, unidades = 1) {
+    let fila = filas.value.find((f) => f.producto.id === producto.id)
+    if (fila) {
+        fila.cantidad = Number(fila.cantidad) + unidades
     } else {
-        filas.value.push({ producto, cantidad: 1 })
+        fila = { producto, cantidad: unidades }
+        filas.value.push(fila)
     }
     buscarProducto.value = ''
+    return fila
 }
 
 function excedeStock(fila) {
@@ -135,9 +171,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <input
                             v-model="buscarProducto"
                             type="text"
-                            placeholder="Busca un producto por nombre o código..."
-                            :class="[claseInput, 'h-11 pl-10']"
+                            placeholder="Busca o escanea un producto (nombre, código o código de barras)..."
+                            :class="[claseInput, 'h-11 pl-10', puedeEscanear ? 'pr-12' : '']"
+                            @keydown.enter.prevent="alPresionarEnter"
                         />
+                        <button
+                            v-if="puedeEscanear"
+                            type="button"
+                            class="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                            aria-label="Escanear con la cámara"
+                            title="Escanear con la cámara"
+                            @click="escanerAbierto = true"
+                        >
+                            <ScanBarcode class="size-5" />
+                        </button>
                         <div
                             v-if="resultados.length"
                             class="absolute top-12 right-0 left-0 z-10 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
@@ -155,6 +202,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </button>
                         </div>
                     </div>
+
+                    <EscanerCamara
+                        v-if="puedeEscanear"
+                        :abierto="escanerAbierto"
+                        :al-leer="leerCodigoCamara"
+                        :resumen="filas.length ? `${filas.length} ${filas.length === 1 ? 'producto' : 'productos'} a transferir` : ''"
+                        @cerrar="escanerAbierto = false"
+                    />
 
                     <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
 
