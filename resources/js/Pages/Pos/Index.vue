@@ -208,6 +208,26 @@ function normalizarPrecio(item) {
     }
 }
 
+// Mientras el cajero escribe, el input muestra lo que teclea tal cual: si no, al borrar
+// o escribir "0" (para llegar a 0.30) volvia de golpe al precio de lista y no se podia editar.
+const precioEnEdicion = ref({ item: null, texto: '' })
+const textoPrecio = (item) => (precioManual(item) !== null ? String(item.precio) : precioLista(item).toFixed(2))
+
+function empezarEdicionPrecio(item, evento) {
+    precioEnEdicion.value = { item, texto: textoPrecio(item) }
+    evento.target.select() // tocar el campo selecciona el precio: se escribe el nuevo directo
+}
+
+function escribirPrecio(item, texto) {
+    precioEnEdicion.value.texto = texto
+    item.precio = texto.replace(',', '.').trim() // teclados de celular con coma decimal
+}
+
+function terminarEdicionPrecio(item) {
+    precioEnEdicion.value = { item: null, texto: '' }
+    normalizarPrecio(item)
+}
+
 const brutoItem = (item) => precioUnitario(item) * Number(item.cantidad || 0)
 const descuentoItem = (item) => Number(item.descuento || 0)
 const subtotalItem = (item) => Math.max(0, brutoItem(item) - descuentoItem(item))
@@ -989,17 +1009,19 @@ const claseInput =
                             <div v-else class="flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 <span>S/</span>
                                 <input
-                                    :value="precioManual(item) !== null ? item.precio : precioLista(item).toFixed(2)"
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    class="h-7 w-16 rounded-lg border bg-white px-1.5 text-xs focus:outline-none dark:bg-neutral-950"
+                                    :value="precioEnEdicion.item === item ? precioEnEdicion.texto : textoPrecio(item)"
+                                    type="text"
+                                    inputmode="decimal"
+                                    autocomplete="off"
+                                    class="h-9 w-20 rounded-lg border bg-white px-2 text-base focus:outline-none sm:h-7 sm:w-16 sm:px-1.5 sm:text-xs dark:bg-neutral-950"
                                     :class="precioManual(item)
                                         ? 'border-amber-400 font-semibold text-amber-700 dark:border-amber-500 dark:text-amber-400'
                                         : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
                                     title="Precio unitario: escribe otro para cambiarlo en esta venta"
-                                    @input="item.precio = $event.target.value"
-                                    @blur="normalizarPrecio(item)"
+                                    @focus="empezarEdicionPrecio(item, $event)"
+                                    @input="escribirPrecio(item, $event.target.value)"
+                                    @blur="terminarEdicionPrecio(item)"
+                                    @keyup.enter="$event.target.blur()"
                                 />
                                 <button
                                     v-if="precioManual(item)"
