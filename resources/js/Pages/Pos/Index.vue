@@ -79,8 +79,10 @@ const centinela = ref(null)
 
 watch([buscar, categoriaActiva], () => (limiteVisible.value = POR_TANDA))
 
+let saltandoAlCarrito = false // mientras se baja al carrito no se cargan más productos (lo alejarían)
+
 function cargarMasProductos() {
-    if (!hayMasProductos.value) return
+    if (!hayMasProductos.value || saltandoAlCarrito) return
     limiteVisible.value += POR_TANDA
     // en pantallas grandes la tanda nueva puede no alcanzar a empujar el final fuera de la vista
     nextTick(() => {
@@ -167,11 +169,24 @@ function agregar(producto, presentacion = null) {
 // ================= escáner con la cámara (celulares y tablets) =================
 const escanerAbierto = ref(false)
 
+const unidadesCarrito = computed(() => carrito.value.reduce((n, i) => n + Number(i.cantidad || 0), 0))
 const resumenEscaner = computed(() => {
     if (!carrito.value.length) return ''
-    const unidades = carrito.value.reduce((n, i) => n + Number(i.cantidad || 0), 0)
-    return `${unidades} ${unidades === 1 ? 'unidad' : 'unidades'} · ${soles(total.value)}`
+    return `${unidadesCarrito.value} ${unidadesCarrito.value === 1 ? 'unidad' : 'unidades'} · ${soles(total.value)}`
 })
+
+// ================= barra del carrito (celulares y tablets) =================
+// Debajo de xl el carrito va después de la lista de productos y, como los productos se cargan
+// al bajar, nunca se llegaba a él: una barra fija lleva al carrito o abre el cobro directo.
+const seccionCarrito = ref(null)
+const carritoALaVista = ref(false)
+useIntersectionObserver(seccionCarrito, ([entrada]) => (carritoALaVista.value = !!entrada?.isIntersecting))
+
+function irAlCarrito() {
+    saltandoAlCarrito = true
+    seccionCarrito.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setTimeout(() => (saltandoAlCarrito = false), 1200)
+}
 
 function leerCodigoCamara(codigo) {
     const encontrado = buscarPorCodigo(codigo)
@@ -765,7 +780,7 @@ const claseInput =
         </div>
 
         <!-- POS -->
-        <div v-else class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div v-else class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]" :class="carrito.length ? 'pb-24 xl:pb-0' : ''">
             <!-- ============ Catálogo ============ -->
             <!-- min-w-0: la fila de categorias hace scroll propio en vez de ensanchar la pagina -->
             <div class="min-w-0">
@@ -938,7 +953,7 @@ const claseInput =
             </div>
 
             <!-- ============ Carrito ============ -->
-            <div class="rounded-2xl border border-stone-200 bg-white xl:sticky xl:top-20 dark:border-neutral-800 dark:bg-neutral-900">
+            <div ref="seccionCarrito" class="scroll-mt-20 rounded-2xl border border-stone-200 bg-white xl:sticky xl:top-20 dark:border-neutral-800 dark:bg-neutral-900">
                 <!-- Cliente -->
                 <div class="border-b border-stone-200 p-4 dark:border-neutral-800">
                     <div v-if="clienteSeleccionado" class="flex items-center justify-between gap-2">
@@ -1183,6 +1198,45 @@ const claseInput =
                 </div>
             </div>
         </div>
+
+        <!-- ============ Barra del carrito (celulares y tablets) ============ -->
+        <Transition
+            enter-active-class="transition duration-200"
+            enter-from-class="translate-y-full opacity-0"
+            leave-active-class="transition duration-150"
+            leave-to-class="translate-y-full opacity-0"
+        >
+            <div
+                v-if="apertura && carrito.length && !carritoALaVista"
+                class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 flex items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white p-2 shadow-xl xl:hidden dark:border-neutral-800 dark:bg-neutral-900"
+            >
+                <button
+                    type="button"
+                    class="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-neutral-800"
+                    @click="irAlCarrito"
+                >
+                    <span class="relative grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                        <ShoppingCart class="size-5" />
+                        <span class="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-indigo-600 px-1 text-[11px] font-bold text-white dark:bg-emerald-600">
+                            {{ unidadesCarrito }}
+                        </span>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block text-base font-bold tracking-tight">{{ soles(total) }}</span>
+                        <span class="block text-xs text-[#64748B] dark:text-neutral-400">Ver carrito</span>
+                    </span>
+                </button>
+                <button
+                    type="button"
+                    class="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="hayFaltantes || hayDescuentosInvalidos"
+                    @click="abrirCobro"
+                >
+                    <Banknote class="size-4" />
+                    Cobrar
+                </button>
+            </div>
+        </Transition>
 
         <!-- ============ Modal venta exitosa ============ -->
         <Teleport to="body">
