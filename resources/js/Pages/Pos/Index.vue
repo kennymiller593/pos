@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
-import { StorageSerializers, useResizeObserver, useStorage, watchDebounced } from '@vueuse/core'
+import { StorageSerializers, useMediaQuery, useResizeObserver, useStorage, watchDebounced } from '@vueuse/core'
 import {
     Banknote,
     CheckCircle2,
@@ -494,6 +494,9 @@ function abrirCobro() {
 }
 
 const ventaExitosa = ref(null) // { mensaje, ticket, venta }
+// los navegadores de celular no muestran un PDF dentro de la página (solo un botón "Abrir"):
+// ahí no se carga la vista previa y se ofrece abrirlo en otra pestaña
+const pantallaChica = useMediaQuery('(max-width: 767px)')
 const formCorreoVenta = useForm({ email: '', guardar_en_cliente: false })
 const correoVentaEnviado = ref(false)
 const inputBuscar = ref(null)
@@ -1156,7 +1159,7 @@ const claseInput =
         <Teleport to="body">
             <div v-if="ventaExitosa" class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
                 <div class="fixed inset-0 bg-neutral-950/60" @click="nuevaVenta" />
-                <div class="relative flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-[#0F172A] shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                <div class="relative flex max-h-[96vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl supports-[height:100dvh]:max-h-[96dvh] border border-[#E2E8F0] bg-white text-[#0F172A] shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                     <button
                         type="button"
                         class="absolute top-3 right-3 grid size-8 place-items-center rounded-xl text-[#64748B] hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
@@ -1231,6 +1234,7 @@ const claseInput =
                                         Reimprimir ticket
                                     </button>
                                     <button
+                                        v-if="!pantallaChica"
                                         type="button"
                                         class="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[#E2E8F0] px-3 text-xs font-medium text-[#0F172A] hover:bg-slate-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
                                         @click="abrirPdfEnPestana"
@@ -1240,7 +1244,16 @@ const claseInput =
                                     </button>
                                 </div>
                             </div>
-                            <div class="relative mt-3 h-[60vh] overflow-hidden rounded-xl border border-[#E2E8F0] bg-slate-50 dark:border-neutral-800 dark:bg-neutral-950">
+                            <button
+                                v-if="pantallaChica"
+                                type="button"
+                                class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-slate-50 px-4 py-4 text-sm font-semibold text-[#4F46E5] hover:bg-slate-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-indigo-300"
+                                @click="abrirPdfEnPestana"
+                            >
+                                <ExternalLink class="size-4" />
+                                Ver {{ formatosPdf.find((f) => f.v === formatoPdf)?.label ?? 'comprobante' }} en PDF
+                            </button>
+                            <div v-else class="relative mt-3 h-[60vh] overflow-hidden rounded-xl border border-[#E2E8F0] bg-slate-50 dark:border-neutral-800 dark:bg-neutral-950">
                                 <div v-if="cargandoPdf" class="absolute inset-0 grid place-items-center text-sm text-[#64748B] dark:text-neutral-400">
                                     <span class="inline-flex items-center gap-2">
                                         <LoaderCircle class="size-4 animate-spin" />
@@ -1309,10 +1322,10 @@ const claseInput =
                         </div>
                     </div>
 
-                    <div class="flex justify-center border-t border-[#E2E8F0] px-5 py-3 dark:border-neutral-800">
+                    <div class="flex shrink-0 justify-center border-t border-[#E2E8F0] px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-neutral-800">
                         <button
                             type="button"
-                            class="inline-flex h-11 min-w-48 items-center justify-center rounded-xl bg-[#4F46E5] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA]"
+                            class="inline-flex h-11 w-full items-center justify-center rounded-xl bg-[#4F46E5] px-6 sm:w-auto sm:min-w-48 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA]"
                             @click="nuevaVenta"
                         >
                             Nueva venta
