@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { ArrowLeft, LoaderCircle, MapPin, Package, Plus, ScanBarcode, Search, Trash2, Truck, UserRound, X } from '@lucide/vue'
+import { Boxes, Building2, ChevronRight, HandCoins, Info, LoaderCircle, MapPin, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
 import { puedeEscanear } from '@/composables/escaner'
@@ -184,7 +184,8 @@ function subtotal(fila) {
     return Number(fila.cantidad || 0) * Number(fila.costo_unitario || 0)
 }
 
-const total = computed(() => filas.value.reduce((suma, f) => suma + subtotal(f), 0))
+const total = computed(() => Math.round(filas.value.reduce((suma, f) => suma + subtotal(f), 0) * 100) / 100)
+const unidades = computed(() => filas.value.reduce((n, f) => n + Number(f.cantidad || 0), 0))
 
 const puedeGuardar = computed(() =>
     filas.value.length > 0 &&
@@ -195,6 +196,16 @@ const puedeGuardar = computed(() =>
         (!f.producto.controla_lote || f.numero_lote.trim() !== ''),
     ),
 )
+
+// por qué todavía no se puede registrar (se muestra en el resumen)
+const motivoNoGuardar = computed(() => {
+    if (!filas.value.length) return ''
+    const sinCosto = filas.value.filter((f) => f.costo_unitario === '').length
+    if (sinCosto) return `Falta el costo unitario de ${sinCosto} ${sinCosto === 1 ? 'producto' : 'productos'}.`
+    if (filas.value.some((f) => !(Number(f.cantidad) > 0))) return 'Hay productos con cantidad 0.'
+    if (filas.value.some((f) => f.producto.controla_lote && f.numero_lote.trim() === '')) return 'Falta el número de lote en algunos productos.'
+    return ''
+})
 
 function guardar() {
     form.items = filas.value.map((f) => ({
@@ -208,7 +219,7 @@ function guardar() {
     form.transform((data) => ({
         ...data,
         tipo_comprobante_codigo: data.tipo_comprobante_codigo || null,
-        serie_numero: data.serie_numero || null,
+        serie_numero: data.tipo_comprobante_codigo ? (data.serie_numero || null) : null,
         fecha_vencimiento: data.es_credito ? (data.fecha_vencimiento || null) : null,
     })).post('/compras')
 }
@@ -217,283 +228,472 @@ const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
 const claseLabel = 'mb-1 block text-sm font-medium'
 const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
+const claseCelda =
+    'h-9 rounded-lg border border-stone-200 bg-white px-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/20 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950'
+const claseTarjeta = 'rounded-2xl border border-[#E2E8F0] bg-white p-5 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900'
+const claseTituloSeccion = 'mb-5 flex items-center gap-2.5 font-semibold tracking-tight'
+const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
 </script>
 
 <template>
     <AppLayout titulo="Nueva compra">
-        <div class="mx-auto max-w-4xl">
-            <Link
-                href="/compras"
-                class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
-            >
-                <ArrowLeft class="size-4" />
-                Volver a compras
-            </Link>
-
-            <!-- Cabecera -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-                <div class="mb-5 flex flex-wrap items-center gap-3">
-                    <div class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-                        <Truck class="size-5" />
-                    </div>
-                    <div class="min-w-48 flex-1">
-                        <h2 class="font-semibold tracking-tight">Datos de la compra</h2>
-                        <p class="text-sm text-neutral-500 dark:text-neutral-400">El stock y el costo se actualizan al guardar.</p>
-                    </div>
-                    <div
-                        v-if="sucursalDestino"
-                        class="flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                        title="La sucursal se cambia con el selector de la barra superior"
-                    >
-                        <MapPin class="size-4 shrink-0" />
-                        <span class="truncate">Ingresa a: <strong>{{ sucursalDestino }}</strong></span>
+        <div>
+            <!-- ============ Encabezado ============ -->
+            <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div class="min-w-0">
+                    <nav class="mb-2 flex items-center gap-1.5 text-xs text-[#64748B] dark:text-neutral-400">
+                        <Link href="/dashboard" class="hover:text-[#0F172A] dark:hover:text-neutral-100">Inicio</Link>
+                        <ChevronRight class="size-3.5" />
+                        <Link href="/compras" class="hover:text-[#0F172A] dark:hover:text-neutral-100">Compras</Link>
+                        <ChevronRight class="size-3.5" />
+                        <span class="text-[#0F172A] dark:text-neutral-200">Registrar compra</span>
+                    </nav>
+                    <div class="flex items-center gap-3">
+                        <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                            <Truck class="size-6" />
+                        </div>
+                        <div class="min-w-0">
+                            <h1 class="text-2xl font-bold tracking-tight">Registrar compra</h1>
+                            <p class="text-sm text-[#64748B] dark:text-neutral-400">
+                                Registra la mercadería que compras a tu proveedor: el stock y el costo se actualizan al guardar.
+                            </p>
+                        </div>
                     </div>
                 </div>
-
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <!-- Proveedor -->
-                    <div class="sm:col-span-2">
-                        <label :class="claseLabel">Proveedor</label>
-                        <div v-if="proveedorSeleccionado" class="flex h-10 items-center justify-between rounded-xl border border-stone-300 bg-stone-50 px-3 dark:border-neutral-700 dark:bg-neutral-950">
-                            <div class="flex min-w-0 items-center gap-2 text-sm">
-                                <UserRound class="size-4 shrink-0 text-neutral-400" />
-                                <span class="truncate font-medium">{{ proveedorSeleccionado.razon_social }}</span>
-                                <span v-if="proveedorSeleccionado.ruc" class="text-xs text-neutral-500">{{ proveedorSeleccionado.ruc }}</span>
-                            </div>
-                            <button type="button" class="rounded-lg p-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200" @click="quitarProveedor">
-                                <X class="size-4" />
-                            </button>
-                        </div>
-                        <div v-else class="flex gap-2">
-                            <div class="relative flex-1">
-                                <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" />
-                                <input
-                                    v-model="buscarProveedor"
-                                    type="text"
-                                    placeholder="Buscar por razón social o RUC (opcional)"
-                                    :class="[claseInput, 'pl-9']"
-                                />
-                                <div
-                                    v-if="resultadosProveedor.length"
-                                    class="absolute top-11 right-0 left-0 z-10 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
-                                >
-                                    <button
-                                        v-for="p in resultadosProveedor"
-                                        :key="p.id"
-                                        type="button"
-                                        class="block w-full px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
-                                        @click="elegirProveedor(p)"
-                                    >
-                                        <span class="font-medium">{{ p.razon_social }}</span>
-                                        <span v-if="p.ruc" class="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{{ p.ruc }}</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-stone-300 px-3.5 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                                @click="modalProveedor = true"
-                            >
-                                <Plus class="size-4" />
-                                Nuevo
-                            </button>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label :class="claseLabel" for="fecha">Fecha *</label>
-                        <input id="fecha" v-model="form.fecha" type="date" :class="claseInput" />
-                        <p v-if="form.errors.fecha" :class="claseError">{{ form.errors.fecha }}</p>
-                    </div>
-                    <div>
-                        <label :class="claseLabel" for="tipo_doc">Tipo de documento</label>
-                        <select id="tipo_doc" v-model="form.tipo_comprobante_codigo" :class="claseInput">
-                            <option value="">Sin documento</option>
-                            <option v-for="t in tiposComprobante" :key="t.codigo" :value="t.codigo">{{ t.nombre }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label :class="claseLabel" for="serie_numero">Serie y número</label>
-                        <input id="serie_numero" v-model="form.serie_numero" type="text" :class="claseInput" placeholder="F001-000123" />
-                    </div>
-                    <div class="flex items-end pb-2">
-                        <label class="flex items-center gap-2 text-sm">
-                            <input v-model="form.es_credito" type="checkbox" class="size-4 rounded accent-emerald-600" />
-                            Compra al crédito
-                        </label>
-                    </div>
-                    <div v-if="form.es_credito">
-                        <label :class="claseLabel" for="fecha_vencimiento">Fecha de pago acordada</label>
-                        <input id="fecha_vencimiento" v-model="form.fecha_vencimiento" type="date" :min="form.fecha" :class="claseInput" />
-                        <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-                            La deuda aparecerá en Cuentas por pagar.
-                        </p>
-                        <p v-if="form.errors.fecha_vencimiento" :class="claseError">{{ form.errors.fecha_vencimiento }}</p>
-                        <p v-if="form.errors.proveedor_id" :class="claseError">{{ form.errors.proveedor_id }}</p>
-                    </div>
+                <div class="hidden shrink-0 gap-2 lg:flex">
+                    <Link
+                        href="/compras"
+                        class="inline-flex h-11 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium hover:bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    >
+                        <X class="size-4" />
+                        Cancelar
+                    </Link>
+                   
                 </div>
             </div>
 
-            <!-- Productos -->
-            <div class="mt-4 rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-                <h2 class="mb-4 font-semibold tracking-tight">Productos</h2>
+            <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                <div class="min-w-0 space-y-6">
+                    <!-- ============ 1. Datos del proveedor ============ -->
+                    <section :class="claseTarjeta">
+                        <h2 :class="claseTituloSeccion"><span :class="claseNumero">1</span> Datos del proveedor</h2>
 
-                <div class="relative">
-                    <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
-                    <input
-                        v-model="buscarProducto"
-                        type="text"
-                        placeholder="Busca o escanea un producto (nombre, código o código de barras)..."
-                        :class="[claseInput, 'h-11 pl-10', puedeEscanear ? 'pr-12' : '']"
-                        @keydown.enter.prevent="alPresionarEnter"
-                    />
-                    <button
-                        v-if="puedeEscanear"
-                        type="button"
-                        class="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-                        aria-label="Escanear con la cámara"
-                        title="Escanear con la cámara"
-                        @click="escanerAbierto = true"
-                    >
-                        <ScanBarcode class="size-5" />
-                    </button>
-                    <div
-                        v-if="resultadosProducto.length"
-                        class="absolute top-12 right-0 left-0 z-10 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
-                    >
-                        <button
-                            v-for="p in resultadosProducto"
-                            :key="p.id"
-                            type="button"
-                            class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
-                            @click="agregarProducto(p)"
-                        >
-                            <Package class="size-4 shrink-0 text-neutral-400" />
-                            <span class="font-medium">{{ p.nombre }}</span>
-                            <span class="ml-auto font-mono text-xs text-neutral-500 dark:text-neutral-400">{{ p.codigo_interno }}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <EscanerCamara
-                    v-if="puedeEscanear"
-                    :abierto="escanerAbierto"
-                    :al-leer="leerCodigoCamara"
-                    :resumen="filas.length ? `${filas.length} ${filas.length === 1 ? 'producto' : 'productos'} en la compra` : ''"
-                    @cerrar="escanerAbierto = false"
-                />
-
-                <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
-
-                <!-- Filas -->
-                <div v-if="filas.length" class="@container mt-4 overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
-                            <tr>
-                                <th class="py-2.5 pr-3 font-semibold tracking-wider">Producto</th>
-                                <th class="px-3 py-2.5 font-semibold tracking-wider">Presentación</th>
-                                <th class="px-3 py-2.5 text-right font-semibold tracking-wider">Cantidad</th>
-                                <th class="px-3 py-2.5 text-right font-semibold tracking-wider">Costo unit. (S/)</th>
-                                <th class="px-3 py-2.5 text-right font-semibold tracking-wider">Subtotal</th>
-                                <th class="py-2.5 pl-3" />
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
-                            <template v-for="(fila, i) in filas" :key="fila.presentacion_id">
-                            <tr>
-                                <td class="py-3 pr-3">
-                                    <p class="font-medium">{{ fila.producto.nombre }}</p>
-                                    <p v-if="!fila.producto.controla_stock" class="text-xs text-amber-600 dark:text-amber-400">
-                                        No controla stock: no genera inventario
-                                    </p>
-                                </td>
-                                <td class="px-3 py-3">
-                                    <select
-                                        v-model="fila.presentacion_id"
-                                        class="h-9 rounded-lg border border-stone-200 bg-white px-2 text-xs focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
-                                    >
-                                        <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
-                                            {{ pres.nombre }} (x{{ pres.factor_conversion }})
-                                        </option>
-                                    </select>
-                                </td>
-                                <td class="px-3 py-3">
-                                    <input
-                                        v-model="fila.cantidad"
-                                        type="number"
-                                        :step="fila.producto.permite_fraccion ? '0.001' : '1'"
-                                        min="0"
-                                        class="h-9 w-24 rounded-lg border border-stone-200 bg-white text-right text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
-                                    />
-                                </td>
-                                <td class="px-3 py-3">
-                                    <input
-                                        v-model="fila.costo_unitario"
-                                        type="number"
-                                        step="0.000001"
-                                        min="0"
-                                        placeholder="0.00"
-                                        class="h-9 w-28 rounded-lg border border-stone-200 bg-white text-right text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
-                                    />
-                                </td>
-                                <td class="px-3 py-3 text-right font-semibold whitespace-nowrap">{{ soles(subtotal(fila)) }}</td>
-                                <td class="py-3 pl-3">
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <!-- Proveedor -->
+                            <div>
+                                <label :class="claseLabel">Proveedor <span class="font-normal text-[#94A3B8]">(opcional al contado)</span></label>
+                                <div v-if="proveedorSeleccionado" class="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+                                    <div class="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">
+                                        <Building2 class="size-5" />
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm font-semibold">{{ proveedorSeleccionado.razon_social }}</p>
+                                        <p class="text-xs text-[#64748B] dark:text-neutral-400">
+                                            {{ proveedorSeleccionado.ruc ? `RUC: ${proveedorSeleccionado.ruc}` : 'Sin RUC' }}
+                                        </p>
+                                    </div>
                                     <button
                                         type="button"
-                                        class="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                        class="rounded-lg p-1.5 text-[#64748B] hover:bg-white hover:text-red-600 dark:hover:bg-neutral-900 dark:hover:text-red-400"
+                                        title="Cambiar proveedor"
+                                        @click="quitarProveedor"
+                                    >
+                                        <X class="size-4" />
+                                    </button>
+                                </div>
+                                <div v-else class="flex gap-2">
+                                    <div class="relative flex-1">
+                                        <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" />
+                                        <input
+                                            v-model="buscarProveedor"
+                                            type="text"
+                                            placeholder="Buscar por RUC o razón social..."
+                                            :class="[claseInput, 'pl-9']"
+                                        />
+                                        <div
+                                            v-if="resultadosProveedor.length"
+                                            class="absolute top-11 right-0 left-0 z-20 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+                                        >
+                                            <button
+                                                v-for="p in resultadosProveedor"
+                                                :key="p.id"
+                                                type="button"
+                                                class="block w-full px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
+                                                @click="elegirProveedor(p)"
+                                            >
+                                                <span class="font-medium">{{ p.razon_social }}</span>
+                                                <span v-if="p.ruc" class="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{{ p.ruc }}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        @click="modalProveedor = true"
+                                    >
+                                        <Plus class="size-4" />
+                                        <span class="hidden sm:inline">Nuevo proveedor</span>
+                                        <span class="sm:hidden">Nuevo</span>
+                                    </button>
+                                </div>
+                                <p v-if="form.errors.proveedor_id" :class="claseError">{{ form.errors.proveedor_id }}</p>
+                            </div>
+
+                            <!-- Comprobante del proveedor -->
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label :class="claseLabel" for="tipo_doc">Tipo de comprobante</label>
+                                    <select id="tipo_doc" v-model="form.tipo_comprobante_codigo" :class="claseInput">
+                                        <option value="">Sin documento</option>
+                                        <option v-for="t in tiposComprobante" :key="t.codigo" :value="t.codigo">{{ t.nombre }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label :class="claseLabel" for="serie_numero">Serie - Número</label>
+                                    <input
+                                        id="serie_numero"
+                                        v-model="form.serie_numero"
+                                        type="text"
+                                        maxlength="20"
+                                        :disabled="!form.tipo_comprobante_codigo"
+                                        :class="[claseInput, 'disabled:bg-stone-50 disabled:text-neutral-400 dark:disabled:bg-neutral-900']"
+                                        placeholder="F001-000123"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label :class="claseLabel" for="fecha">Fecha de emisión *</label>
+                                <input id="fecha" v-model="form.fecha" type="date" :class="claseInput" />
+                                <p v-if="form.errors.fecha" :class="claseError">{{ form.errors.fecha }}</p>
+                            </div>
+
+                            <!-- Condición de pago -->
+                            <div>
+                                <label :class="claseLabel">Condición de pago</label>
+                                <div class="grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1 dark:bg-neutral-800">
+                                    <button
+                                        v-for="c in [{ v: false, t: 'Contado' }, { v: true, t: 'Crédito' }]"
+                                        :key="c.t"
+                                        type="button"
+                                        class="h-8 rounded-lg text-sm font-medium transition-colors"
+                                        :class="form.es_credito === c.v
+                                            ? 'bg-white text-[#0F172A] shadow-sm dark:bg-neutral-950 dark:text-neutral-100'
+                                            : 'text-[#64748B] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:text-neutral-100'"
+                                        @click="form.es_credito = c.v"
+                                    >
+                                        {{ c.t }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div v-if="form.es_credito" class="md:col-span-2">
+                                <div class="grid items-end gap-3 rounded-xl bg-amber-50 p-3 sm:grid-cols-[1fr_auto] dark:bg-amber-950/30">
+                                    <div>
+                                        <label :class="claseLabel" for="fecha_vencimiento">Fecha de pago acordada</label>
+                                        <input id="fecha_vencimiento" v-model="form.fecha_vencimiento" type="date" :min="form.fecha" :class="claseInput" />
+                                        <p v-if="form.errors.fecha_vencimiento" :class="claseError">{{ form.errors.fecha_vencimiento }}</p>
+                                    </div>
+                                    <p class="text-xs text-amber-800 sm:max-w-56 sm:pb-2.5 dark:text-amber-300">
+                                        La deuda quedará en <strong>Cuentas por pagar</strong>.<template v-if="!proveedorSeleccionado"> Elige el proveedor.</template>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- ============ 2. Detalle de la compra ============ -->
+                    <section :class="claseTarjeta">
+                        <h2 :class="claseTituloSeccion"><span :class="claseNumero">2</span> Detalle de la compra</h2>
+
+                        <!-- celular: una tarjeta por producto, con todos los campos a la vista -->
+                        <div v-if="filas.length" class="space-y-3 md:hidden">
+                            <div
+                                v-for="(fila, i) in filas"
+                                :key="fila.presentacion_id"
+                                class="rounded-xl border border-[#E2E8F0] p-3 dark:border-neutral-800"
+                            >
+                                <div class="flex items-start gap-2">
+                                    <span class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-semibold text-[#64748B] dark:bg-neutral-800 dark:text-neutral-400">{{ i + 1 }}</span>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-sm font-medium">{{ fila.producto.nombre }}</p>
+                                        <p class="font-mono text-xs text-[#94A3B8]">{{ fila.producto.codigo_interno }}</p>
+                                        <p v-if="!fila.producto.controla_stock" class="text-xs text-amber-600 dark:text-amber-400">No controla stock: no genera inventario</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="grid size-8 shrink-0 place-items-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-950/40"
+                                        title="Quitar"
                                         @click="filas.splice(i, 1)"
                                     >
                                         <Trash2 class="size-4" />
                                     </button>
-                                </td>
-                            </tr>
-
-                            <!-- Lote y vencimiento (productos que controlan lote) -->
-                            <tr v-if="fila.producto.controla_lote" class="!border-t-0">
-                                <td colspan="6" class="pt-0 pb-3">
-                                    <div class="flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
-                                        <span class="text-xs font-semibold text-amber-700 dark:text-amber-400">Lote *</span>
+                                </div>
+                                <div class="mt-3 grid grid-cols-2 gap-2">
+                                    <label class="col-span-2 block">
+                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Presentación</span>
+                                        <select v-model="fila.presentacion_id" :class="[claseCelda, 'w-full text-base']">
+                                            <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
+                                                {{ pres.nombre }} (x{{ pres.factor_conversion }})
+                                            </option>
+                                        </select>
+                                    </label>
+                                    <label class="block">
+                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Cantidad</span>
                                         <input
-                                            v-model="fila.numero_lote"
-                                            type="text"
-                                            maxlength="50"
-                                            placeholder="N° de lote"
-                                            class="h-8 w-36 rounded-lg border bg-white px-2 text-sm focus:outline-none dark:bg-neutral-950"
-                                            :class="fila.numero_lote.trim() === ''
-                                                ? 'border-amber-400 focus:border-amber-500 dark:border-amber-700'
-                                                : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
+                                            v-model="fila.cantidad"
+                                            type="number"
+                                            inputmode="decimal"
+                                            :step="fila.producto.permite_fraccion ? '0.001' : '1'"
+                                            min="0"
+                                            :class="[claseCelda, 'h-10 w-full text-right text-base']"
                                         />
-                                        <span class="text-xs text-neutral-500 dark:text-neutral-400">Vence</span>
+                                    </label>
+                                    <label class="block">
+                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Costo unit. (S/)</span>
                                         <input
-                                            v-model="fila.fecha_vencimiento"
-                                            type="date"
-                                            class="h-8 rounded-lg border border-stone-200 bg-white px-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                            v-model="fila.costo_unitario"
+                                            type="number"
+                                            inputmode="decimal"
+                                            step="0.000001"
+                                            min="0"
+                                            placeholder="0.00"
+                                            :class="[claseCelda, 'h-10 w-full text-right text-base', fila.costo_unitario === '' ? '!border-amber-300 dark:!border-amber-700' : '']"
                                         />
-                                    </div>
-                                </td>
-                            </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-                <p v-else class="mt-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                    Aún no agregas productos a la compra.
-                </p>
-            </div>
+                                    </label>
+                                </div>
+                                <div v-if="fila.producto.controla_lote" class="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-amber-50 p-2 dark:bg-amber-950/30">
+                                    <label class="block">
+                                        <span class="mb-1 block text-xs font-semibold text-amber-700 dark:text-amber-400">Lote *</span>
+                                        <input v-model="fila.numero_lote" type="text" maxlength="50" placeholder="N° de lote" :class="[claseCelda, 'w-full']" />
+                                    </label>
+                                    <label class="block">
+                                        <span class="mb-1 block text-xs text-neutral-500 dark:text-neutral-400">Vence</span>
+                                        <input v-model="fila.fecha_vencimiento" type="date" :class="[claseCelda, 'w-full']" />
+                                    </label>
+                                </div>
+                                <div class="mt-3 flex items-center justify-between border-t border-[#F1F5F9] pt-2 text-sm dark:border-neutral-800">
+                                    <span class="text-[#64748B] dark:text-neutral-400">Subtotal</span>
+                                    <span class="font-semibold tabular-nums">{{ soles(subtotal(fila)) }}</span>
+                                </div>
+                            </div>
+                        </div>
 
-            <!-- Total y guardar -->
-            <div class="mt-4 flex items-center justify-between rounded-2xl border border-stone-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-                <div>
-                    <p class="text-sm text-neutral-500 dark:text-neutral-400">Total de la compra</p>
-                    <p class="text-2xl font-bold tracking-tight">{{ soles(total) }}</p>
+                        <!-- PC y tablet: tabla -->
+                        <div v-if="filas.length" class="@container -mx-5 hidden overflow-x-auto sm:-mx-6 md:block">
+                            <table class="w-full min-w-[40rem] text-left text-sm">
+                                <thead class="border-y border-[#E2E8F0] bg-slate-50 text-xs text-[#64748B] dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400">
+                                    <tr>
+                                        <th class="w-10 py-2.5 pl-5 font-semibold sm:pl-6">#</th>
+                                        <th class="px-3 py-2.5 font-semibold">Producto</th>
+                                        <th class="px-3 py-2.5 font-semibold">Presentación</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold">Cant.</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold">Costo unit. (S/)</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold">Subtotal</th>
+                                        <th class="py-2.5 pr-5 text-right font-semibold sm:pr-6">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-[#F1F5F9] dark:divide-neutral-800">
+                                    <template v-for="(fila, i) in filas" :key="fila.presentacion_id">
+                                        <tr>
+                                            <td class="py-3 pl-5 text-[#94A3B8] sm:pl-6">{{ i + 1 }}</td>
+                                            <td class="px-3 py-3">
+                                                <p class="font-medium">{{ fila.producto.nombre }}</p>
+                                                <p class="font-mono text-xs text-[#94A3B8]">{{ fila.producto.codigo_interno }}</p>
+                                                <p v-if="!fila.producto.controla_stock" class="text-xs text-amber-600 dark:text-amber-400">
+                                                    No controla stock: no genera inventario
+                                                </p>
+                                            </td>
+                                            <td class="px-3 py-3">
+                                                <select v-model="fila.presentacion_id" :class="claseCelda">
+                                                    <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
+                                                        {{ pres.nombre }} (x{{ pres.factor_conversion }})
+                                                    </option>
+                                                </select>
+                                            </td>
+                                            <td class="px-3 py-3">
+                                                <input
+                                                    v-model="fila.cantidad"
+                                                    type="number"
+                                                    :step="fila.producto.permite_fraccion ? '0.001' : '1'"
+                                                    min="0"
+                                                    :class="[claseCelda, 'ml-auto block w-20 text-right']"
+                                                />
+                                            </td>
+                                            <td class="px-3 py-3">
+                                                <input
+                                                    v-model="fila.costo_unitario"
+                                                    type="number"
+                                                    step="0.000001"
+                                                    min="0"
+                                                    placeholder="0.00"
+                                                    :class="[claseCelda, 'ml-auto block w-28 text-right', fila.costo_unitario === '' ? '!border-amber-300 dark:!border-amber-700' : '']"
+                                                />
+                                            </td>
+                                            <td class="px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums">{{ soles(subtotal(fila)) }}</td>
+                                            <td class="py-3 pr-5 text-right sm:pr-6">
+                                                <button
+                                                    type="button"
+                                                    class="inline-grid size-8 place-items-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-950/40"
+                                                    title="Quitar"
+                                                    @click="filas.splice(i, 1)"
+                                                >
+                                                    <Trash2 class="size-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Lote y vencimiento (productos que controlan lote) -->
+                                        <tr v-if="fila.producto.controla_lote" class="!border-t-0">
+                                            <td />
+                                            <td colspan="6" class="px-3 pt-0 pb-3 sm:pr-6">
+                                                <div class="flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
+                                                    <span class="text-xs font-semibold text-amber-700 dark:text-amber-400">Lote *</span>
+                                                    <input
+                                                        v-model="fila.numero_lote"
+                                                        type="text"
+                                                        maxlength="50"
+                                                        placeholder="N° de lote"
+                                                        class="h-8 w-36 rounded-lg border bg-white px-2 text-sm focus:outline-none dark:bg-neutral-950"
+                                                        :class="fila.numero_lote.trim() === ''
+                                                            ? 'border-amber-400 focus:border-amber-500 dark:border-amber-700'
+                                                            : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
+                                                    />
+                                                    <span class="text-xs text-neutral-500 dark:text-neutral-400">Vence</span>
+                                                    <input
+                                                        v-model="fila.fecha_vencimiento"
+                                                        type="date"
+                                                        class="h-8 rounded-lg border border-stone-200 bg-white px-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                                    />
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Agregar producto: buscar, pistola lectora o cámara -->
+                        <div class="relative" :class="filas.length ? 'mt-4' : ''">
+                            <div
+                                v-if="!filas.length"
+                                class="mb-3 rounded-xl border border-dashed border-[#CBD5E1] px-4 py-8 text-center dark:border-neutral-700"
+                            >
+                                <Package class="mx-auto mb-2 size-8 text-[#CBD5E1] dark:text-neutral-600" />
+                                <p class="text-sm font-medium">Aún no agregas productos</p>
+                                <p class="text-xs text-[#64748B] dark:text-neutral-400">Búscalos por nombre o escanea su código de barras.</p>
+                            </div>
+                            <div class="relative">
+                                <Plus class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-emerald-600" />
+                                <input
+                                    v-model="buscarProducto"
+                                    type="text"
+                                    placeholder="Agregar producto: busca o escanea (nombre, código o código de barras)..."
+                                    :class="[claseInput, 'h-11 border-emerald-300 pl-10 dark:border-emerald-900', puedeEscanear ? 'pr-12' : '']"
+                                    @keydown.enter.prevent="alPresionarEnter"
+                                />
+                                <button
+                                    v-if="puedeEscanear"
+                                    type="button"
+                                    class="absolute top-1/2 right-1.5 grid size-9 -translate-y-1/2 place-items-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                                    aria-label="Escanear con la cámara"
+                                    title="Escanear con la cámara"
+                                    @click="escanerAbierto = true"
+                                >
+                                    <ScanBarcode class="size-5" />
+                                </button>
+                            </div>
+                            <div
+                                v-if="resultadosProducto.length"
+                                class="absolute top-full right-0 left-0 z-20 mt-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+                            >
+                                <button
+                                    v-for="p in resultadosProducto"
+                                    :key="p.id"
+                                    type="button"
+                                    class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
+                                    @click="agregarProducto(p)"
+                                >
+                                    <Package class="size-4 shrink-0 text-neutral-400" />
+                                    <span class="font-medium">{{ p.nombre }}</span>
+                                    <span class="ml-auto font-mono text-xs text-neutral-500 dark:text-neutral-400">{{ p.codigo_interno }}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <EscanerCamara
+                            v-if="puedeEscanear"
+                            :abierto="escanerAbierto"
+                            :al-leer="leerCodigoCamara"
+                            :resumen="filas.length ? `${filas.length} ${filas.length === 1 ? 'producto' : 'productos'} en la compra` : ''"
+                            @cerrar="escanerAbierto = false"
+                        />
+
+                        <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
+
+                        <p class="mt-4 flex items-start gap-2 rounded-xl bg-indigo-50 px-3 py-2.5 text-xs text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300">
+                            <Info class="mt-0.5 size-4 shrink-0" />
+                            Escribe el costo tal como figura en el comprobante del proveedor: con él se calcula el costo FIFO y la ganancia de cada venta.
+                        </p>
+                    </section>
                 </div>
-                <button
-                    :disabled="!puedeGuardar || form.processing"
-                    class="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-base font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    @click="guardar"
-                >
-                    {{ form.processing ? 'Registrando...' : 'Registrar compra' }}
-                </button>
+
+                <!-- ============ Resumen ============ -->
+                <aside class="space-y-4 lg:sticky lg:top-20">
+                    <section :class="claseTarjeta">
+                        <h2 class="mb-4 font-semibold tracking-tight">Resumen de la compra</h2>
+                        <dl class="space-y-2.5 text-sm">
+                            <div class="flex justify-between">
+                                <dt class="text-[#64748B] dark:text-neutral-400">Productos</dt>
+                                <dd class="font-medium tabular-nums">{{ filas.length }}</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-[#64748B] dark:text-neutral-400">Unidades</dt>
+                                <dd class="font-medium tabular-nums">{{ unidades }}</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-[#64748B] dark:text-neutral-400">Condición</dt>
+                                <dd class="font-medium">{{ form.es_credito ? 'Crédito' : 'Contado' }}</dd>
+                            </div>
+                        </dl>
+                        <div class="mt-4 flex items-baseline justify-between border-t border-[#E2E8F0] pt-4 dark:border-neutral-800">
+                            <span class="text-base font-semibold">Total</span>
+                            <span class="text-2xl font-bold tracking-tight tabular-nums">{{ soles(total) }}</span>
+                        </div>
+
+                        <div class="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-[#475569] dark:bg-neutral-950/60 dark:text-neutral-300">
+                            <p v-if="sucursalDestino" class="flex items-center gap-2" title="La sucursal se cambia con el selector de la barra superior">
+                                <MapPin class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span>Ingresa a: <strong>{{ sucursalDestino }}</strong></span>
+                            </p>
+                            <p class="flex items-center gap-2">
+                                <Boxes class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                El stock y el costo se actualizan al guardar.
+                            </p>
+                            <p v-if="form.es_credito" class="flex items-center gap-2">
+                                <HandCoins class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                Quedará como deuda en Cuentas por pagar.
+                            </p>
+                        </div>
+
+                        <p v-if="motivoNoGuardar" class="mt-3 text-xs font-medium text-amber-700 dark:text-amber-400">{{ motivoNoGuardar }}</p>
+
+                        <button
+                            type="button"
+                            :disabled="!puedeGuardar || form.processing"
+                            class="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-base font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            @click="guardar"
+                        >
+                            {{ form.processing ? 'Registrando...' : 'Registrar compra' }}
+                        </button>
+                        <Link
+                            href="/compras"
+                            class="mt-2 flex h-10 items-center justify-center rounded-xl text-sm font-medium text-[#64748B] hover:bg-slate-50 lg:hidden dark:text-neutral-400 dark:hover:bg-neutral-800"
+                        >
+                            Cancelar
+                        </Link>
+                    </section>
+                </aside>
             </div>
         </div>
 
