@@ -307,7 +307,9 @@ const descuentoInvalido = (item) => descuentoItem(item) > 0 && descuentoItem(ite
 const hayDescuentosInvalidos = computed(() => carrito.value.some(descuentoInvalido))
 
 const totalDescuentos = computed(() => carrito.value.reduce((suma, i) => suma + (descuentoInvalido(i) ? 0 : descuentoItem(i)), 0))
-const total = computed(() => carrito.value.reduce((suma, i) => suma + subtotalItem(i), 0))
+// redondeado al centimo: sumar decimales en JS deja restos (573.6500000001) que hacian
+// aparecer "Falta: S/ 0.00" en rojo al pagar el monto exacto
+const total = computed(() => Math.round(carrito.value.reduce((suma, i) => suma + subtotalItem(i), 0) * 100) / 100)
 
 // unidades base requeridas por producto (para validar stock en cliente)
 function faltaStock(item) {
@@ -503,7 +505,7 @@ const esEfectivoSimple = computed(() => pagos.value.length === 1 && pagos.value[
 
 const vuelto = computed(() => {
     if (!esEfectivoSimple.value || recibido.value === '') return null
-    return Number(recibido.value) - total.value
+    return Math.round((Number(recibido.value) - total.value) * 100) / 100
 })
 
 function agregarPago() {
@@ -1272,7 +1274,7 @@ const claseInput =
             leave-to-class="translate-y-full opacity-0"
         >
             <div
-                v-if="apertura && carrito.length && !carritoALaVista"
+                v-if="apertura && carrito.length && !carritoALaVista && !modalCobro && !ventaExitosa"
                 class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 flex items-center gap-2 rounded-2xl border border-[#E2E8F0] bg-white p-2 shadow-xl xl:hidden dark:border-neutral-800 dark:bg-neutral-900"
             >
                 <button
@@ -1884,7 +1886,7 @@ const claseInput =
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
                                 : 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'"
                         >
-                            {{ vuelto >= 0 ? `Vuelto: ${soles(vuelto)}` : `Falta: ${soles(Math.abs(vuelto))}` }}
+                            {{ vuelto === 0 ? 'Monto exacto · sin vuelto' : vuelto > 0 ? `Vuelto: ${soles(vuelto)}` : `Falta: ${soles(Math.abs(vuelto))}` }}
                         </p>
                     </div>
 
