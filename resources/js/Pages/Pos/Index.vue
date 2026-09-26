@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
-import { StorageSerializers, useMediaQuery, useResizeObserver, useStorage, watchDebounced } from '@vueuse/core'
+import { StorageSerializers, useIntersectionObserver, useMediaQuery, useResizeObserver, useStorage, watchDebounced } from '@vueuse/core'
 import {
     Banknote,
     CheckCircle2,
@@ -66,6 +66,29 @@ const productosFiltrados = computed(() => {
         )
     })
 })
+
+// Con miles de productos no se dibujan todas las tarjetas (el POS se volvía lento, sobre todo
+// en celulares): se muestran de a 60 y se cargan más al acercarse al final. Buscar, escanear
+// y filtrar por categoría siguen trabajando sobre el catálogo completo.
+const POR_TANDA = 60
+const limiteVisible = ref(POR_TANDA)
+const productosVisibles = computed(() => productosFiltrados.value.slice(0, limiteVisible.value))
+const hayMasProductos = computed(() => productosFiltrados.value.length > limiteVisible.value)
+const centinela = ref(null)
+
+watch([buscar, categoriaActiva], () => (limiteVisible.value = POR_TANDA))
+
+function cargarMasProductos() {
+    if (!hayMasProductos.value) return
+    limiteVisible.value += POR_TANDA
+    // en pantallas grandes la tanda nueva puede no alcanzar a empujar el final fuera de la vista
+    nextTick(() => {
+        const r = centinela.value?.getBoundingClientRect()
+        if (r && r.top < window.innerHeight + 600) cargarMasProductos()
+    })
+}
+
+useIntersectionObserver(centinela, ([entrada]) => entrada?.isIntersecting && cargarMasProductos(), { rootMargin: '600px' })
 
 function presentacionDefault(producto) {
     return producto.presentaciones.find((p) => p.es_default) ?? producto.presentaciones[0]
@@ -834,7 +857,7 @@ const claseInput =
                 <!-- Grilla de productos -->
                 <div v-if="productosFiltrados.length" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
                     <div
-                        v-for="p in productosFiltrados"
+                        v-for="p in productosVisibles"
                         :key="p.id"
                         role="button"
                         tabindex="0"
@@ -888,6 +911,15 @@ const claseInput =
                 </div>
                 <div v-else class="mt-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
                     No se encontraron productos.
+                </div>
+                <div v-if="hayMasProductos" ref="centinela" class="flex justify-center py-5">
+                    <button
+                        type="button"
+                        class="rounded-xl border border-[#E2E8F0] bg-white px-4 py-2 text-xs font-medium text-[#64748B] hover:bg-[#F1F5F9] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400"
+                        @click="cargarMasProductos"
+                    >
+                        Mostrando {{ productosVisibles.length }} de {{ productosFiltrados.length }} · ver más
+                    </button>
                 </div>
 
                 <!-- Aviso de stock agotado -->
