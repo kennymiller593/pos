@@ -87,7 +87,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
 <template>
     <AppLayout titulo="Planes">
-        <div class="mx-auto max-w-6xl">
+        <div>
             <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-sm text-neutral-500 dark:text-neutral-400">
                     Edita nombre, precio y límites de cada plan. Los cambios aplican a todas las empresas con ese plan.
@@ -110,7 +110,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 No hay planes registrados.
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-2">
+            <div class="grid gap-6 lg:grid-cols-2 2xl:grid-cols-3">
                 <form
                     v-for="ed in tarjetas"
                     :key="ed.plan.id ?? 'nuevo'"

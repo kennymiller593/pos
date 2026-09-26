@@ -118,7 +118,7 @@ const certificadoVencimiento = computed(() => {
 
 <template>
     <AppLayout titulo="Empresa">
-        <form class="mx-auto max-w-3xl space-y-4" @submit.prevent="enviar">
+        <form class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="enviar">
             <!-- Datos generales -->
             <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="mb-5 flex items-center gap-3">
@@ -356,7 +356,7 @@ const certificadoVencimiento = computed(() => {
                 </div>
             </div>
 
-            <div class="flex justify-end">
+            <div class="flex justify-end xl:col-span-2">
                 <button
                     type="submit"
                     :disabled="form.processing"

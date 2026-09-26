@@ -171,7 +171,7 @@ const claseBoton =
 
 <template>
     <AppLayout :titulo="empresa.razon_social">
-        <div class="mx-auto max-w-6xl space-y-6">
+        <div class="space-y-6">
             <!-- Cabecera -->
             <div>
                 <Link

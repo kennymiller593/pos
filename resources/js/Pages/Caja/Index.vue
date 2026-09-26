@@ -138,7 +138,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
         <!-- Aviso de cierre con ticket -->
         <div
             v-if="ticketCierre"
-            class="mx-auto mb-4 flex max-w-5xl flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+            class="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
         >
             <p class="inline-flex items-center gap-2 font-medium">
                 <CheckCircle2 class="size-5 shrink-0 text-[#10B981]" />
@@ -389,7 +389,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
         </template>
 
         <!-- ============ Historial de turnos ============ -->
-        <div class="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900" :class="!apertura ? 'mx-auto max-w-5xl' : ''">
+        <div class="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
             <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
                 <h2 class="font-semibold tracking-tight">Historial de turnos</h2>
                 <p class="text-xs text-neutral-500 dark:text-neutral-400">Arqueos de caja cerrados</p>

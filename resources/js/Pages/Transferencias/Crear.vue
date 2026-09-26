@@ -107,7 +107,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
 <template>
     <AppLayout titulo="Nueva transferencia">
-        <div class="mx-auto max-w-3xl">
+        <div>
             <Link
                 href="/transferencias"
                 class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"

@@ -114,7 +114,7 @@ const etiquetaEstado = (e) => (ESTADOS[e]?.texto ?? (e ? e.charAt(0).toUpperCase
 
 <template>
     <AppLayout titulo="Suscripción">
-        <div class="mx-auto max-w-6xl space-y-6">
+        <div class="space-y-6">
             <!-- Aviso de servicio suspendido -->
             <div v-if="sinServicio"
                 class="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
