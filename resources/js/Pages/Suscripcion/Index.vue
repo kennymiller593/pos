@@ -280,7 +280,7 @@ const etiquetaEstado = (e) => (ESTADOS[e]?.texto ?? (e ? e.charAt(0).toUpperCase
                 <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
                     <h2 class="font-semibold tracking-tight">Historial</h2>
                 </div>
-                <div class="overflow-x-auto">
+                <div class="@container overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead
                             class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
@@ -294,7 +294,9 @@ const etiquetaEstado = (e) => (ESTADOS[e]?.texto ?? (e ? e.charAt(0).toUpperCase
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-if="!historial.length">
                                 <td colspan="4" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400">
-                                    Sin movimientos todavía.
+                                    <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                        Sin movimientos todavía.
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-for="h in historial" :key="h.id" class="transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50">

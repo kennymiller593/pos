@@ -120,7 +120,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            <div class="overflow-x-auto">
+            <div class="@container overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
@@ -134,8 +134,10 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!usuarios.data.length">
                             <td colspan="5" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
-                                <UserCog class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
-                                No hay usuarios que mostrar.
+                                <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                    <UserCog class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
+                                    No hay usuarios que mostrar.
+                                </div>
                             </td>
                         </tr>
                         <tr v-for="u in usuarios.data" :key="u.id" class="transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50">

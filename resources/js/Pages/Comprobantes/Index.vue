@@ -343,7 +343,7 @@ const claseInput =
 
         <!-- Tabla -->
         <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            <div class="overflow-x-auto">
+            <div class="@container overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
@@ -362,8 +362,10 @@ const claseInput =
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!comprobantes.data.length">
                             <td colspan="10" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
-                                <ReceiptText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
-                                No hay comprobantes que mostrar.
+                                <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                    <ReceiptText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
+                                    No hay comprobantes que mostrar.
+                                </div>
                             </td>
                         </tr>
                         <template v-for="c in comprobantes.data" :key="c.id">

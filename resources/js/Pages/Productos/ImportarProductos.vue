@@ -355,7 +355,9 @@ const textoEstado = { ok: 'OK', advertencia: 'Advertencia', error: 'Error' }
                                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                                         <tr v-if="!filasFiltradas.length">
                                             <td colspan="9" class="px-3 py-10 text-center text-neutral-500 dark:text-neutral-400">
-                                                No hay filas que mostrar.
+                                                <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                                    No hay filas que mostrar.
+                                                </div>
                                             </td>
                                         </tr>
                                         <tr

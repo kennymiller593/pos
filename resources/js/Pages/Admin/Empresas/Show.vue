@@ -350,7 +350,7 @@ const claseBoton =
             <!-- Historial -->
             <section class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
                 <h3 class="border-b border-stone-200 px-5 py-4 font-semibold tracking-tight dark:border-neutral-800">Historial de suscripciones</h3>
-                <div class="overflow-x-auto">
+                <div class="@container relative overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                             <tr>
@@ -365,8 +365,10 @@ const claseBoton =
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-if="!historial.length">
                                 <td colspan="6" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400">
-                                    <Boxes class="mx-auto mb-2 size-7 text-neutral-300 dark:text-neutral-600" />
-                                    Sin suscripciones registradas.
+                                    <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                        <Boxes class="mx-auto mb-2 size-7 text-neutral-300 dark:text-neutral-600" />
+                                        Sin suscripciones registradas.
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-for="h in historial" :key="h.id">
@@ -395,7 +397,7 @@ const claseBoton =
                 <h3 class="border-b border-stone-200 px-5 py-4 font-semibold tracking-tight dark:border-neutral-800">
                     Usuarios <span class="font-normal text-neutral-400">({{ usuarios.length }})</span>
                 </h3>
-                <div class="overflow-x-auto">
+                <div class="@container relative overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                             <tr>
@@ -409,7 +411,7 @@ const claseBoton =
                         </thead>
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-if="!usuarios.length">
-                                <td colspan="6" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400">Sin usuarios.</td>
+                                <td colspan="6" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400"><div class="sticky left-4 max-w-[calc(100cqw-2rem)]">Sin usuarios.</div></td>
                             </tr>
                             <tr v-for="u in usuarios" :key="u.id">
                                 <td class="px-4 py-3 font-medium">{{ u.nombre_completo }}</td>

@@ -195,11 +195,11 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
             <!-- Cabecera -->
             <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
-                <div class="mb-5 flex items-center gap-3">
-                    <div class="grid size-10 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                <div class="mb-5 flex flex-wrap items-center gap-3">
+                    <div class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
                         <Truck class="size-5" />
                     </div>
-                    <div class="min-w-0 flex-1">
+                    <div class="min-w-48 flex-1">
                         <h2 class="font-semibold tracking-tight">Datos de la compra</h2>
                         <p class="text-sm text-neutral-500 dark:text-neutral-400">El stock y el costo se actualizan al guardar.</p>
                     </div>
@@ -330,7 +330,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
 
                 <!-- Filas -->
-                <div v-if="filas.length" class="mt-4 overflow-x-auto">
+                <div v-if="filas.length" class="@container mt-4 overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                             <tr>

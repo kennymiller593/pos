@@ -296,7 +296,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <h2 class="font-semibold tracking-tight text-slate-900 dark:text-neutral-100">Cuadre por medio de pago</h2>
                     <p class="text-xs text-slate-500 dark:text-neutral-400">Lo que debería haber en cada medio al cerrar el turno</p>
                 </div>
-                <div class="overflow-x-auto">
+                <div class="@container relative overflow-x-auto">
                     <table class="w-full min-w-[32rem] text-left text-sm">
                         <thead class="border-b border-slate-200 text-xs text-slate-500 uppercase dark:border-neutral-800 dark:text-neutral-500">
                             <tr>
@@ -395,7 +395,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 <p class="text-xs text-neutral-500 dark:text-neutral-400">Arqueos de caja cerrados</p>
             </div>
 
-            <div class="overflow-x-auto">
+            <div class="@container relative overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
@@ -413,7 +413,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!historial.data.length">
                             <td colspan="9" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                Aún no hay turnos cerrados.
+                                <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                    Aún no hay turnos cerrados.
+                                </div>
                             </td>
                         </tr>
                         <template v-for="t in historial.data" :key="t.id">

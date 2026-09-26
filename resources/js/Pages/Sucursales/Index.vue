@@ -438,7 +438,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-if="!sucursalSeries.series.length">
                                 <td colspan="5" class="py-6 text-center text-neutral-400 dark:text-neutral-500">
-                                    Sin series: se crearán automáticamente en la primera venta.
+                                    <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
+                                        Sin series: se crearán automáticamente en la primera venta.
+                                    </div>
                                 </td>
                             </tr>
                             <tr v-for="serie in sucursalSeries.series" :key="serie.id">

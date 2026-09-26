@@ -1537,9 +1537,9 @@ const claseInput =
 
         <!-- ============ Modal de cobro ============ -->
         <Teleport to="body">
-            <div v-if="modalCobro" class="fixed inset-0 z-50 grid place-items-center p-4">
+            <div v-if="modalCobro" class="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
                 <div class="fixed inset-0 bg-neutral-950/60" @click="modalCobro = false" />
-                <div class="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                <div class="relative max-h-[94vh] w-full max-w-md min-w-0 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 supports-[height:100dvh]:max-h-[94dvh] sm:p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                     <div class="mb-4 flex items-center justify-between">
                         <h3 class="text-lg font-semibold tracking-tight">Cobrar {{ soles(total) }}</h3>
                         <button
@@ -1659,7 +1659,7 @@ const claseInput =
                                 <div class="flex gap-2">
                                     <select
                                         v-model="p.medio_pago_codigo"
-                                        class="h-10 flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                        class="h-10 min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                     >
                                         <option v-for="m in mediosPago" :key="m.codigo" :value="m.codigo">{{ m.nombre }}</option>
                                     </select>
@@ -1670,7 +1670,7 @@ const claseInput =
                                         min="0"
                                         placeholder="0.00"
                                         :disabled="esEfectivoSimple"
-                                        class="h-10 w-28 rounded-xl border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:disabled:bg-neutral-800"
+                                        class="h-10 w-24 shrink-0 rounded-xl sm:w-28 border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:disabled:bg-neutral-800"
                                     />
                                     <button
                                         v-if="pagos.length > 1"
