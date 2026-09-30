@@ -6,6 +6,7 @@ use App\Models\Empresa;
 use App\Models\Plan;
 use App\Models\Rubro;
 use App\Models\Suscripcion;
+use App\Models\Usuario;
 use App\Services\SuscripcionService;
 use App\Support\DocumentoIdentidad;
 use Tests\Concerns\CreaEscenarioPos;
@@ -128,7 +129,8 @@ class SuperadminTest extends TestCase
         // privado: no aparece en la landing ni en Suscripción, pero sí se puede asignar desde el panel
         $this->app['auth']->guard()->logout();
         $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 3));
-        $this->actingAs($this->admin)->get('/suscripcion')
+        // (el superadmin ya no entra a Suscripción: lo consulta un admin normal de la empresa)
+        $this->actingAs($this->crearUsuario('admin', 'normal'.random_int(10000, 99999).'@test.local'))->get('/suscripcion')
             ->assertInertia(fn ($p) => $p->where('planes', fn ($planes) => collect($planes)->doesntContain('codigo', 'corporativo')));
         $this->actingAs($this->admin)->get("/admin/empresas/{$this->otra->id}")
             ->assertInertia(fn ($p) => $p->where('planes', fn ($planes) => collect($planes)->contains('codigo', 'corporativo')));
@@ -137,6 +139,70 @@ class SuperadminTest extends TestCase
         $super->put("/admin/planes/{$creado->id}", ['publico' => true] + $plan)->assertSessionHas('success');
         $this->app['auth']->guard()->logout();
         $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 4)->where('planes.3.codigo', 'corporativo'));
+    }
+
+    public function test_el_superadmin_solo_ve_la_plataforma(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $super = $this->actingAs($this->admin->fresh());
+
+        $super->get('/admin/empresas')->assertOk();
+        $super->get('/admin/cuenta')->assertOk()->assertInertia(fn ($p) => $p->component('Admin/Cuenta/Index'));
+
+        // cualquier pantalla de empresa lo devuelve al panel
+        foreach (['/dashboard', '/pos', '/compras', '/productos', '/usuarios', '/suscripcion'] as $ruta) {
+            $super->get($ruta)->assertRedirect('/admin/empresas');
+        }
+        $super->getJson('/notificaciones')->assertForbidden();
+        $super->post('/pos/ventas', [])->assertRedirect('/admin/empresas');
+    }
+
+    public function test_el_acceso_de_plataforma_se_mueve_a_otro_correo(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $emailNuevo = 'plataforma'.random_int(10000, 99999).'@inkanet.pro';
+
+        $this->actingAs($this->admin->fresh())->post('/admin/cuenta/migrar', [
+            'nombre_completo' => 'Admin inkaPos', 'email' => $emailNuevo,
+            'password' => 'Plataforma-2026', 'password_confirmation' => 'Plataforma-2026',
+        ])->assertRedirect('/login')->assertSessionHas('success');
+
+        $nuevo = Usuario::where('email', $emailNuevo)->firstOrFail();
+        $this->assertTrue($nuevo->es_superadmin);
+        $this->assertFalse($this->admin->fresh()->es_superadmin);
+        $this->assertDatabaseHas('auditoria', ['accion' => 'plataforma.superadmin_migrado', 'entidad_id' => $nuevo->id]);
+
+        // la cuenta nueva solo ve la plataforma; la anterior vuelve a operar su empresa
+        $this->actingAs($nuevo)->get('/admin/empresas')->assertOk();
+        $this->actingAs($nuevo)->get('/pos')->assertRedirect('/admin/empresas');
+        $this->actingAs($this->admin->fresh())->get('/dashboard')->assertOk();
+        $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertForbidden();
+
+        // la cuenta de plataforma no aparece ni cuenta como usuario de la empresa
+        $this->actingAs($this->admin->fresh())->get('/usuarios')
+            ->assertInertia(fn ($p) => $p->where('usuarios.data', fn ($lista) => collect($lista)->doesntContain('email', $emailNuevo)));
+        $this->actingAs($this->admin->fresh())->put("/usuarios/{$nuevo->id}", [])->assertForbidden();
+        $this->assertSame(1, Usuario::where('empresa_id', $this->empresa->id)->where('activo', true)->where('es_superadmin', false)->count());
+
+        // el correo nuevo no puede repetirse
+        $this->actingAs($nuevo)->post('/admin/cuenta/migrar', [
+            'nombre_completo' => 'X', 'email' => $this->admin->email, 'password' => 'Plataforma-2026', 'password_confirmation' => 'Plataforma-2026',
+        ])->assertSessionHasErrors('email');
+    }
+
+    public function test_el_comando_migra_el_superadmin(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $emailNuevo = 'cmd'.random_int(10000, 99999).'@inkanet.pro';
+
+        $this->artisan('superadmin:migrar', ['email_actual' => $this->admin->email, 'email_nuevo' => $emailNuevo])
+            ->expectsOutputToContain("Cuenta de plataforma creada: {$emailNuevo}")
+            ->assertSuccessful();
+
+        $this->assertTrue(Usuario::where('email', $emailNuevo)->value('es_superadmin'));
+        $this->assertFalse($this->admin->fresh()->es_superadmin);
+
+        $this->artisan('superadmin:migrar', ['email_actual' => $this->admin->email, 'email_nuevo' => 'otro@inkanet.pro'])->assertFailed();
     }
 
     public function test_el_superadmin_no_queda_bloqueado_por_su_propia_suscripcion(): void

@@ -25,7 +25,7 @@ class SuscripcionController extends Controller
         return Inertia::render('Suscripcion/Index', [
             'suscripcion' => $this->suscripciones->resumen($empresa),
             'uso' => [
-                'usuarios' => Usuario::where('empresa_id', $empresa->id)->where('activo', true)->count(),
+                'usuarios' => Usuario::where('empresa_id', $empresa->id)->where('activo', true)->where('es_superadmin', false)->count(),
                 'sucursales' => Sucursal::where('empresa_id', $empresa->id)->where('activo', true)->count(),
                 'comprobantes_mes' => Comprobante::where('empresa_id', $empresa->id)
                     ->where('fecha_emision', '>=', now()->startOfMonth()->toDateString())

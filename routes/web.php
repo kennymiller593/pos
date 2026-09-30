@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CuentaController as AdminCuentaController;
 use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\AuditoriaController;
@@ -102,6 +103,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
         Route::post('/planes', [AdminPlanController::class, 'store'])->name('planes.store');
         Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');
+        Route::get('/cuenta', [AdminCuentaController::class, 'index'])->name('cuenta');
+        Route::post('/cuenta/migrar', [AdminCuentaController::class, 'migrar'])->middleware('throttle:5,1')->name('cuenta.migrar');
     });
 
     // ---- configuracion (solo admin) ----

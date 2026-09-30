@@ -136,7 +136,7 @@ class SuscripcionService
         [$maximo, $actual, $mensaje] = match ($recurso) {
             'usuarios' => [
                 $plan->max_usuarios,
-                Usuario::where('empresa_id', $empresa->id)->where('activo', true)->count(),
+                Usuario::where('empresa_id', $empresa->id)->where('activo', true)->where('es_superadmin', false)->count(),
                 'usuarios activos',
             ],
             'sucursales' => [

@@ -27,7 +27,7 @@ class EmpresaController extends Controller
 
         $empresas = Empresa::query()
             ->withCount([
-                'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true),
+                'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true)->where('es_superadmin', false),
                 'sucursales as sucursales_activas' => fn ($q) => $q->where('activo', true),
                 'comprobantes as comprobantes_mes' => fn ($q) => $q->where('fecha_emision', '>=', now()->startOfMonth()->toDateString()),
             ])
@@ -82,7 +82,7 @@ class EmpresaController extends Controller
     public function show(Empresa $empresa): Response
     {
         $empresa->loadCount([
-            'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true),
+            'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true)->where('es_superadmin', false),
             'sucursales as sucursales_activas' => fn ($q) => $q->where('activo', true),
             'productos', 'clientes',
         ]);
@@ -115,7 +115,7 @@ class EmpresaController extends Controller
                 ->with('plan:id,codigo,nombre,precio_mensual')
                 ->orderByDesc('fecha_fin')
                 ->get(['id', 'plan_id', 'fecha_inicio', 'fecha_fin', 'estado', 'es_prueba', 'nota', 'creado_en']),
-            'usuarios' => $empresa->usuarios()->with('rol:id,nombre')->orderBy('nombre_completo')
+            'usuarios' => $empresa->usuarios()->where('es_superadmin', false)->with('rol:id,nombre')->orderBy('nombre_completo')
                 ->get(['id', 'nombre_completo', 'email', 'rol_id', 'activo', 'email_verificado_en', 'creado_en']),
             'planes' => Plan::where('activo', true)->where('codigo', '!=', 'prueba')->orderBy('orden')
                 ->get(['codigo', 'nombre', 'precio_mensual', 'max_sucursales', 'max_usuarios', 'max_comprobantes_mes']),

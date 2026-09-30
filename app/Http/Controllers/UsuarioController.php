@@ -28,6 +28,7 @@ class UsuarioController extends Controller
         return Inertia::render('Usuarios/Index', [
             'usuarios' => Usuario::query()
                 ->where('empresa_id', $empresaId)
+                ->where('es_superadmin', false) // la cuenta de plataforma no es un usuario de la empresa
                 ->with(['rol:id,codigo,nombre', 'sucursales:sucursales.id,nombre'])
                 ->select('usuarios.*')
                 ->selectRaw(Usuario::sqlTieneHistorial().' AS con_historial')
@@ -102,6 +103,7 @@ class UsuarioController extends Controller
     public function update(Request $request, Usuario $usuario): RedirectResponse
     {
         abort_unless($usuario->empresa_id === $request->user()->empresa_id, 403);
+        abort_if($usuario->es_superadmin, 403, 'La cuenta de plataforma no se administra desde aquí.');
 
         $datos = $this->validar($request, $usuario);
         $esUnoMismo = $usuario->id === $request->user()->id;

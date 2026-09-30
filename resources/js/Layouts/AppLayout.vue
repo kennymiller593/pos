@@ -51,7 +51,9 @@ defineProps({
 const page = usePage()
 const usuario = computed(() => page.props.auth?.user ?? null)
 const empresa = computed(() => usuario.value?.empresa ?? null)
-const nombreEmpresa = computed(() => empresa.value?.nombre_comercial || empresa.value?.razon_social || page.props.appName || 'inkaPos')
+// el superadmin es una cuenta exclusiva de la plataforma: sin empresa, sucursal ni módulos de venta
+const esPlataforma = computed(() => !!usuario.value?.es_superadmin)
+const nombreEmpresa = computed(() => (esPlataforma.value ? 'inkaPos' : empresa.value?.nombre_comercial || empresa.value?.razon_social || page.props.appName || 'inkaPos'))
 const inicialEmpresa = computed(() => nombreEmpresa.value.charAt(0).toUpperCase())
 const sucursalActiva = computed(() => usuario.value?.sucursal_activa ?? null)
 
@@ -105,20 +107,22 @@ const menuBase = [
             { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
         ],
     },
+]
+
+const menuPlataforma = [
     {
         seccion: 'Plataforma',
-        soloSuperadmin: true,
         items: [
             { label: 'Empresas', href: '/admin/empresas', icon: Building2 },
             { label: 'Planes', href: '/admin/planes', icon: CreditCard },
+            { label: 'Mi cuenta', href: '/admin/cuenta', icon: UserCog },
         ],
     },
 ]
 
 // cada item se muestra solo si el usuario tiene su permiso (sin permiso = visible para todos)
 const { puede } = usePermisos()
-const menu = computed(() => menuBase
-    .filter((grupo) => !grupo.soloSuperadmin || usuario.value?.es_superadmin)
+const menu = computed(() => (esPlataforma.value ? menuPlataforma : menuBase)
     .map((grupo) => ({
         ...grupo,
         items: grupo.items.filter((item) => !item.permiso || puede(item.permiso)),
@@ -189,7 +193,7 @@ function alternarNotificaciones() {
 }
 
 onMounted(() => {
-    if (usuario.value) cargarNotificaciones()
+    if (usuario.value && !esPlataforma.value) cargarNotificaciones()
 })
 
 function esActivo(item) {
@@ -208,6 +212,7 @@ function fechaLarga(iso) {
 }
 
 const avisoSuscripcion = computed(() => {
+    if (esPlataforma.value) return null
     const s = suscripcion.value
     if (!s) return null
     const dias = s.dias_restantes ?? 0
@@ -294,11 +299,11 @@ watch(
             ]">
             <!-- Logo y nombre de la empresa -->
             <div class="flex h-16 shrink-0 items-center gap-3 px-4">
-                <div class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl" :class="empresa?.logo_url
+                <div class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl" :class="empresa?.logo_url && !esPlataforma
                     ? 'border border-[#E2E8F0] bg-white dark:border-neutral-700'
                     : 'bg-[#4F46E5] font-bold text-white dark:bg-emerald-500 dark:text-white'"
                     :title="colapsado && !abiertoMovil ? nombreEmpresa : undefined">
-                    <img v-if="empresa?.logo_url" :src="empresa.logo_url" :alt="nombreEmpresa"
+                    <img v-if="empresa?.logo_url && !esPlataforma" :src="empresa.logo_url" :alt="nombreEmpresa"
                         class="size-full object-contain" />
                     <template v-else>{{ inicialEmpresa }}</template>
                 </div>
@@ -306,7 +311,8 @@ watch(
                     <span class="block truncate text-lg leading-tight font-semibold tracking-tight">
                         {{ nombreEmpresa }}
                     </span>
-                    <span v-if="sucursalActiva"
+                    <span v-if="esPlataforma" class="block text-[11px] text-[#64748B] dark:text-neutral-400">Panel de la plataforma</span>
+                    <span v-else-if="sucursalActiva"
                         class="flex items-center gap-1 text-[11px] text-[#64748B] dark:text-neutral-400"
                         :title="sucursalActiva.caja ? `Operando en ${sucursalActiva.nombre} (${sucursalActiva.caja})` : `Sucursal ${sucursalActiva.nombre}`">
                         <MapPin class="size-3 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
@@ -349,7 +355,7 @@ watch(
             </nav>
 
             <!-- Tutorial en video (Google Drive) -->
-            <div class="shrink-0 border-t border-[#E2E8F0] px-3 py-2 dark:border-neutral-800">
+            <div v-if="!esPlataforma" class="shrink-0 border-t border-[#E2E8F0] px-3 py-2 dark:border-neutral-800">
                 <a href="https://drive.google.com/file/d/1hYoMYGBuDAQrONiq-qCskFmwnAArj1G8/view?usp=sharing"
                     target="_blank" rel="noopener noreferrer"
                     class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
@@ -389,7 +395,7 @@ watch(
                     <!-- Estado de facturación electrónica -->
                     <component
                         :is="puede('empresa.gestionar') ? Link : 'span'"
-                        v-if="empresa?.facturacion_electronica"
+                        v-if="empresa?.facturacion_electronica && !esPlataforma"
                         :href="puede('empresa.gestionar') ? '/empresa' : undefined"
                         class="hidden h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold tracking-wide uppercase sm:flex"
                         :class="empresa.entorno_sunat === 'produccion'
@@ -404,7 +410,7 @@ watch(
                     </component>
 
                     <!-- Selector de sucursal -->
-                    <div v-if="mostrarSelector" ref="selectorRef" class="relative">
+                    <div v-if="mostrarSelector && !esPlataforma" ref="selectorRef" class="relative">
                         <button
                             class="flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm font-medium text-[#64748B] transition-colors hover:border-[#CBD5E1] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
                             title="Cambiar de sucursal" @click="selectorAbierto = !selectorAbierto">
@@ -442,7 +448,7 @@ watch(
                         <Sun v-if="esOscuro" class="size-5" />
                         <Moon v-else class="size-5" />
                     </button>
-                    <div ref="notiRef" class="relative">
+                    <div v-if="!esPlataforma" ref="notiRef" class="relative">
                         <button
                             class="relative grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                             title="Notificaciones" @click="alternarNotificaciones">
