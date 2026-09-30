@@ -438,10 +438,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         <div v-if="esSuelta(pres)" class="flex h-10 items-center rounded-xl bg-stone-50 px-3 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                                             Unidad suelta · 1 {{ unidadBaseSingular }}
                                         </div>
-                                        <div v-else class="flex items-center gap-2">
-                                            <span class="shrink-0 text-sm whitespace-nowrap text-neutral-600 dark:text-neutral-300">1 {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }} =</span>
-                                            <input v-model="pres.factor_conversion" type="number" step="0.0001" min="0" :class="[claseInput, 'w-24 shrink-0 text-center']" />
-                                            <span class="min-w-0 truncate text-sm text-neutral-600 dark:text-neutral-300">{{ unidadBasePlural.toLowerCase() }}</span>
+                                        <!-- un solo campo con el texto adentro: "1 saco = [50] kilogramos" (cabe en la columna) -->
+                                        <div
+                                            class="flex h-10 w-full min-w-0 items-center gap-1 rounded-xl border border-stone-300 bg-white px-2.5 text-sm focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-400/30 dark:border-neutral-700 dark:bg-neutral-950"
+                                            v-else
+                                        >
+                                            <span class="shrink-0 text-xs text-neutral-500 dark:text-neutral-400">1 {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }} =</span>
+                                            <input
+                                                v-model="pres.factor_conversion"
+                                                type="number"
+                                                step="0.0001"
+                                                min="0"
+                                                class="w-full min-w-0 flex-1 bg-transparent text-center font-medium focus:outline-none"
+                                            />
+                                            <span class="min-w-0 shrink truncate text-xs text-neutral-500 dark:text-neutral-400">{{ unidadBasePlural.toLowerCase() }}</span>
                                         </div>
                                         <p v-if="!esSuelta(pres)" class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
                                             No es el stock: es cuántos {{ unidadBasePlural.toLowerCase() }} tiene cada {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }}. El stock entra por compras.
