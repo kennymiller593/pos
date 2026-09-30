@@ -160,6 +160,27 @@ class ProductoTest extends TestCase
         $this->assertSame($nueva, $producto->fresh()->imagen_url);
     }
 
+    public function test_el_comando_renombra_presentaciones_que_repiten_el_nombre_del_producto(): void
+    {
+        $producto = $this->crearProducto(); // presentación "Unidad" por defecto
+        $producto->presentaciones()->first()->update(['nombre' => $producto->nombre]);
+        $this->agregarPresentacion($producto, $producto->nombre.' ', 12, 100.0); // caja x12 mal nombrada
+        $this->agregarPresentacion($producto, 'Six pack', 6, 50.0); // nombre propio: se respeta
+
+        $this->artisan('productos:normalizar-presentaciones')->expectsOutputToContain('renombradas: 2')->assertSuccessful();
+
+        $nombres = $producto->presentaciones()->orderBy('factor_conversion')->pluck('nombre')->all();
+        $this->assertSame(['Unidad', 'Six pack', 'Unidad x12'], $nombres);
+
+        // idempotente
+        $this->artisan('productos:normalizar-presentaciones')->expectsOutputToContain('renombradas: 0')->assertSuccessful();
+    }
+
+    public function test_las_unidades_nuevas_sirven_para_nombrar_presentaciones(): void
+    {
+        $this->assertSame(['BG', 'BO', 'DZN', 'PK'], UnidadMedida::whereIn('codigo', ['PK', 'DZN', 'BG', 'BO'])->orderBy('codigo')->pluck('codigo')->all());
+    }
+
     public function test_rechaza_archivos_que_no_son_imagen(): void
     {
         Storage::fake('public');

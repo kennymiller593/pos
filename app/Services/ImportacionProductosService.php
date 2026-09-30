@@ -96,7 +96,7 @@ class ImportacionProductosService
             'afecto_igv: SI (gravado), EXONERADO o INAFECTO. Vacío = SI.',
             'permite_fraccion: SI si vendes medios (metros de cable, arroz a granel). Vacío = NO.',
             'categoria y marca: si no existen, se crean solas.',
-            'presentacion: otra forma de vender el mismo producto (Caja, Paquete). factor = cuántas unidades base trae (Caja 305 m → 305).',
+            'presentacion: otra forma de vender el mismo producto, NO repitas el nombre del producto: escribe Caja x12, Paquete x6, Saco x50... factor = cuántas unidades base trae (Caja 305 m → 305).',
             'precio_presentacion: precio de venta de esa caja/paquete completo.',
             'precio_compra_presentacion: si solo conoces el precio de compra por caja, ponlo aquí y el sistema calcula el de la unidad.',
             'Si el código de barras o el nombre ya existen, la fila ACTUALIZA ese producto (no lo duplica).',

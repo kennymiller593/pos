@@ -72,7 +72,8 @@ function quitarImagen() {
 function presentacionNueva(esDefault = false) {
     return {
         id: null,
-        nombre: esDefault ? 'Unidad' : '',
+        nombre: '',
+        nombre_manual: false, // el nombre se arma solo con la unidad y el factor ("Caja x12")
         unidad_codigo: form.unidad_base_codigo || unidadPorDefecto(),
         factor_conversion: 1,
         precio_venta: '',
@@ -108,6 +109,8 @@ function cargar() {
         ? p.presentaciones.map((x) => ({
               id: x.id,
               nombre: x.nombre,
+              // un nombre propio ("Six pack") se conserva y se muestra como manual
+              nombre_manual: x.nombre !== nombreAuto({ unidad_codigo: x.unidad_codigo, factor_conversion: x.factor_conversion }),
               unidad_codigo: x.unidad_codigo,
               factor_conversion: Number(x.factor_conversion),
               precio_venta: Number(x.precio_venta),
@@ -137,14 +140,49 @@ function marcarDefault(indice) {
     form.presentaciones.forEach((p, i) => (p.es_default = i === indice))
 }
 
+// ---- nombre de la presentación: automático ("Unidad", "Caja x12"), editable solo a pedido ----
+const nombreUnidad = (codigo) => props.catalogos.unidades.find((u) => u.codigo === codigo)?.nombre ?? 'Unidad'
+
+function nombreAuto(pres) {
+    const factor = Number(pres.factor_conversion)
+    const unidad = nombreUnidad(pres.unidad_codigo)
+    return factor > 0 && factor !== 1 ? `${unidad} x${Number(factor.toFixed(4))}` : unidad
+}
+
+const nombreDe = (pres) => (pres.nombre_manual ? pres.nombre : nombreAuto(pres))
+
+// como se verá en el POS y en el ticket (la presentación "Unidad" no se agrega al nombre)
+const comoSeVera = (pres) => {
+    const producto = form.nombre.trim() || 'Nombre del producto'
+    const nombre = nombreDe(pres).trim()
+    return nombre && nombre !== 'Unidad' ? `${producto} (${nombre})` : producto
+}
+
+function editarNombre(pres) {
+    pres.nombre = nombreDe(pres)
+    pres.nombre_manual = true
+}
+
+function usarNombreAuto(pres) {
+    pres.nombre_manual = false
+    pres.nombre = ''
+}
+
+// aviso cuando el nombre manual repite el del producto (era la confusión de siempre)
+const repiteNombreProducto = (pres) => {
+    const producto = form.nombre.trim().toLowerCase()
+    return pres.nombre_manual && producto.length > 2 && pres.nombre.trim().toLowerCase().includes(producto)
+}
+
 function enviar() {
     const transformar = (data) => ({
         ...data,
         categoria_id: data.categoria_id || null,
         marca_id: data.marca_id || null,
         stock_minimo: data.stock_minimo === '' ? null : data.stock_minimo,
-        presentaciones: data.presentaciones.map((p) => ({
+        presentaciones: data.presentaciones.map(({ nombre_manual, ...p }) => ({
             ...p,
+            nombre: nombreDe({ ...p, nombre_manual }),
             precio_mayorista: p.precio_mayorista === '' ? null : p.precio_mayorista,
             cantidad_mayorista: p.cantidad_mayorista === '' ? null : p.cantidad_mayorista,
             codigo_barras: p.codigo_barras || null,
@@ -312,15 +350,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
                         <!-- Presentaciones -->
                         <div class="mt-6">
-                            <div class="mb-2 flex items-center justify-between">
-                                <h3 class="text-sm font-semibold tracking-tight">Presentaciones y precios</h3>
+                            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 class="text-sm font-semibold tracking-tight">¿Cómo se vende? · Presentaciones y precios</h3>
+                                    <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                        La primera es la unidad suelta. Si también vendes por caja, paquete o saco, agrégala como otra presentación.
+                                    </p>
+                                </div>
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                     @click="agregarPresentacion"
                                 >
                                     <Plus class="size-4" />
-                                    Agregar
+                                    Otra presentación (caja, pack…)
                                 </button>
                             </div>
                             <p v-if="preciosBloqueados" class="mb-1 text-xs text-amber-700 dark:text-amber-400">
@@ -333,21 +376,56 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 :key="pres.id ?? `nueva-${i}`"
                                 class="mt-3 rounded-xl border border-stone-200 p-4 dark:border-neutral-800"
                             >
+                                <!-- nombre: se arma solo con la unidad y el factor; editable solo si lo piden -->
+                                <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="font-semibold">
+                                            {{ nombreDe(pres) || 'Presentación' }}
+                                            <span v-if="pres.es_default" class="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">principal</span>
+                                        </p>
+                                        <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                            En el POS y el ticket: <span class="font-medium text-neutral-700 dark:text-neutral-200">{{ comoSeVera(pres) }}</span>
+                                        </p>
+                                    </div>
+                                    <button
+                                        v-if="!pres.nombre_manual"
+                                        type="button"
+                                        class="text-xs font-medium text-neutral-500 underline underline-offset-2 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
+                                        @click="editarNombre(pres)"
+                                    >
+                                        Cambiar nombre
+                                    </button>
+                                </div>
+                                <div v-if="pres.nombre_manual" class="mb-3">
+                                    <label :class="claseLabel">Nombre de la presentación</label>
+                                    <div class="flex gap-2">
+                                        <input v-model="pres.nombre" type="text" :class="claseInput" placeholder="Ej. Six pack, Display x24" />
+                                        <button
+                                            type="button"
+                                            class="shrink-0 rounded-xl border border-stone-300 px-3 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                            @click="usarNombreAuto(pres)"
+                                        >
+                                            Automático
+                                        </button>
+                                    </div>
+                                    <p v-if="repiteNombreProducto(pres)" class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                                        Parece el nombre del producto. Aquí va cómo se vende: Unidad, Caja x12, Paquete x6…
+                                    </p>
+                                    <p v-if="form.errors[`presentaciones.${i}.nombre`]" :class="claseError">{{ form.errors[`presentaciones.${i}.nombre`] }}</p>
+                                </div>
+                                <p v-else-if="form.errors[`presentaciones.${i}.nombre`]" :class="[claseError, 'mb-3']">{{ form.errors[`presentaciones.${i}.nombre`] }}</p>
+
                                 <div class="grid gap-3 sm:grid-cols-3">
                                     <div>
-                                        <label :class="claseLabel">Nombre *</label>
-                                        <input v-model="pres.nombre" type="text" :class="claseInput" placeholder="Unidad, Six pack..." />
-                                        <p v-if="form.errors[`presentaciones.${i}.nombre`]" :class="claseError">{{ form.errors[`presentaciones.${i}.nombre`] }}</p>
-                                    </div>
-                                    <div>
-                                        <label :class="claseLabel">Unidad *</label>
+                                        <label :class="claseLabel">Se vende por *</label>
                                         <select v-model="pres.unidad_codigo" :class="claseInput">
                                             <option v-for="u in catalogos.unidades" :key="u.codigo" :value="u.codigo">{{ u.nombre }}</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label :class="claseLabel">Factor (unid. base) *</label>
+                                        <label :class="claseLabel">Unidades que trae *</label>
                                         <input v-model="pres.factor_conversion" type="number" step="0.0001" min="0" :class="claseInput" />
+                                        <p class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">1 si es la unidad suelta; 12 si la caja trae 12.</p>
                                         <p v-if="form.errors[`presentaciones.${i}.factor_conversion`]" :class="claseError">{{ form.errors[`presentaciones.${i}.factor_conversion`] }}</p>
                                     </div>
                                     <div>

@@ -103,6 +103,10 @@ INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BX', 'Caja', false);
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('SA', 'Saco', false);
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('GLL', 'Galon', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('PK', 'Paquete', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('DZN', 'Docena', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BG', 'Bolsa', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BO', 'Botella', false);
 
 
 --

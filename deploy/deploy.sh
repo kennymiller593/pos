@@ -48,6 +48,9 @@ $PHP artisan empresa:cifrar-certificados
 echo "→ Fotos de productos sin optimizar (idempotente; si falla no detiene el despliegue)"
 $PHP artisan productos:optimizar-imagenes || true
 
+echo "→ Presentaciones que repetían el nombre del producto (idempotente)"
+$PHP artisan productos:normalizar-presentaciones || true
+
 echo "→ Permisos (el deploy corre como root; PHP-FPM y el worker corren como www-data)"
 chown -R www-data:www-data storage bootstrap/cache public/build
 chown www-data:www-data .env
