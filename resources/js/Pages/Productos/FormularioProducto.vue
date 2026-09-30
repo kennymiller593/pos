@@ -156,6 +156,15 @@ const pluralUnidad = (nombre) => (/n$/i.test(nombre) ? `${nombre}es` : `${nombre
 const unidadBasePlural = computed(() => pluralUnidad(nombreUnidad(form.unidad_base_codigo)))
 const unidadBaseSingular = computed(() => nombreUnidad(form.unidad_base_codigo).toLowerCase())
 
+// la presentación principal sigue a la unidad base (kilogramo → se vende por kilogramo),
+// salvo que el usuario ya la haya cambiado a otra cosa por su cuenta
+watch(() => form.unidad_base_codigo, (nueva, anterior) => {
+    const principal = form.presentaciones.find((p) => p.es_default)
+    if (principal && (principal.unidad_codigo === anterior || !principal.unidad_codigo)) {
+        principal.unidad_codigo = nueva
+    }
+})
+
 // si la presentación se vende en la misma unidad base es la "suelta": equivale a 1, sin preguntar
 const esSuelta = (pres) => pres.unidad_codigo === form.unidad_base_codigo
 watch(() => form.presentaciones.map((p) => p.unidad_codigo + '|' + form.unidad_base_codigo), () => {
