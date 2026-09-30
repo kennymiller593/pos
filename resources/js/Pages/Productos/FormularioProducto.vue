@@ -156,6 +156,12 @@ const pluralUnidad = (nombre) => (/n$/i.test(nombre) ? `${nombre}es` : `${nombre
 const unidadBasePlural = computed(() => pluralUnidad(nombreUnidad(form.unidad_base_codigo)))
 const unidadBaseSingular = computed(() => nombreUnidad(form.unidad_base_codigo).toLowerCase())
 
+// si la presentación se vende en la misma unidad base es la "suelta": equivale a 1, sin preguntar
+const esSuelta = (pres) => pres.unidad_codigo === form.unidad_base_codigo
+watch(() => form.presentaciones.map((p) => p.unidad_codigo + '|' + form.unidad_base_codigo), () => {
+    form.presentaciones.forEach((p) => { if (esSuelta(p)) p.factor_conversion = 1 })
+})
+
 // como se verá en el POS y en el ticket (la presentación "Unidad" no se agrega al nombre)
 const comoSeVera = (pres) => {
     const producto = form.nombre.trim() || 'Nombre del producto'
@@ -428,10 +434,17 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         </select>
                                     </div>
                                     <div>
-                                        <label :class="claseLabel">{{ unidadBasePlural }} que trae *</label>
-                                        <input v-model="pres.factor_conversion" type="number" step="0.0001" min="0" :class="claseInput" />
-                                        <p class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
-                                            1 si se vende suelto por {{ unidadBaseSingular }}; 50 si el saco trae 50 {{ unidadBasePlural.toLowerCase() }}.
+                                        <label :class="claseLabel">Equivalencia *</label>
+                                        <div v-if="esSuelta(pres)" class="flex h-10 items-center rounded-xl bg-stone-50 px-3 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                                            Unidad suelta · 1 {{ unidadBaseSingular }}
+                                        </div>
+                                        <div v-else class="flex items-center gap-2">
+                                            <span class="shrink-0 text-sm whitespace-nowrap text-neutral-600 dark:text-neutral-300">1 {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }} =</span>
+                                            <input v-model="pres.factor_conversion" type="number" step="0.0001" min="0" :class="[claseInput, 'w-24 shrink-0 text-center']" />
+                                            <span class="min-w-0 truncate text-sm text-neutral-600 dark:text-neutral-300">{{ unidadBasePlural.toLowerCase() }}</span>
+                                        </div>
+                                        <p v-if="!esSuelta(pres)" class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
+                                            No es el stock: es cuántos {{ unidadBasePlural.toLowerCase() }} tiene cada {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }}. El stock entra por compras.
                                         </p>
                                         <p v-if="form.errors[`presentaciones.${i}.factor_conversion`]" :class="claseError">{{ form.errors[`presentaciones.${i}.factor_conversion`] }}</p>
                                     </div>
