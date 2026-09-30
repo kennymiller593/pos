@@ -11,6 +11,7 @@ import {
     Package,
     Power,
     Receipt,
+    ScrollText,
     ShoppingCart,
     Store,
     Users,
@@ -204,6 +205,13 @@ const claseBoton =
                         <p class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">Alta: {{ fechaLarga(empresa.creado_en) }}</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
+                        <Link
+                            :href="`/admin/empresas/${empresa.id}/auditoria`"
+                            class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-stone-300 px-3 text-xs font-semibold hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        >
+                            <ScrollText class="size-3.5" />
+                            Ver auditoría
+                        </Link>
                         <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" :class="empresa.activo ? VERDE : GRIS">
                             {{ empresa.activo ? 'Activa' : 'Desactivada' }}
                         </span>

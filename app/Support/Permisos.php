@@ -54,6 +54,12 @@ final class Permisos
         'empresa.gestionar' => 'Configurar la empresa y la facturación',
     ];
 
+    /**
+     * Permisos que por ahora solo ejerce la plataforma (superadmin): ningun rol de empresa
+     * los tiene, aunque sigan en DESCRIPCIONES. Para devolverselos al dueño, basta quitarlos de aqui.
+     */
+    private const RESERVADOS_PLATAFORMA = ['auditoria.ver'];
+
     /** '*' = todos los permisos. */
     private const POR_ROL = [
         'admin' => '*',
@@ -89,8 +95,9 @@ final class Permisos
     public static function deRol(?string $rol): array
     {
         $permisos = self::POR_ROL[$rol] ?? [];
+        $permisos = $permisos === '*' ? array_keys(self::DESCRIPCIONES) : $permisos;
 
-        return $permisos === '*' ? array_keys(self::DESCRIPCIONES) : $permisos;
+        return array_values(array_diff($permisos, self::RESERVADOS_PLATAFORMA));
     }
 
     public static function tiene(?string $rol, string $permiso): bool

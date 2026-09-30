@@ -85,7 +85,9 @@ class PermisosTest extends TestCase
 
     public function test_el_admin_tiene_todos_los_permisos_y_los_demas_solo_los_suyos(): void
     {
-        $this->assertSame(array_keys(Permisos::DESCRIPCIONES), $this->admin->permisos());
+        // todos, salvo los reservados por ahora a la plataforma (la auditoría)
+        $this->assertSame(array_values(array_diff(array_keys(Permisos::DESCRIPCIONES), ['auditoria.ver'])), $this->admin->permisos());
+        $this->assertFalse($this->admin->can('auditoria.ver'));
         $this->assertTrue($this->cajero->can('pos.vender'));
         $this->assertFalse($this->cajero->can('stock.ajustar'));
         $this->assertTrue($this->almacenero->can('stock.ajustar'));

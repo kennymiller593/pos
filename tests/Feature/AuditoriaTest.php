@@ -130,13 +130,27 @@ class AuditoriaTest extends TestCase
         $this->assertSame('Vendedor', $evento->detalle['cambios']['rol']['a'] ?? null);
     }
 
-    public function test_solo_el_admin_ve_la_auditoria(): void
+    public function test_por_ahora_la_auditoria_solo_la_ve_el_superadmin_desde_el_panel(): void
     {
         $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(10000, 99999).'@test.local');
 
+        // ni el cajero ni el dueño (queda reservada a la plataforma; el menú tampoco la muestra)
         $this->actingAs($cajero)->get('/auditoria')->assertForbidden();
-        $this->actingAs($this->admin)->get('/auditoria')->assertInertia(fn (Assert $pagina) => $pagina
-            ->component('Auditoria/Index')
-        );
+        $this->actingAs($this->admin)->get('/auditoria')->assertForbidden();
+        $this->actingAs($this->admin)->get('/dashboard')
+            ->assertInertia(fn (Assert $p) => $p->where('auth.user.permisos', fn ($permisos) => ! collect($permisos)->contains('auditoria.ver')));
+
+        // el superadmin la ve por empresa desde el panel, con los mismos filtros
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $this->actingAs($this->admin->fresh())->get("/admin/empresas/{$this->empresa->id}/auditoria?accion=usuario.creado")
+            ->assertOk()->assertInertia(fn (Assert $p) => $p
+                ->component('Auditoria/Index')
+                ->where('empresa.id', $this->empresa->id)
+                ->where('base', "/admin/empresas/{$this->empresa->id}/auditoria")
+                ->where('filtros.accion', 'usuario.creado'));
+
+        // un admin de empresa no llega a la del panel
+        $this->admin->forceFill(['es_superadmin' => false])->save();
+        $this->actingAs($this->admin->fresh())->get("/admin/empresas/{$this->empresa->id}/auditoria")->assertForbidden();
     }
 }

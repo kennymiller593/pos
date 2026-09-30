@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Auditoria;
+use App\Models\Empresa;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,7 +32,20 @@ class AuditoriaController extends Controller
 
     public function index(Request $request): Response
     {
-        $empresaId = $request->user()->empresa_id;
+        return $this->listar($request, $request->user()->empresa_id);
+    }
+
+    /** Auditoria de una empresa vista desde el panel de la plataforma. */
+    public function deEmpresa(Request $request, Empresa $empresa): Response
+    {
+        return $this->listar($request, $empresa->id, [
+            'empresa' => ['id' => $empresa->id, 'razon_social' => $empresa->razon_social],
+            'base' => "/admin/empresas/{$empresa->id}/auditoria",
+        ]);
+    }
+
+    private function listar(Request $request, string $empresaId, array $extra = []): Response
+    {
         $filtros = $request->only(['accion', 'usuario_id', 'desde', 'hasta']);
 
         $registros = Auditoria::query()
@@ -58,6 +72,7 @@ class AuditoriaController extends Controller
             'filtros' => $filtros,
             'acciones' => collect(self::ACCIONES)->map(fn ($label, $valor) => ['valor' => $valor, 'label' => $label])->values(),
             'usuarios' => Usuario::where('empresa_id', $empresaId)->orderBy('nombre_completo')->get(['id', 'nombre_completo']),
+            ...$extra,
         ]);
     }
 

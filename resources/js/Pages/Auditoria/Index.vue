@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ScrollText } from '@lucide/vue'
+import { ArrowLeft, ScrollText } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
 const props = defineProps({
@@ -9,6 +9,9 @@ const props = defineProps({
     filtros: { type: Object, default: () => ({}) },
     acciones: { type: Array, required: true },
     usuarios: { type: Array, required: true },
+    // desde el panel de la plataforma: empresa consultada y URL base de los filtros
+    empresa: { type: Object, default: null },
+    base: { type: String, default: '/auditoria' },
 })
 
 const COLORES_ACCION = {
@@ -33,7 +36,7 @@ const desde = ref(props.filtros.desde ?? '')
 const hasta = ref(props.filtros.hasta ?? '')
 
 watch([accion, usuarioId, desde, hasta], () => {
-    router.get('/auditoria', {
+    router.get(props.base, {
         accion: accion.value || undefined,
         usuario_id: usuarioId.value || undefined,
         desde: desde.value || undefined,
@@ -46,7 +49,16 @@ const claseInput =
 </script>
 
 <template>
-    <AppLayout titulo="Auditoría">
+    <AppLayout :titulo="empresa ? `Auditoría · ${empresa.razon_social}` : 'Auditoría'">
+        <Link
+            v-if="empresa"
+            :href="`/admin/empresas/${empresa.id}`"
+            class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+        >
+            <ArrowLeft class="size-4" />
+            {{ empresa.razon_social }}
+        </Link>
+
         <!-- Filtros -->
         <div class="mb-4 flex flex-wrap items-center gap-2">
             <select v-model="accion" :class="claseInput">
