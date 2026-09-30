@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Empresa;
 use App\Models\Plan;
+use App\Models\Rol;
 use App\Models\Rubro;
 use App\Models\Suscripcion;
 use App\Models\Usuario;
@@ -203,6 +204,87 @@ class SuperadminTest extends TestCase
         $this->assertFalse($this->admin->fresh()->es_superadmin);
 
         $this->artisan('superadmin:migrar', ['email_actual' => $this->admin->email, 'email_nuevo' => 'otro@inkanet.pro'])->assertFailed();
+    }
+
+    private function duenoDeOtra(string $rol = 'admin', bool $activo = true): Usuario
+    {
+        return Usuario::create([
+            'empresa_id' => $this->otra->id,
+            'rol_id' => Rol::where('codigo', $rol)->value('id'),
+            'email' => 'dueno'.random_int(10000, 99999).'@otra.local',
+            'password_hash' => 'clave12345',
+            'nombre_completo' => 'Dueño Otra',
+            'activo' => $activo,
+            'email_verificado_en' => now(),
+        ]);
+    }
+
+    public function test_el_superadmin_entra_como_dueno_y_vuelve_a_la_plataforma(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $dueno = $this->duenoDeOtra();
+
+        $this->actingAs($this->admin->fresh())->post("/admin/empresas/{$this->otra->id}/entrar")
+            ->assertRedirect('/dashboard')->assertSessionHas('success');
+        $this->assertAuthenticatedAs($dueno);
+
+        // ve la empresa como el dueño, con la franja de soporte
+        $this->get('/dashboard')->assertOk()->assertInertia(fn ($p) => $p
+            ->where('auth.user.id', $dueno->id)
+            ->where('impersonacion.usuario', 'Dueño Otra')
+            ->where('impersonacion.superadmin', $this->admin->nombre_completo));
+        $this->get('/pos')->assertOk();
+
+        // queda registrado en la auditoría de la plataforma y de la empresa
+        $this->assertDatabaseHas('auditoria', ['empresa_id' => $this->empresa->id, 'accion' => 'plataforma.entro_como', 'entidad_id' => $dueno->id]);
+        $this->assertDatabaseHas('auditoria', ['empresa_id' => $this->otra->id, 'accion' => 'soporte.ingreso', 'usuario_id' => $this->admin->id]);
+
+        // en modo soporte no se cambian contraseñas ni se eliminan usuarios
+        $cajero = $this->duenoDeOtra('cajero');
+        $this->put("/usuarios/{$cajero->id}", [
+            'nombre_completo' => $cajero->nombre_completo, 'email' => $cajero->email, 'rol_id' => $cajero->rol_id,
+            'sucursal_ids' => [], 'password' => 'Nueva-12345', 'password_confirmation' => 'Nueva-12345', 'activo' => true,
+        ])->assertSessionHas('error', fn ($m) => str_contains($m, 'soporte'));
+        $this->delete("/usuarios/{$cajero->id}")->assertSessionHas('error', fn ($m) => str_contains($m, 'soporte'));
+        $this->assertDatabaseHas('usuarios', ['id' => $cajero->id]);
+
+        // vuelve a la plataforma
+        $this->post('/volver-plataforma')->assertRedirect('/admin/empresas');
+        $this->assertAuthenticatedAs($this->admin);
+        $this->get('/admin/empresas')->assertOk()->assertInertia(fn ($p) => $p->where('impersonacion', null));
+        $this->assertDatabaseHas('auditoria', ['empresa_id' => $this->otra->id, 'accion' => 'soporte.salida']);
+    }
+
+    public function test_entrar_como_valida_usuario_y_permisos(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $super = $this->actingAs($this->admin->fresh());
+
+        // sin administrador activo no hay con quién entrar
+        $super->post("/admin/empresas/{$this->otra->id}/entrar")->assertSessionHas('error', fn ($m) => str_contains($m, 'administrador activo'));
+        $this->assertAuthenticatedAs($this->admin);
+
+        // un usuario de otra empresa o inactivo no vale
+        $inactivo = $this->duenoDeOtra('admin', activo: false);
+        $super->post("/admin/empresas/{$this->otra->id}/entrar", ['usuario_id' => $inactivo->id])->assertSessionHas('error');
+        $super->post("/admin/empresas/{$this->otra->id}/entrar", ['usuario_id' => $this->admin->id])->assertSessionHas('error');
+
+        // solo el superadmin puede entrar como otro
+        $cajero = $this->crearUsuario('cajero', 'caj'.random_int(10000, 99999).'@test.local');
+        $this->actingAs($cajero)->post("/admin/empresas/{$this->otra->id}/entrar")->assertForbidden();
+    }
+
+    public function test_la_sesion_como_dueno_expira_a_las_dos_horas(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $dueno = $this->duenoDeOtra();
+
+        $this->actingAs($this->admin->fresh())->post("/admin/empresas/{$this->otra->id}/entrar")->assertRedirect('/dashboard');
+        $this->assertAuthenticatedAs($dueno);
+
+        $this->travel(3)->hours();
+        $this->get('/pos')->assertRedirect('/admin/empresas')->assertSessionHas('error', fn ($m) => str_contains($m, 'expiró'));
+        $this->assertAuthenticatedAs($this->admin);
     }
 
     public function test_el_superadmin_no_queda_bloqueado_por_su_propia_suscripcion(): void

@@ -17,6 +17,8 @@ class AuditoriaController extends Controller
         'usuario.creado' => 'Usuario creado',
         'usuario.actualizado' => 'Usuario actualizado',
         'caja.cierre_con_diferencia' => 'Cierre de caja con diferencia',
+        'soporte.ingreso' => 'Soporte de inkaPos entró a la cuenta',
+        'soporte.salida' => 'Soporte de inkaPos salió de la cuenta',
     ];
 
     private const ETIQUETAS_CAMPO = [
@@ -48,7 +50,7 @@ class AuditoriaController extends Controller
                 'usuario' => $registro->usuario?->nombre_completo ?? '—',
                 'accion' => $registro->accion,
                 'accion_label' => self::ACCIONES[$registro->accion] ?? $registro->accion,
-                'descripcion' => $this->describir($registro),
+                'descripcion' => $this->describir($registro).(isset($registro->detalle['_soporte']) ? " — hecho por soporte de inkaPos ({$registro->detalle['_soporte']})" : ''),
             ]);
 
         return Inertia::render('Auditoria/Index', [
@@ -97,7 +99,9 @@ class AuditoriaController extends Controller
                 ($d['diferencia'] ?? 0) > 0 ? 'sobran' : 'faltan',
                 $soles(abs($d['diferencia'] ?? 0)),
             ),
-            default => json_encode($d, JSON_UNESCAPED_UNICODE) ?: '',
+            'soporte.ingreso' => sprintf('%s entró como %s para dar soporte', $d['soporte'] ?? 'Soporte', $d['como'] ?? '?'),
+            'soporte.salida' => sprintf('%s salió de la cuenta de %s', $d['soporte'] ?? 'Soporte', $d['como'] ?? '?'),
+            default => json_encode(array_diff_key($d, ['_soporte' => 1]), JSON_UNESCAPED_UNICODE) ?: '',
         };
     }
 }

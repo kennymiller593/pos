@@ -26,7 +26,9 @@ class SuscripcionVigente
 
         $empresa = $usuario->empresa;
 
-        if (! $empresa || ! $empresa->activo) {
+        $soporte = $request->session()->has(\App\Services\ImpersonacionService::SESION);
+
+        if (! $empresa || (! $empresa->activo && ! $soporte)) {
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -35,7 +37,7 @@ class SuscripcionVigente
         }
 
         // el superadmin de la plataforma no depende de la suscripcion de su propia empresa
-        if ($usuario->es_superadmin || $request->routeIs('suscripcion.*', 'logout') || $this->suscripciones->vigente($empresa)) {
+        if ($usuario->es_superadmin || $request->routeIs('suscripcion.*', 'logout', 'plataforma.volver') || $this->suscripciones->vigente($empresa)) {
             return $next($request);
         }
 

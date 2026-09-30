@@ -3,6 +3,7 @@
 use App\Http\Middleware\CabecerasSeguridad;
 use App\Http\Middleware\CorreoVerificado;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ImpersonacionVigente;
 use App\Http\Middleware\SoloPlataforma;
 use App\Http\Middleware\SuscripcionVigente;
 use App\Http\Middleware\UsuarioActivo;
@@ -30,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             CabecerasSeguridad::class,
             UsuarioActivo::class,
+            ImpersonacionVigente::class,
             SoloPlataforma::class,
             SuscripcionVigente::class,
             CorreoVerificado::class,

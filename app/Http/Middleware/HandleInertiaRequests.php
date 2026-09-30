@@ -42,6 +42,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => config('app.name'),
+            // sesion "entrar como" del superadmin (franja superior con el boton para volver)
+            'impersonacion' => fn () => app(\App\Services\ImpersonacionService::class)->activa($request),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

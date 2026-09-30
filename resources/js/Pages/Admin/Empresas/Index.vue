@@ -2,8 +2,9 @@
 import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Building2, CalendarPlus, CheckCircle2, Search } from '@lucide/vue'
+import { Building2, CalendarPlus, CheckCircle2, LogIn, Search } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { useConfirmar } from '@/composables/confirmar'
 
 const props = defineProps({
     empresas: { type: Object, required: true },
@@ -77,6 +78,20 @@ function abrir(e) {
     router.visit(`/admin/empresas/${e.id}`)
 }
 
+// "entrar como": abre sesión como el dueño de la empresa para dar soporte (queda en auditoría)
+const { confirmar } = useConfirmar()
+const entrando = ref(null)
+async function entrarComoDueno(e) {
+    const ok = await confirmar({
+        titulo: `Entrar a ${e.razon_social}`,
+        mensaje: 'Verás el sistema como su administrador, sin su contraseña. Quedará registrado en la auditoría y podrás volver a la plataforma cuando quieras.',
+        textoConfirmar: 'Entrar como dueño',
+    })
+    if (!ok) return
+    entrando.value = e.id
+    router.post(`/admin/empresas/${e.id}/entrar`, {}, { onFinish: () => { entrando.value = null } })
+}
+
 const tarjetas = [
     { clave: 'empresas', label: 'Empresas registradas', icon: Building2 },
     { clave: 'activas', label: 'Empresas activas', icon: CheckCircle2 },
@@ -140,6 +155,7 @@ const claseInput =
                             <th class="px-4 py-3.5 font-semibold tracking-wider">SUNAT</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Alta</th>
                             <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
+                            <th class="px-4 py-3.5"><span class="sr-only">Acciones</span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
@@ -202,6 +218,18 @@ const claseInput =
                                 >
                                     {{ e.activo ? 'Activa' : 'Desactivada' }}
                                 </span>
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <button
+                                    type="button"
+                                    :disabled="entrando === e.id"
+                                    class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-200 px-2.5 text-xs font-semibold whitespace-nowrap text-indigo-700 hover:bg-indigo-50 disabled:opacity-60 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                                    title="Abrir sesión como el administrador de la empresa"
+                                    @click.stop="entrarComoDueno(e)"
+                                >
+                                    <LogIn class="size-3.5" />
+                                    Entrar
+                                </button>
                             </td>
                         </tr>
                     </tbody>

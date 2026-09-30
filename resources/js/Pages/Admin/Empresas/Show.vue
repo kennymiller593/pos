@@ -1,12 +1,13 @@
 <script setup>
 import { computed } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import {
     ArrowLeft,
     Boxes,
     CalendarClock,
     CalendarPlus,
     CreditCard,
+    LogIn,
     Package,
     Power,
     Receipt,
@@ -27,6 +28,16 @@ const props = defineProps({
 })
 
 const { confirmar } = useConfirmar()
+
+// "entrar como": abre sesión como ese usuario para dar soporte (queda en auditoría)
+async function entrarComo(u) {
+    const ok = await confirmar({
+        titulo: `Entrar como ${u.nombre_completo}`,
+        mensaje: `Verás ${props.empresa.razon_social} tal como la ve ${u.nombre_completo}, sin su contraseña. Quedará registrado en la auditoría y podrás volver a la plataforma cuando quieras.`,
+        textoConfirmar: 'Entrar como',
+    })
+    if (ok) router.post(`/admin/empresas/${props.empresa.id}/entrar`, { usuario_id: u.id })
+}
 
 // ---- formato ----
 // 'YYYY-MM-DD' como fecha local (evita el desfase de un dia por UTC)
@@ -407,11 +418,12 @@ const claseBoton =
                                 <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
                                 <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Correo confirmado</th>
                                 <th class="px-4 py-3.5 font-semibold tracking-wider">Alta</th>
+                                <th class="px-4 py-3.5"><span class="sr-only">Acciones</span></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-if="!usuarios.length">
-                                <td colspan="6" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400"><div class="sticky left-4 max-w-[calc(100cqw-2rem)]">Sin usuarios.</div></td>
+                                <td colspan="7" class="px-4 py-10 text-center text-neutral-500 dark:text-neutral-400"><div class="sticky left-4 max-w-[calc(100cqw-2rem)]">Sin usuarios.</div></td>
                             </tr>
                             <tr v-for="u in usuarios" :key="u.id">
                                 <td class="px-4 py-3 font-medium">{{ u.nombre_completo }}</td>
@@ -428,6 +440,18 @@ const claseBoton =
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-neutral-500 dark:text-neutral-400">{{ fechaCorta(u.creado_en) }}</td>
+                                <td class="px-4 py-3 text-right">
+                                    <button
+                                        v-if="u.activo"
+                                        type="button"
+                                        class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-200 px-2.5 text-xs font-semibold whitespace-nowrap text-indigo-700 hover:bg-indigo-50 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                                        :title="`Abrir sesión como ${u.nombre_completo}`"
+                                        @click="entrarComo(u)"
+                                    >
+                                        <LogIn class="size-3.5" />
+                                        Entrar como
+                                    </button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>

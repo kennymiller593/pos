@@ -8,6 +8,7 @@ use App\Models\Auditoria;
 use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\Usuario;
+use App\Services\ImpersonacionService;
 use App\Services\SuscripcionService;
 use App\Support\Permisos;
 use Illuminate\Http\RedirectResponse;
@@ -106,6 +107,12 @@ class UsuarioController extends Controller
         abort_if($usuario->es_superadmin, 403, 'La cuenta de plataforma no se administra desde aquí.');
 
         $datos = $this->validar($request, $usuario);
+
+        // en modo soporte ("entrar como") no se cambian contraseñas ni correos de nadie
+        if ($request->session()->has(ImpersonacionService::SESION)
+            && (filled($datos['password'] ?? null) || $datos['email'] !== $usuario->email)) {
+            return back()->with('error', 'Mientras entras como soporte no puedes cambiar contraseñas ni correos.');
+        }
         $esUnoMismo = $usuario->id === $request->user()->id;
 
         if ($esUnoMismo && ! $datos['activo']) {
@@ -179,6 +186,10 @@ class UsuarioController extends Controller
 
         if ($usuario->id === $request->user()->id) {
             return back()->with('error', 'No puedes eliminarte a ti mismo.');
+        }
+
+        if ($request->session()->has(ImpersonacionService::SESION)) {
+            return back()->with('error', 'Mientras entras como soporte no puedes eliminar usuarios.');
         }
 
         if ($usuario->es_superadmin) {

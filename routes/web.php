@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CuentaController as AdminCuentaController;
 use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
+use App\Http\Controllers\Admin\ImpersonacionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
@@ -89,6 +90,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
     Route::get('/notificaciones', [NotificacionController::class, 'index'])->name('notificaciones');
 
+    // el superadmin vuelve a la plataforma tras "entrar como" (accesible aunque la empresa este vencida o desactivada)
+    Route::post('/volver-plataforma', [ImpersonacionController::class, 'salir'])->name('plataforma.volver');
+
     // accesible aunque la suscripcion haya vencido (ver SuscripcionVigente)
     Route::get('/suscripcion', [SuscripcionController::class, 'index'])->name('suscripcion.index');
 
@@ -100,6 +104,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/plan', [AdminEmpresaController::class, 'activarPlan'])->name('empresas.plan');
         Route::post('/empresas/{empresa}/extender', [AdminEmpresaController::class, 'extender'])->name('empresas.extender');
         Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
+        Route::post('/empresas/{empresa}/entrar', [ImpersonacionController::class, 'entrar'])->name('empresas.entrar');
         Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
         Route::post('/planes', [AdminPlanController::class, 'store'])->name('planes.store');
         Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');

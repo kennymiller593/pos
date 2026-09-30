@@ -28,6 +28,7 @@ import {
     PanelLeftOpen,
     ReceiptText,
     ScrollText,
+    ShieldCheck,
     Settings,
     ShoppingCart,
     Sparkles,
@@ -36,6 +37,7 @@ import {
     Sun,
     Tags,
     Truck,
+    Undo2,
     UserCog,
     Users,
     Wallet,
@@ -51,6 +53,14 @@ defineProps({
 const page = usePage()
 const usuario = computed(() => page.props.auth?.user ?? null)
 const empresa = computed(() => usuario.value?.empresa ?? null)
+// sesión "entrar como" del superadmin: franja superior fija con el botón para volver
+const impersonacion = computed(() => page.props.impersonacion ?? null)
+const volviendo = ref(false)
+function volverPlataforma() {
+    volviendo.value = true
+    router.post('/volver-plataforma', {}, { onFinish: () => { volviendo.value = false } })
+}
+
 // el superadmin es una cuenta exclusiva de la plataforma: sin empresa, sucursal ni módulos de venta
 const esPlataforma = computed(() => !!usuario.value?.es_superadmin)
 const nombreEmpresa = computed(() => (esPlataforma.value ? 'inkaPos' : empresa.value?.nombre_comercial || empresa.value?.razon_social || page.props.appName || 'inkaPos'))
@@ -370,9 +380,26 @@ watch(
         <!-- Contenido -->
         <div class="flex min-h-screen min-w-0 flex-col transition-all duration-200"
             :class="colapsado ? 'lg:pl-[4.5rem]' : 'lg:pl-64'">
+            <!-- Franja de soporte: el superadmin está dentro de una empresa -->
+            <div v-if="impersonacion"
+                class="sticky top-0 z-30 flex min-h-10 flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-indigo-700 px-4 py-1.5 text-sm text-white dark:bg-indigo-600">
+                <ShieldCheck class="size-4 shrink-0" />
+                <span>
+                    Estás viendo <strong>{{ impersonacion.empresa }}</strong> como <strong>{{ impersonacion.usuario }}</strong>
+                    <span class="text-indigo-200">· soporte de {{ impersonacion.superadmin }}</span>
+                </span>
+                <button type="button" :disabled="volviendo"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-lg bg-white/15 px-3 text-xs font-semibold hover:bg-white/25 disabled:opacity-60"
+                    @click="volverPlataforma">
+                    <Undo2 class="size-3.5" />
+                    Volver a la plataforma
+                </button>
+            </div>
+
             <!-- Barra superior -->
             <header
-                class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-[#E2E8F0] bg-white px-4 backdrop-blur-md sm:px-6 dark:border-transparent dark:bg-[#171717]">
+                class="sticky z-20 flex h-16 items-center gap-3 border-b border-[#E2E8F0] bg-white px-4 backdrop-blur-md sm:px-6 dark:border-transparent dark:bg-[#171717]"
+                :class="impersonacion ? 'top-10' : 'top-0'">
                 <button
                     class="grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] hover:text-[#0F172A] lg:hidden dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                     @click="abiertoMovil = true">

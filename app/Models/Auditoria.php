@@ -45,6 +45,12 @@ class Auditoria extends Model
      */
     public static function registrar(Usuario $usuario, string $accion, string $entidad, ?string $entidadId = null, array $detalle = []): void
     {
+        // durante un "entrar como", lo que se haga queda marcado con el nombre del soporte
+        $sesion = app()->bound('request') && request()->hasSession() ? request()->session()->get(\App\Services\ImpersonacionService::SESION) : null;
+        if ($sesion && $sesion['usuario_id'] === $usuario->id) {
+            $detalle['_soporte'] = $sesion['superadmin'];
+        }
+
         try {
             static::create([
                 'empresa_id' => $usuario->empresa_id,
