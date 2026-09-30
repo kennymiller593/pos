@@ -52,7 +52,7 @@ class UnidadMedidaController extends Controller
 
         Auditoria::registrar($request->user(), 'plataforma.unidad_creada', 'unidad_medida', null, $datos);
 
-        return back()->with('success', "Unidad {$unidad->codigo} · {$unidad->descripcion_sunat} creada.");
+        return back()->with('success', "Unidad {$unidad->codigo} - {$unidad->descripcion_sunat} creada.");
     }
 
     public function update(Request $request, UnidadMedida $unidad): RedirectResponse

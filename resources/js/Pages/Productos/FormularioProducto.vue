@@ -147,7 +147,7 @@ const nombreUnidad = (codigo) => props.catalogos.unidades.find((u) => u.codigo =
 // opciones del selector de unidades: "NIU · UNIDAD (BIENES)", buscables por código o nombre
 const opcionesUnidad = computed(() => props.catalogos.unidades.map((u) => ({
     valor: u.codigo,
-    texto: `${u.codigo} · ${u.descripcion_sunat ?? u.nombre.toUpperCase()}`,
+    texto: `${u.codigo} - ${u.descripcion_sunat ?? u.nombre.toUpperCase()}`,
     detalle: u.permite_decimales ? 'decimales' : '',
 })))
 
