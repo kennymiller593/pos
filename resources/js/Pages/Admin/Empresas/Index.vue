@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Building2, CalendarPlus, CheckCircle2, LogIn, Search } from '@lucide/vue'
+import { Building2, CalendarPlus, CheckCircle2, LogIn, ScrollText, Search } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 
@@ -219,7 +219,16 @@ const claseInput =
                                     {{ e.activo ? 'Activa' : 'Desactivada' }}
                                 </span>
                             </td>
-                            <td class="px-4 py-3 text-right">
+                            <td class="px-4 py-3 text-right whitespace-nowrap">
+                                <Link
+                                    :href="`/admin/auditoria/${e.id}`"
+                                    class="mr-1.5 inline-flex h-8 items-center gap-1.5 rounded-lg border border-stone-300 px-2.5 text-xs font-semibold text-neutral-700 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                                    title="Ver la auditoría de esta empresa"
+                                    @click.stop
+                                >
+                                    <ScrollText class="size-3.5" />
+                                    Auditoría
+                                </Link>
                                 <button
                                     type="button"
                                     :disabled="entrando === e.id"
