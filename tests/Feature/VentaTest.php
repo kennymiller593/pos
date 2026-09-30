@@ -62,6 +62,25 @@ class VentaTest extends TestCase
         $this->assertNotNull($pago->apertura_id);
     }
 
+    public function test_la_linea_lleva_la_unidad_de_la_presentacion_vendida(): void
+    {
+        // maíz en kilos (KGM) que también se vende por saco (SA) de 50 kg
+        $producto = $this->crearProducto(precio: 3.00, atributos: ['unidad_base_codigo' => 'KGM', 'permite_fraccion' => true]);
+        $producto->presentaciones()->first()->update(['unidad_codigo' => 'KGM']);
+        $saco = $this->agregarPresentacion($producto, 'Saco x50', 50, 120.00);
+        $saco->update(['unidad_codigo' => 'SA']);
+        $this->darStock($producto, 500, 1.60);
+        $this->abrirCaja();
+
+        $this->venderContado($saco, 1)->assertSessionHas('success');
+        $this->venderContado($producto->presentaciones()->where('es_default', true)->first(), 3)->assertSessionHas('success');
+
+        $unidades = \App\Models\ComprobanteDetalle::whereIn('presentacion_id', $producto->presentaciones()->pluck('id'))
+            ->orderBy('cantidad')->pluck('unidad_codigo', 'descripcion')->all();
+        $this->assertSame(['SA', 'KGM'], array_values($unidades)); // 1 saco = SA, 3 kilos sueltos = KGM
+        $this->assertSame(447.0, $this->stockDe($producto));
+    }
+
     public function test_precio_mayorista_se_aplica_automaticamente_desde_la_cantidad_minima(): void
     {
         $producto = $this->crearProducto(precio: 3.50);
