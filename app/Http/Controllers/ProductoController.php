@@ -51,7 +51,7 @@ class ProductoController extends Controller
             'catalogos' => [
                 'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
                 'marcas' => Marca::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
-                'unidades' => UnidadMedida::orderBy('nombre')->get(['codigo', 'nombre']),
+                'unidades' => UnidadMedida::where('activo', true)->orderBy('descripcion_sunat')->get(['codigo', 'nombre', 'descripcion_sunat', 'permite_decimales']),
                 // vista previa del codigo que tomara el proximo producto (se confirma al guardar)
                 'siguienteCodigo' => Producto::siguienteCodigo($empresaId),
                 'tiposAfectacion' => TipoAfectacionIgv::orderBy('codigo')->get(['codigo', 'nombre']),

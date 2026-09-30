@@ -56,7 +56,7 @@ class ImportacionProductosTest extends TestCase
             ['nombre' => 'Cable UTP Cat6', 'precio_venta' => '1,20', 'precio_compra' => '', 'stock_inicial' => 305, 'unidad' => 'Metro', 'permite_fraccion' => 'SI'],
             ['nombre' => '', 'precio_venta' => 5],
             ['nombre' => 'Sin precio'],
-            ['nombre' => 'Unidad rara', 'precio_venta' => 3, 'unidad' => 'Barriles'],
+            ['nombre' => 'Unidad rara', 'precio_venta' => 3, 'unidad' => 'Frascos'],
             ['nombre' => 'A pérdida', 'precio_venta' => 2, 'precio_compra' => 3],
         ]))->assertOk();
 

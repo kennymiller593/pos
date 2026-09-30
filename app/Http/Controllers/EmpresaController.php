@@ -38,7 +38,8 @@ class EmpresaController extends Controller
                 'entorno_sunat' => $empresa->entorno_sunat,
                 'certificado_vence_en' => $empresa->certificado_vence_en?->toDateString(),
             ],
-            'rubros' => Rubro::orderBy('nombre')->get(['codigo', 'nombre']),
+            // activos, mas el que ya tiene la empresa aunque este desactivado
+            'rubros' => Rubro::where('activo', true)->orWhere('codigo', $empresa->rubro_codigo)->orderBy('nombre')->get(['codigo', 'nombre']),
             'requisitosFacturacion' => $this->requisitosFacturacion($request),
         ]);
     }

@@ -20,7 +20,13 @@ class Rubro extends Model
     protected $fillable = [
         'codigo',
         'nombre',
+        'activo',
     ];
+
+    protected function casts(): array
+    {
+        return ['activo' => 'boolean'];
+    }
 
     public function empresas(): HasMany
     {

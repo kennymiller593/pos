@@ -70,7 +70,7 @@ class ImportacionProductosService
         }
 
         // listas desplegables en unidad, afecto_igv y permite_fraccion
-        $unidades = UnidadMedida::orderBy('nombre')->pluck('nombre')->implode(',');
+        $unidades = UnidadMedida::where('activo', true)->orderBy('nombre')->pluck('nombre')->implode(',');
         $listas = [
             'H' => $unidades,
             'J' => 'SI,EXONERADO,INAFECTO',
@@ -314,9 +314,10 @@ class ImportacionProductosService
     private function contexto(string $empresaId): array
     {
         $unidades = [];
-        foreach (UnidadMedida::all(['codigo', 'nombre']) as $u) {
+        foreach (UnidadMedida::where('activo', true)->get(['codigo', 'nombre', 'descripcion_sunat']) as $u) {
             $unidades[mb_strtolower(Str::ascii($u->nombre))] = $u;
             $unidades[mb_strtolower($u->codigo)] = $u;
+            $unidades[mb_strtolower(Str::ascii((string) $u->descripcion_sunat))] = $u;
         }
 
         return [

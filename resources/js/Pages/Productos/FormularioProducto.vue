@@ -4,6 +4,7 @@ import { useForm, usePage } from '@inertiajs/vue3'
 import { ImagePlus, LoaderCircle, Package, Plus, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
 import { optimizarImagenProducto } from '@/composables/imagenProducto'
+import SelectorBuscable from '@/Components/SelectorBuscable.vue'
 
 const props = defineProps({
     abierto: { type: Boolean, default: false },
@@ -142,6 +143,13 @@ function marcarDefault(indice) {
 
 // ---- nombre de la presentación: automático ("Unidad", "Caja x12"), editable solo a pedido ----
 const nombreUnidad = (codigo) => props.catalogos.unidades.find((u) => u.codigo === codigo)?.nombre ?? 'Unidad'
+
+// opciones del selector de unidades: "NIU · UNIDAD (BIENES)", buscables por código o nombre
+const opcionesUnidad = computed(() => props.catalogos.unidades.map((u) => ({
+    valor: u.codigo,
+    texto: `${u.codigo} · ${u.descripcion_sunat ?? u.nombre.toUpperCase()}`,
+    detalle: u.permite_decimales ? 'decimales' : '',
+})))
 
 function nombreAuto(pres) {
     const factor = Number(pres.factor_conversion)
@@ -331,9 +339,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </div>
                             <div>
                                 <label :class="claseLabel" for="unidad_base">Unidad base *</label>
-                                <select id="unidad_base" v-model="form.unidad_base_codigo" :class="claseInput">
-                                    <option v-for="u in catalogos.unidades" :key="u.codigo" :value="u.codigo">{{ u.nombre }}</option>
-                                </select>
+                                <SelectorBuscable id="unidad_base" v-model="form.unidad_base_codigo" :opciones="opcionesUnidad" :clase-input="claseInput" placeholder="Elige la unidad" />
                                 <p v-if="form.errors.unidad_base_codigo" :class="claseError">{{ form.errors.unidad_base_codigo }}</p>
                             </div>
                             <div>
@@ -438,9 +444,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <div class="grid gap-3 sm:grid-cols-3">
                                     <div>
                                         <label :class="claseLabel">Se vende por *</label>
-                                        <select v-model="pres.unidad_codigo" :class="claseInput">
-                                            <option v-for="u in catalogos.unidades" :key="u.codigo" :value="u.codigo">{{ u.nombre }}</option>
-                                        </select>
+                                        <SelectorBuscable v-model="pres.unidad_codigo" :opciones="opcionesUnidad" :clase-input="claseInput" placeholder="Elige la unidad" />
                                     </div>
                                     <div>
                                         <label :class="claseLabel">Equivalencia *</label>

@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\CuentaController as AdminCuentaController;
 use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
 use App\Http\Controllers\Admin\ImpersonacionController;
+use App\Http\Controllers\Admin\RubroController as AdminRubroController;
+use App\Http\Controllers\Admin\UnidadMedidaController as AdminUnidadMedidaController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
@@ -110,6 +112,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
         Route::post('/planes', [AdminPlanController::class, 'store'])->name('planes.store');
         Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');
+        Route::get('/unidades', [AdminUnidadMedidaController::class, 'index'])->name('unidades.index');
+        Route::post('/unidades', [AdminUnidadMedidaController::class, 'store'])->name('unidades.store');
+        Route::put('/unidades/{unidad}', [AdminUnidadMedidaController::class, 'update'])->name('unidades.update');
+        Route::get('/rubros', [AdminRubroController::class, 'index'])->name('rubros.index');
+        Route::post('/rubros', [AdminRubroController::class, 'store'])->name('rubros.store');
+        Route::put('/rubros/{rubro}', [AdminRubroController::class, 'update'])->name('rubros.update');
         Route::get('/cuenta', [AdminCuentaController::class, 'index'])->name('cuenta');
         Route::post('/cuenta/migrar', [AdminCuentaController::class, 'migrar'])->middleware('throttle:5,1')->name('cuenta.migrar');
     });

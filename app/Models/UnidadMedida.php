@@ -19,13 +19,16 @@ class UnidadMedida extends Model
     protected $fillable = [
         'codigo',
         'nombre',
+        'descripcion_sunat',
         'permite_decimales',
+        'activo',
     ];
 
     protected function casts(): array
     {
         return [
             'permite_decimales' => 'boolean',
+            'activo' => 'boolean',
         ];
     }
 }

@@ -287,6 +287,48 @@ class SuperadminTest extends TestCase
         $this->assertAuthenticatedAs($this->admin);
     }
 
+    public function test_el_superadmin_gestiona_unidades_de_medida(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $super = $this->actingAs($this->admin->fresh());
+
+        $super->get('/admin/unidades')->assertOk()->assertInertia(fn ($p) => $p->component('Admin/Unidades/Index')
+            ->where('unidades', fn ($u) => collect($u)->firstWhere('codigo', 'NIU')['descripcion_sunat'] === 'UNIDAD (BIENES)'));
+
+        $super->post('/admin/unidades', ['codigo' => 'frasco', 'nombre' => 'Frasco', 'descripcion_sunat' => 'Frasco', 'permite_decimales' => false, 'activo' => true])
+            ->assertSessionHasErrors('codigo'); // minusculas: no es un codigo SUNAT
+        $super->post('/admin/unidades', ['codigo' => 'BLI', 'nombre' => 'Blíster', 'descripcion_sunat' => 'blíster', 'permite_decimales' => false, 'activo' => true])
+            ->assertSessionHas('success');
+        $this->assertSame('BLÍSTER', \App\Models\UnidadMedida::find('BLI')->descripcion_sunat);
+
+        // desactivada: deja de ofrecerse en el formulario de productos; NIU nunca se desactiva
+        $super->put('/admin/unidades/BLI', ['nombre' => 'Blíster', 'descripcion_sunat' => 'BLÍSTER', 'permite_decimales' => false, 'activo' => false])->assertSessionHas('success');
+        $super->put('/admin/unidades/NIU', ['nombre' => 'Unidad', 'descripcion_sunat' => 'UNIDAD (BIENES)', 'permite_decimales' => false, 'activo' => false])->assertSessionHas('success');
+        $this->assertTrue(\App\Models\UnidadMedida::find('NIU')->activo);
+
+        $this->admin->forceFill(['es_superadmin' => false])->save();
+        $this->actingAs($this->admin->fresh())->get('/productos')->assertInertia(fn ($p) => $p
+            ->where('catalogos.unidades', fn ($u) => collect($u)->doesntContain('codigo', 'BLI') && collect($u)->contains('codigo', 'NIU')));
+        $this->actingAs($this->admin->fresh())->get('/admin/unidades')->assertForbidden();
+    }
+
+    public function test_el_superadmin_gestiona_rubros(): void
+    {
+        $this->admin->forceFill(['es_superadmin' => true])->save();
+        $super = $this->actingAs($this->admin->fresh());
+
+        $super->post('/admin/rubros', ['nombre' => 'Panadería y pastelería', 'activo' => true])->assertSessionHas('success');
+        $rubro = \App\Models\Rubro::where('nombre', 'Panadería y pastelería')->firstOrFail();
+        $this->assertSame('panaderia_y_past', $rubro->codigo); // slug recortado a 16
+        $super->post('/admin/rubros', ['nombre' => 'Panadería y pastelería', 'activo' => true])->assertSessionHasErrors('nombre');
+
+        $super->put("/admin/rubros/{$rubro->codigo}", ['nombre' => 'Panadería', 'activo' => false])->assertSessionHas('success');
+
+        // desactivado: no se ofrece en el registro
+        $this->app['auth']->guard()->logout();
+        $this->get('/registro')->assertInertia(fn ($p) => $p->where('rubros', fn ($r) => collect($r)->doesntContain('codigo', $rubro->codigo)));
+    }
+
     public function test_el_superadmin_no_queda_bloqueado_por_su_propia_suscripcion(): void
     {
         $this->admin->forceFill(['es_superadmin' => true])->save();

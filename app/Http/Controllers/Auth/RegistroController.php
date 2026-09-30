@@ -26,7 +26,7 @@ class RegistroController extends Controller
     public function create(): Response
     {
         return Inertia::render('Auth/Registro', [
-            'rubros' => Rubro::orderBy('nombre')->get(['codigo', 'nombre']),
+            'rubros' => Rubro::where('activo', true)->orderBy('nombre')->get(['codigo', 'nombre']),
         ]);
     }
 

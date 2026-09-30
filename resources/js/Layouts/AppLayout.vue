@@ -27,6 +27,7 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     ReceiptText,
+    Ruler,
     ScrollText,
     ShieldCheck,
     Settings,
@@ -125,6 +126,8 @@ const menuPlataforma = [
         items: [
             { label: 'Empresas', href: '/admin/empresas', icon: Building2 },
             { label: 'Planes', href: '/admin/planes', icon: CreditCard },
+            { label: 'Unidades de medida', href: '/admin/unidades', icon: Ruler },
+            { label: 'Rubros', href: '/admin/rubros', icon: Tags },
             { label: 'Mi cuenta', href: '/admin/cuenta', icon: UserCog },
         ],
     },
