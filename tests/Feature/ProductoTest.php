@@ -179,6 +179,8 @@ class ProductoTest extends TestCase
     public function test_las_unidades_nuevas_sirven_para_nombrar_presentaciones(): void
     {
         $this->assertSame(['BG', 'BO', 'DZN', 'PK'], UnidadMedida::whereIn('codigo', ['PK', 'DZN', 'BG', 'BO'])->orderBy('codigo')->pluck('codigo')->all());
+        // catalogo 03 de SUNAT ampliado (SQL 012)
+        $this->assertSame(24, UnidadMedida::whereIn('codigo', ['GRM', 'MLT', 'TNE', 'CMT', 'INH', 'FOT', 'MTK', 'MTQ', 'PR', 'CEN', 'MIL', 'BJ', 'CA', 'BLL', 'CY', 'TU', 'RO', 'EV', 'BE', 'SET', 'KT', 'ZZ', 'HUR', 'DAY'])->count());
     }
 
     public function test_rechaza_archivos_que_no_son_imagen(): void

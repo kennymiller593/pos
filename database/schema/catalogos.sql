@@ -107,6 +107,30 @@ INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('DZN', 'Docena', false);
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BG', 'Bolsa', false);
 INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BO', 'Botella', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('GRM', 'Gramo', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('MLT', 'Mililitro', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('TNE', 'Tonelada', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('CMT', 'Centímetro', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('INH', 'Pulgada', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('FOT', 'Pie', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('MTK', 'Metro cuadrado', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('MTQ', 'Metro cúbico', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('PR', 'Par', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('CEN', 'Ciento', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('MIL', 'Millar', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BJ', 'Balde', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('CA', 'Lata', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BLL', 'Barril', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('CY', 'Cilindro', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('TU', 'Tubo', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('RO', 'Rollo', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('EV', 'Sobre', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('BE', 'Fardo', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('SET', 'Juego', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('KT', 'Kit', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('ZZ', 'Servicio', false);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('HUR', 'Hora', true);
+INSERT INTO public.unidades_medida (codigo, nombre, permite_decimales) VALUES ('DAY', 'Día', false);
 
 
 --
