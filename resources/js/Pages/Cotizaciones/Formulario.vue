@@ -209,6 +209,14 @@ function agregarProducto(producto, presentacion = null) {
 
 const presentacionDe = (fila) => fila.producto.presentaciones.find((p) => p.id === fila.presentacion_id)
 
+// botones − / +: de uno en uno, sin bajar del mínimo (para quitar el producto está el tacho)
+// (una cantidad menor a 1, p. ej. 0.5 kg, se escribe en el campo)
+const cantidadMinima = () => 1
+function cambiarCantidad(fila, delta) {
+    const nueva = Math.round((Number(fila.cantidad || 0) + delta) * 1000) / 1000
+    if (nueva > 0) fila.cantidad = nueva
+}
+
 // mismas reglas que el POS: precio mayorista automático desde la cantidad mínima
 const esMayorista = (fila) => {
     const p = presentacionDe(fila)
@@ -346,11 +354,19 @@ const claseLabel = 'mb-1 block text-sm font-medium'
 const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 const claseCelda =
     'h-9 rounded-lg border border-stone-200 bg-white px-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/20 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950'
+// campo compuesto (− cantidad +, "S/ precio"): un solo borde que se ilumina al enfocar cualquiera de sus partes
+const claseGrupo =
+    'flex items-center overflow-hidden rounded-xl border border-stone-200 bg-white transition-colors focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-400/20 dark:border-neutral-700 dark:bg-neutral-950'
+const claseBotonPaso =
+    'grid h-full shrink-0 place-items-center text-[#64748B] transition-colors hover:bg-slate-100 hover:text-[#0F172A] active:bg-slate-200 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
+const claseNumeroGrupo =
+    'h-full w-full min-w-0 flex-1 bg-transparent text-center text-sm font-medium tabular-nums [appearance:textfield] placeholder:font-normal placeholder:text-neutral-400 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
+const claseSoloLectura = '!bg-stone-50 dark:!bg-neutral-900'
 const claseTarjeta = 'rounded-2xl border border-[#E2E8F0] bg-white p-5 sm:p-6 dark:border-neutral-800 dark:bg-neutral-900'
 const claseTituloSeccion = 'mb-5 flex items-center gap-2.5 font-semibold tracking-tight'
 const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
 const clasePrecio = (fila) => (precioCambiado(fila)
-    ? '!border-amber-400 font-semibold text-amber-700 dark:!border-amber-500 dark:text-amber-400'
+    ? '!border-amber-400 text-amber-700 dark:!border-amber-500 dark:text-amber-400'
     : '')
 </script>
 
@@ -539,59 +555,100 @@ const clasePrecio = (fila) => (precioCambiado(fila)
                             <div
                                 v-for="(fila, i) in filas"
                                 :key="fila.presentacion_id"
-                                class="rounded-xl border border-[#E2E8F0] p-3 dark:border-neutral-800"
+                                class="rounded-2xl border border-[#E2E8F0] p-3 dark:border-neutral-800"
                             >
-                                <div class="flex items-start gap-2">
-                                    <span class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-semibold text-[#64748B] dark:bg-neutral-800 dark:text-neutral-400">{{ i + 1 }}</span>
+                                <div class="flex items-start gap-3">
+                                    <div class="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#F8FAFC] text-[#CBD5E1] dark:bg-neutral-800 dark:text-neutral-600">
+                                        <img v-if="fila.producto.imagen_url" :src="fila.producto.imagen_url" :alt="fila.producto.nombre" class="size-full bg-white object-contain" />
+                                        <Package v-else class="size-5" />
+                                    </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-medium">{{ fila.producto.nombre }}</p>
-                                        <p class="font-mono text-xs text-[#94A3B8]">{{ fila.producto.codigo_interno }}</p>
+                                        <p class="text-sm leading-snug font-semibold">{{ fila.producto.nombre }}</p>
+                                        <p class="text-xs text-[#94A3B8]">
+                                            <span class="font-mono">{{ fila.producto.codigo_interno }}</span>
+                                            <template v-if="fila.producto.presentaciones.length === 1"> · {{ presentacionDe(fila).nombre }}</template>
+                                        </p>
                                     </div>
                                     <button
                                         type="button"
-                                        class="grid size-8 shrink-0 place-items-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-950/40"
-                                        title="Quitar"
+                                        class="-mt-1 -mr-1 grid size-9 shrink-0 place-items-center rounded-lg text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                        :aria-label="`Quitar ${fila.producto.nombre}`"
                                         @click="filas.splice(i, 1)"
                                     >
                                         <Trash2 class="size-4" />
                                     </button>
                                 </div>
+
+                                <select
+                                    v-if="fila.producto.presentaciones.length > 1"
+                                    v-model="fila.presentacion_id"
+                                    aria-label="Presentación"
+                                    :class="[claseCelda, 'mt-3 h-10 w-full text-base']"
+                                    @change="alCambiarPresentacion(fila)"
+                                >
+                                    <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
+                                        {{ pres.nombre }} · {{ soles(pres.precio_venta) }}
+                                    </option>
+                                </select>
+
                                 <div class="mt-3 grid grid-cols-2 gap-2">
-                                    <label class="col-span-2 block">
-                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Presentación</span>
-                                        <select v-model="fila.presentacion_id" :class="[claseCelda, 'w-full text-base']" @change="alCambiarPresentacion(fila)">
-                                            <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
-                                                {{ pres.nombre }} · {{ soles(pres.precio_venta) }}
-                                            </option>
-                                        </select>
-                                    </label>
-                                    <label class="block">
+                                    <div>
                                         <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Cantidad</span>
-                                        <input
-                                            v-model="fila.cantidad"
-                                            type="number"
-                                            inputmode="decimal"
-                                            :step="fila.producto.permite_fraccion ? '0.001' : '1'"
-                                            min="0"
-                                            :class="[claseCelda, 'h-10 w-full text-right text-base']"
-                                        />
-                                    </label>
-                                    <label class="block">
-                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Precio unit. (S/)</span>
-                                        <input
-                                            :value="textoPrecio(fila)"
-                                            type="text"
-                                            inputmode="decimal"
-                                            autocomplete="off"
-                                            :readonly="!puede('pos.precio_manual')"
-                                            :class="[claseCelda, 'h-10 w-full text-right text-base read-only:bg-stone-50 dark:read-only:bg-neutral-900', clasePrecio(fila)]"
-                                            @focus="puede('pos.precio_manual') && empezarEdicionPrecio(fila, $event)"
-                                            @input="escribirPrecio(fila, $event.target.value)"
-                                            @blur="terminarEdicionPrecio(fila)"
-                                        />
-                                    </label>
-                                    <label class="col-span-2 block">
-                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Descuento (S/)</span>
+                                        <div :class="[claseGrupo, 'h-11']">
+                                            <button type="button" :class="[claseBotonPaso, 'w-11']" aria-label="Restar" :disabled="Number(fila.cantidad) <= cantidadMinima(fila)" @click="cambiarCantidad(fila, -1)">
+                                                <Minus class="size-4" />
+                                            </button>
+                                            <input
+                                                v-model="fila.cantidad"
+                                                type="number"
+                                                inputmode="decimal"
+                                                :step="fila.producto.permite_fraccion ? '0.001' : '1'"
+                                                min="0"
+                                                aria-label="Cantidad"
+                                                :class="[claseNumeroGrupo, 'text-base']"
+                                                @focus="$event.target.select()"
+                                            />
+                                            <button type="button" :class="[claseBotonPaso, 'w-11']" aria-label="Sumar" @click="cambiarCantidad(fila, 1)">
+                                                <Plus class="size-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span class="mb-1 flex items-center justify-between text-xs text-[#64748B] dark:text-neutral-400">
+                                            Precio unit.
+                                            <button v-if="precioCambiado(fila)" type="button" class="font-medium text-amber-600 dark:text-amber-400" @click="fila.precio = ''">Volver a lista</button>
+                                        </span>
+                                        <div :class="[claseGrupo, 'h-11 px-3', clasePrecio(fila), !puede('pos.precio_manual') && claseSoloLectura]">
+                                            <span class="text-sm text-[#94A3B8]">S/</span>
+                                            <input
+                                                :value="textoPrecio(fila)"
+                                                type="text"
+                                                inputmode="decimal"
+                                                autocomplete="off"
+                                                aria-label="Precio unitario"
+                                                :readonly="!puede('pos.precio_manual')"
+                                                :class="[claseNumeroGrupo, 'text-right text-base']"
+                                                @focus="puede('pos.precio_manual') && empezarEdicionPrecio(fila, $event)"
+                                                @input="escribirPrecio(fila, $event.target.value)"
+                                                @blur="terminarEdicionPrecio(fila)"
+                                                @keydown.enter.prevent="$event.target.blur()"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3 flex items-center justify-between gap-3 border-t border-[#F1F5F9] pt-3 dark:border-neutral-800">
+                                    <button
+                                        v-if="!fila.conDescuento && !(descuentoFila(fila) > 0)"
+                                        type="button"
+                                        class="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-[#64748B] hover:bg-slate-50 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                                        @click="fila.conDescuento = true"
+                                    >
+                                        <Tag class="size-4" />
+                                        Descuento
+                                    </button>
+                                    <div v-else :class="[claseGrupo, 'h-9 w-32 px-2.5', descuentoInvalido(fila) && '!border-red-400']">
+                                        <span class="text-xs whitespace-nowrap text-amber-600 dark:text-amber-400">− S/</span>
                                         <input
                                             v-model="fila.descuento"
                                             type="number"
@@ -599,58 +656,77 @@ const clasePrecio = (fila) => (precioCambiado(fila)
                                             step="0.01"
                                             min="0"
                                             placeholder="0.00"
-                                            :class="[claseCelda, 'h-10 w-full text-right text-base', descuentoInvalido(fila) ? '!border-red-400' : '']"
+                                            aria-label="Descuento"
+                                            :class="[claseNumeroGrupo, 'text-right']"
                                         />
-                                    </label>
-                                </div>
-                                <div class="mt-3 flex items-center justify-between border-t border-[#F1F5F9] pt-2 text-sm dark:border-neutral-800">
-                                    <span class="text-[#64748B] dark:text-neutral-400">
-                                        Importe
-                                        <span v-if="esMayorista(fila) && !precioCambiado(fila)" class="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">Mayorista</span>
-                                    </span>
-                                    <span class="font-semibold tabular-nums">{{ soles(totalFila(fila)) }}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <span v-if="esMayorista(fila) && !precioCambiado(fila)" class="mr-1.5 rounded-full bg-emerald-100 px-2 py-0.5 align-middle text-[11px] font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">Mayorista</span>
+                                        <span class="align-middle text-base font-bold tabular-nums">{{ soles(totalFila(fila)) }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- PC y tablet: tabla -->
                         <div v-if="filas.length" class="@container -mx-5 hidden overflow-x-auto sm:-mx-6 md:block">
-                            <table class="w-full min-w-[50rem] text-left text-sm">
+                            <table class="w-full min-w-[44rem] text-left text-sm">
                                 <thead class="border-y border-[#E2E8F0] bg-slate-50 text-xs text-[#64748B] dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400">
                                     <tr>
-                                        <th class="w-10 py-2.5 pl-5 font-semibold sm:pl-6">#</th>
-                                        <th class="px-3 py-2.5 font-semibold">Producto</th>
-                                        <th class="px-3 py-2.5 font-semibold">Presentación</th>
-                                        <th class="px-2 py-2.5 text-right font-semibold">Cant.</th>
-                                        <th class="px-2 py-2.5 text-right font-semibold">Precio unit. (S/)</th>
-                                        <th class="px-2 py-2.5 text-right font-semibold">Dscto. (S/)</th>
+                                        <th class="py-2.5 pl-5 font-semibold sm:pl-6">Producto</th>
+                                        <th class="px-2 py-2.5 text-center font-semibold">Cantidad</th>
+                                        <th class="px-2 py-2.5 text-right font-semibold">Precio unit.</th>
+                                        <th class="px-2 py-2.5 text-right font-semibold">Descuento</th>
                                         <th class="px-2 py-2.5 text-right font-semibold">Importe</th>
-                                        <th class="py-2.5 pr-5 sm:pr-6" />
+                                        <th class="w-12 py-2.5 pr-5 sm:pr-6" />
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-[#F1F5F9] dark:divide-neutral-800">
-                                    <tr v-for="(fila, i) in filas" :key="fila.presentacion_id">
-                                        <td class="py-3 pl-5 text-[#94A3B8] sm:pl-6">{{ i + 1 }}</td>
-                                        <td class="min-w-48 px-3 py-3">
-                                            <p class="font-medium">{{ fila.producto.nombre }}</p>
-                                            <p class="font-mono text-xs text-[#94A3B8]">
-                                                {{ fila.producto.codigo_interno }}
-                                                <span v-if="fila.producto.afectacion !== 'gravado'" class="ml-1 font-sans text-[#64748B] capitalize dark:text-neutral-400">· {{ fila.producto.afectacion }}</span>
-                                            </p>
+                                    <tr v-for="(fila, i) in filas" :key="fila.presentacion_id" class="group transition-colors hover:bg-slate-50/60 dark:hover:bg-neutral-800/30">
+                                        <td class="py-3 pl-5 sm:pl-6">
+                                            <div class="flex min-w-48 items-center gap-3">
+                                                <div class="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#F8FAFC] text-[#CBD5E1] dark:bg-neutral-800 dark:text-neutral-600">
+                                                    <img v-if="fila.producto.imagen_url" :src="fila.producto.imagen_url" :alt="fila.producto.nombre" class="size-full bg-white object-contain" />
+                                                    <Package v-else class="size-5" />
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <p class="leading-snug font-semibold">{{ fila.producto.nombre }}</p>
+                                                    <p class="text-xs text-[#94A3B8]">
+                                                        <span class="font-mono">{{ fila.producto.codigo_interno }}</span>
+                                                        <template v-if="fila.producto.presentaciones.length === 1"> · {{ presentacionDe(fila).nombre }}</template>
+                                                        <span v-if="fila.producto.afectacion !== 'gravado'" class="capitalize"> · {{ fila.producto.afectacion }}</span>
+                                                    </p>
+                                                    <!-- varias presentaciones (unidad, caja, saco...): se elige aquí mismo -->
+                                                    <select
+                                                        v-if="fila.producto.presentaciones.length > 1"
+                                                        v-model="fila.presentacion_id"
+                                                        aria-label="Presentación"
+                                                        class="mt-1 h-7 max-w-full rounded-lg border border-stone-200 bg-white pr-6 pl-2 text-xs font-medium focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                                        @change="alCambiarPresentacion(fila)"
+                                                    >
+                                                        <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">{{ pres.nombre }} · {{ soles(pres.precio_venta) }}</option>
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td class="px-2 py-3">
-                                            <select v-model="fila.presentacion_id" :class="[claseCelda, 'max-w-44']" @change="alCambiarPresentacion(fila)">
-                                                <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">{{ pres.nombre }}</option>
-                                            </select>
-                                        </td>
-                                        <td class="px-2 py-3">
-                                            <input
-                                                v-model="fila.cantidad"
-                                                type="number"
-                                                :step="fila.producto.permite_fraccion ? '0.001' : '1'"
-                                                min="0"
-                                                :class="[claseCelda, 'ml-auto block w-16 text-right']"
-                                            />
+                                            <div :class="[claseGrupo, 'mx-auto h-10 w-28']">
+                                                <button type="button" :class="[claseBotonPaso, 'w-9']" aria-label="Restar" title="Restar" :disabled="Number(fila.cantidad) <= cantidadMinima(fila)" @click="cambiarCantidad(fila, -1)">
+                                                    <Minus class="size-3.5" />
+                                                </button>
+                                                <input
+                                                    v-model="fila.cantidad"
+                                                    type="number"
+                                                    :step="fila.producto.permite_fraccion ? '0.001' : '1'"
+                                                    min="0"
+                                                    aria-label="Cantidad"
+                                                    :class="claseNumeroGrupo"
+                                                    @focus="$event.target.select()"
+                                                />
+                                                <button type="button" :class="[claseBotonPaso, 'w-9']" aria-label="Sumar" title="Sumar" @click="cambiarCantidad(fila, 1)">
+                                                    <Plus class="size-3.5" />
+                                                </button>
+                                            </div>
                                         </td>
                                         <td class="px-2 py-3">
                                             <div class="flex items-center justify-end gap-1">
@@ -659,42 +735,54 @@ const clasePrecio = (fila) => (precioCambiado(fila)
                                                     type="button"
                                                     class="grid size-7 place-items-center rounded-lg text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
                                                     :title="`Volver al precio de lista (${soles(precioLista(fila))})`"
+                                                    aria-label="Volver al precio de lista"
                                                     @click="fila.precio = ''"
                                                 >
                                                     <RotateCcw class="size-3.5" />
                                                 </button>
-                                                <input
-                                                    :value="textoPrecio(fila)"
-                                                    type="text"
-                                                    inputmode="decimal"
-                                                    autocomplete="off"
-                                                    :readonly="!puede('pos.precio_manual')"
+                                                <div
+                                                    :class="[claseGrupo, 'h-10 w-24 px-2.5', clasePrecio(fila), !puede('pos.precio_manual') && claseSoloLectura]"
                                                     :title="puede('pos.precio_manual') ? 'Escribe otro precio para esta cotización' : 'Tu rol cotiza al precio de lista'"
-                                                    :class="[claseCelda, 'w-20 text-right read-only:bg-stone-50 dark:read-only:bg-neutral-900', clasePrecio(fila)]"
-                                                    @focus="puede('pos.precio_manual') && empezarEdicionPrecio(fila, $event)"
-                                                    @input="escribirPrecio(fila, $event.target.value)"
-                                                    @blur="terminarEdicionPrecio(fila)"
-                                                    @keydown.enter.prevent="$event.target.blur()"
-                                                />
+                                                >
+                                                    <span class="text-xs text-[#94A3B8]">S/</span>
+                                                    <input
+                                                        :value="textoPrecio(fila)"
+                                                        type="text"
+                                                        inputmode="decimal"
+                                                        autocomplete="off"
+                                                        aria-label="Precio unitario"
+                                                        :readonly="!puede('pos.precio_manual')"
+                                                        :class="[claseNumeroGrupo, 'text-right']"
+                                                        @focus="puede('pos.precio_manual') && empezarEdicionPrecio(fila, $event)"
+                                                        @input="escribirPrecio(fila, $event.target.value)"
+                                                        @blur="terminarEdicionPrecio(fila)"
+                                                        @keydown.enter.prevent="$event.target.blur()"
+                                                    />
+                                                </div>
                                             </div>
-                                            <p v-if="esMayorista(fila) && !precioCambiado(fila)" class="mt-0.5 text-right text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Mayorista</p>
+                                            <p v-if="esMayorista(fila) && !precioCambiado(fila)" class="mt-0.5 text-right text-[11px] font-medium text-emerald-700 dark:text-emerald-400">Precio mayorista</p>
                                         </td>
                                         <td class="px-2 py-3">
-                                            <input
-                                                v-model="fila.descuento"
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                placeholder="0.00"
-                                                :class="[claseCelda, 'ml-auto block w-20 text-right', descuentoInvalido(fila) ? '!border-red-400' : '']"
-                                            />
+                                            <div :class="[claseGrupo, 'ml-auto h-10 w-24 px-2.5', descuentoInvalido(fila) && '!border-red-400']">
+                                                <span class="text-xs text-[#94A3B8]">S/</span>
+                                                <input
+                                                    v-model="fila.descuento"
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    placeholder="0.00"
+                                                    aria-label="Descuento"
+                                                    :class="[claseNumeroGrupo, 'text-right']"
+                                                />
+                                            </div>
                                         </td>
-                                        <td class="px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums">{{ soles(totalFila(fila)) }}</td>
+                                        <td class="px-2 py-3 text-right text-base font-bold whitespace-nowrap tabular-nums">{{ soles(totalFila(fila)) }}</td>
                                         <td class="py-3 pr-5 text-right sm:pr-6">
                                             <button
                                                 type="button"
-                                                class="inline-grid size-8 place-items-center rounded-lg border border-red-200 text-red-500 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-950/40"
+                                                class="inline-grid size-9 place-items-center rounded-lg text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                                                 title="Quitar"
+                                                :aria-label="`Quitar ${fila.producto.nombre}`"
                                                 @click="filas.splice(i, 1)"
                                             >
                                                 <Trash2 class="size-4" />

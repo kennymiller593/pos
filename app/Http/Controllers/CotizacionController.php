@@ -257,7 +257,7 @@ class CotizacionController extends Controller
             ->where('activo', true)
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'tipo_afectacion_codigo'])
+            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'tipo_afectacion_codigo', 'imagen_url'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
 
@@ -269,6 +269,7 @@ class CotizacionController extends Controller
                 'nombre' => $p->nombre,
                 'codigo_interno' => $p->codigo_interno,
                 'permite_fraccion' => $p->permite_fraccion,
+                'imagen_url' => $p->imagen_url,
                 // gravado | exonerado | inafecto (el Nuevo RUS cotiza todo como exonerado)
                 'afectacion' => in_array(trim((string) $p->tipo_afectacion_codigo), $afectos, true)
                     ? ($empresa->esRus() ? 'exonerado' : 'gravado')
