@@ -899,11 +899,10 @@ const claseInput =
                                     <button
                                         type="button"
                                         class="grid size-8 place-items-center rounded-lg border border-stone-200 dark:border-neutral-700"
-                                        :aria-label="Number(item.cantidad) <= 1 ? 'Quitar del carrito' : 'Restar uno'"
+                                        aria-label="Restar uno"
                                         @click="Number(item.cantidad) <= 1 ? quitar(i) : (item.cantidad = Number(item.cantidad) - 1)"
                                     >
-                                        <Trash2 v-if="Number(item.cantidad) <= 1" class="size-3.5 text-red-500" />
-                                        <Minus v-else class="size-3.5" />
+                                        <Minus class="size-3.5" />
                                     </button>
                                     <span class="min-w-8 text-center text-sm font-semibold">{{ item.cantidad }}</span>
                                     <button
@@ -919,7 +918,17 @@ const claseInput =
                                     Stock insuficiente ({{ item.producto.stock }} disp.)
                                 </p>
                             </div>
-                            <p class="shrink-0 self-center text-base font-bold">{{ soles(subtotalItem(item)) }}</p>
+                            <div class="flex shrink-0 flex-col items-end gap-1.5 self-stretch">
+                                <button
+                                    type="button"
+                                    class="grid size-8 place-items-center rounded-lg text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                    :aria-label="`Quitar ${item.producto.nombre} del carrito`"
+                                    @click="quitar(i)"
+                                >
+                                    <Trash2 class="size-4" />
+                                </button>
+                                <p class="mt-auto text-base font-bold">{{ soles(subtotalItem(item)) }}</p>
+                            </div>
                         </div>
                     </div>
 
