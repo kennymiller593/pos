@@ -171,10 +171,12 @@ function agregar(producto, presentacion = null) {
 const escanerAbierto = ref(false)
 
 const unidadesCarrito = computed(() => carrito.value.reduce((n, i) => n + Number(i.cantidad || 0), 0))
-const resumenEscaner = computed(() => {
-    if (!carrito.value.length) return ''
-    return `${unidadesCarrito.value} ${unidadesCarrito.value === 1 ? 'unidad' : 'unidades'} · ${soles(total.value)}`
-})
+const ultimoEscaneado = ref(null) // id de la presentación recién leída (se resalta en la lista)
+
+function cobrarDesdeEscaner() {
+    escanerAbierto.value = false
+    abrirCobro()
+}
 
 // ================= barra del carrito (celulares y tablets) =================
 // Debajo de xl el carrito va después de la lista de productos y, como los productos se cargan
@@ -231,9 +233,11 @@ function leerCodigoCamara(codigo) {
     const { producto, presentacion } = encontrado
     if (!agregar(producto, presentacion)) return { ok: false, mensaje: avisoSinStock.value }
 
-    const cantidad = carrito.value.find((i) => i.presentacion.id === presentacion.id)?.cantidad ?? 1
-    const nombre = producto.nombre + (presentacion.nombre !== 'Unidad' ? ` (${presentacion.nombre})` : '')
-    return { ok: true, mensaje: `${nombre} · ${cantidad} en el carrito` }
+    const item = carrito.value.find((i) => i.presentacion.id === presentacion.id)
+    ultimoEscaneado.value = presentacion.id
+    nextTick(() => document.getElementById(`escaner-item-${presentacion.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+
+    return { ok: true, mensaje: `${producto.nombre} agregado`, detalle: soles(precioUnitario(item)) }
 }
 
 function quitar(indice) {
@@ -849,9 +853,101 @@ const claseInput =
                     v-if="puedeEscanear"
                     :abierto="escanerAbierto"
                     :al-leer="leerCodigoCamara"
-                    :resumen="resumenEscaner"
                     @cerrar="escanerAbierto = false"
-                />
+                >
+                    <!-- el carrito queda a la vista bajo la cámara mientras se escanea -->
+                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
+                        <p class="flex items-center gap-2 text-base font-semibold">
+                            Carrito actual
+                            <span class="rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                                {{ carrito.length }} {{ carrito.length === 1 ? 'item' : 'items' }}
+                            </span>
+                        </p>
+                        <button
+                            v-if="carrito.length"
+                            type="button"
+                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                            @click="vaciarCarrito"
+                        >
+                            <Trash2 class="size-4" />
+                            Vaciar
+                        </button>
+                    </div>
+                    <p v-if="!carrito.length" class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                        Aún no hay productos.<br />Apunta la cámara a un código de barras.
+                    </p>
+                    <div class="space-y-2">
+                        <div
+                            v-for="(item, i) in carrito"
+                            :id="`escaner-item-${item.presentacion.id}`"
+                            :key="item.presentacion.id"
+                            class="flex items-center gap-3 rounded-2xl border bg-white p-2.5 transition-colors dark:bg-neutral-900"
+                            :class="ultimoEscaneado === item.presentacion.id
+                                ? 'border-emerald-400 ring-2 ring-emerald-400/25'
+                                : 'border-stone-200 dark:border-neutral-800'"
+                        >
+                            <div class="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#F8FAFC] text-[#CBD5E1] dark:bg-neutral-800 dark:text-neutral-600">
+                                <img v-if="item.producto.imagen_url" :src="item.producto.imagen_url" :alt="item.producto.nombre" class="size-full bg-white object-contain" />
+                                <Package v-else class="size-5" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-semibold">{{ item.producto.nombre }}</p>
+                                <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                                    {{ soles(precioUnitario(item)) }} c/u<template v-if="item.producto.presentaciones.length > 1"> · {{ item.presentacion.nombre }}</template>
+                                </p>
+                                <div class="mt-1 flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        class="grid size-8 place-items-center rounded-lg border border-stone-200 dark:border-neutral-700"
+                                        :aria-label="Number(item.cantidad) <= 1 ? 'Quitar del carrito' : 'Restar uno'"
+                                        @click="Number(item.cantidad) <= 1 ? quitar(i) : (item.cantidad = Number(item.cantidad) - 1)"
+                                    >
+                                        <Trash2 v-if="Number(item.cantidad) <= 1" class="size-3.5 text-red-500" />
+                                        <Minus v-else class="size-3.5" />
+                                    </button>
+                                    <span class="min-w-8 text-center text-sm font-semibold">{{ item.cantidad }}</span>
+                                    <button
+                                        type="button"
+                                        class="grid size-8 place-items-center rounded-lg border border-stone-200 dark:border-neutral-700"
+                                        aria-label="Sumar uno"
+                                        @click="item.cantidad = Number(item.cantidad) + 1"
+                                    >
+                                        <Plus class="size-3.5" />
+                                    </button>
+                                </div>
+                                <p v-if="faltaStock(item)" class="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                                    Stock insuficiente ({{ item.producto.stock }} disp.)
+                                </p>
+                            </div>
+                            <p class="shrink-0 self-center text-base font-bold">{{ soles(subtotalItem(item)) }}</p>
+                        </div>
+                    </div>
+
+                    <template #pie="{ cerrar }">
+                        <div class="flex items-center gap-2">
+                            <div class="min-w-0 flex-1 px-1">
+                                <p class="text-xs text-neutral-500 dark:text-neutral-400">Total · {{ unidadesCarrito }} {{ unidadesCarrito === 1 ? 'unidad' : 'unidades' }}</p>
+                                <p class="text-lg leading-tight font-bold tracking-tight">{{ soles(total) }}</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="h-11 shrink-0 rounded-xl border border-stone-300 px-4 text-sm font-medium dark:border-neutral-700"
+                                @click="cerrar"
+                            >
+                                Listo
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="!carrito.length || hayFaltantes || hayDescuentosInvalidos"
+                                @click="cobrarDesdeEscaner"
+                            >
+                                <Banknote class="size-4" />
+                                Cobrar
+                            </button>
+                        </div>
+                    </template>
+                </EscanerCamara>
 
                 <!-- Chips de categorías -->
                 <div class="relative mt-3">

@@ -4,12 +4,12 @@
 // { ok, mensaje } para mostrar el resultado (agregado, sin stock, no registrado...).
 // Usa el lector nativo del navegador (BarcodeDetector, Android/Chrome) y, si no existe
 // (iPhone/Safari), la librería ZXing, que se descarga solo al abrir el escáner.
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, useSlots, watch } from 'vue'
 import { CircleAlert, CircleCheck, Flashlight, FlashlightOff, LoaderCircle, ScanBarcode, X } from '@lucide/vue'
 
 const props = defineProps({
     abierto: { type: Boolean, default: false },
-    // (codigo: string) => { ok: boolean, mensaje: string }
+    // (codigo: string) => { ok: boolean, mensaje: string, detalle?: string }
     alLeer: { type: Function, required: true },
     // texto de resumen al pie, p. ej. "3 productos · S/ 85.00"
     resumen: { type: String, default: '' },
@@ -20,6 +20,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['cerrar'])
+
+// con contenido en el slot (p. ej. el carrito del POS) la cámara ocupa solo un recuadro
+// arriba y la lista queda a la vista debajo; sin slot, la cámara va a pantalla completa
+const slots = useSlots()
+const conLista = computed(() => !!slots.default)
 
 const FORMATOS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf']
 // el mismo código vuelve a sumar solo si salió de la cámara al menos este tiempo:
@@ -243,9 +248,14 @@ async function alternarLinterna() {
 
 <template>
     <Teleport to="body">
-        <div v-if="abierto" class="fixed inset-0 z-[70] flex flex-col bg-black text-white">
-            <!-- Barra superior -->
-            <div class="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+        <!-- z-[55]: por encima de los modales (z-50) y por debajo de las confirmaciones (z-60) -->
+        <div
+            v-if="abierto"
+            class="fixed inset-0 z-[55] flex flex-col"
+            :class="conLista ? 'bg-[#F8FAFC] text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' : 'bg-black text-white'"
+        >
+            <!-- Barra superior (pantalla completa) -->
+            <div v-if="!conLista" class="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
                 <p class="inline-flex items-center gap-2 text-sm font-semibold">
                     <ScanBarcode class="size-5" />
                     {{ titulo }}
@@ -272,12 +282,17 @@ async function alternarLinterna() {
                 </div>
             </div>
 
-            <!-- Cámara -->
-            <div class="relative min-h-0 flex-1 overflow-hidden">
+            <!-- Cámara: toda la pantalla, o un recuadro arriba cuando debajo va una lista -->
+            <div
+                class="relative overflow-hidden"
+                :class="conLista
+                    ? 'mx-3 mt-[max(0.75rem,env(safe-area-inset-top))] h-[32vh] min-h-52 shrink-0 rounded-2xl bg-black text-white shadow-lg'
+                    : 'min-h-0 flex-1'"
+            >
                 <video ref="video" class="size-full object-cover" playsinline muted autoplay />
 
-                <!-- Guía -->
-                <div v-if="estado === 'leyendo'" class="pointer-events-none absolute inset-0 grid place-items-center">
+                <!-- Guía (pantalla completa) -->
+                <div v-if="estado === 'leyendo' && !conLista" class="pointer-events-none absolute inset-0 grid place-items-center">
                     <div class="relative h-40 w-[80%] max-w-sm rounded-2xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
                         <span class="absolute -top-0.5 -left-0.5 size-8 rounded-tl-2xl border-t-4 border-l-4 border-white" />
                         <span class="absolute -top-0.5 -right-0.5 size-8 rounded-tr-2xl border-t-4 border-r-4 border-white" />
@@ -291,6 +306,48 @@ async function alternarLinterna() {
                     </p>
                 </div>
 
+                <!-- Guía (recuadro con lista) -->
+                <template v-if="conLista">
+                    <div v-if="estado === 'leyendo'" class="pointer-events-none absolute inset-0">
+                        <div class="absolute inset-x-6 top-12 bottom-11">
+                            <span class="absolute top-0 left-0 size-7 rounded-tl-xl border-t-[3px] border-l-[3px] border-emerald-400" />
+                            <span class="absolute top-0 right-0 size-7 rounded-tr-xl border-t-[3px] border-r-[3px] border-emerald-400" />
+                            <span class="absolute bottom-0 left-0 size-7 rounded-bl-xl border-b-[3px] border-l-[3px] border-emerald-400" />
+                            <span class="absolute right-0 bottom-0 size-7 rounded-br-xl border-r-[3px] border-b-[3px] border-emerald-400" />
+                        </div>
+                        <p class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pt-6 pb-2.5 text-center text-xs font-medium text-white">
+                            Alinea el código de barras en el marco
+                        </p>
+                    </div>
+                    <p
+                        v-if="estado === 'leyendo'"
+                        class="absolute top-2.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white backdrop-blur"
+                    >
+                        <span class="size-2 animate-pulse rounded-full bg-emerald-400" />
+                        Cámara lista para escanear
+                    </p>
+                    <div class="absolute top-2 right-2 flex flex-col gap-2">
+                        <button
+                            type="button"
+                            class="grid size-10 place-items-center rounded-full bg-black/55 text-white backdrop-blur"
+                            aria-label="Cerrar escáner"
+                            @click="cerrar"
+                        >
+                            <X class="size-5" />
+                        </button>
+                        <button
+                            v-if="hayLinterna"
+                            type="button"
+                            class="grid size-10 place-items-center rounded-full bg-black/55 text-white backdrop-blur"
+                            :aria-label="linternaEncendida ? 'Apagar linterna' : 'Encender linterna'"
+                            @click="alternarLinterna"
+                        >
+                            <FlashlightOff v-if="linternaEncendida" class="size-5" />
+                            <Flashlight v-else class="size-5" />
+                        </button>
+                    </div>
+                </template>
+
                 <div v-if="estado === 'cargando'" class="absolute inset-0 grid place-items-center">
                     <p class="inline-flex items-center gap-2 text-sm text-white/80">
                         <LoaderCircle class="size-5 animate-spin" />
@@ -298,18 +355,18 @@ async function alternarLinterna() {
                     </p>
                 </div>
 
-                <div v-if="estado === 'error'" class="absolute inset-0 grid place-items-center p-6">
-                    <div class="max-w-sm rounded-2xl bg-white p-5 text-center text-neutral-900">
-                        <CircleAlert class="mx-auto mb-2 size-8 text-red-500" />
+                <div v-if="estado === 'error'" class="absolute inset-0 grid place-items-center overflow-y-auto" :class="conLista ? 'p-3' : 'p-6'">
+                    <div class="max-w-sm rounded-2xl bg-white text-center text-neutral-900" :class="conLista ? 'p-3.5' : 'p-5'">
+                        <CircleAlert v-if="!conLista" class="mx-auto mb-2 size-8 text-red-500" />
                         <p class="text-sm">{{ error }}</p>
-                        <div class="mt-4 flex justify-center gap-2">
+                        <div class="mt-3 flex justify-center gap-2">
                             <button type="button" class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium" @click="cerrar">Cerrar</button>
                             <button type="button" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" @click="iniciar">Reintentar</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Resultado de la última lectura -->
+                <!-- Resultado de la última lectura (pantalla completa) -->
                 <Transition
                     enter-active-class="transition duration-150"
                     enter-from-class="opacity-0 -translate-y-2"
@@ -317,7 +374,7 @@ async function alternarLinterna() {
                     leave-to-class="opacity-0"
                 >
                     <div
-                        v-if="ultimo"
+                        v-if="ultimo && !conLista"
                         class="absolute inset-x-4 top-4 flex items-start gap-2.5 rounded-2xl px-4 py-3 text-sm font-medium shadow-lg"
                         :class="ultimo.ok ? 'bg-emerald-600' : 'bg-red-600'"
                     >
@@ -328,8 +385,37 @@ async function alternarLinterna() {
                 </Transition>
             </div>
 
+            <!-- Lista bajo la cámara (p. ej. el carrito) -->
+            <div v-if="conLista" class="relative min-h-0 flex-1">
+                <div class="scroll-fino size-full overflow-y-auto px-3 pt-3 pb-16">
+                    <slot />
+                </div>
+
+                <!-- Resultado de la última lectura -->
+                <Transition
+                    enter-active-class="transition duration-150"
+                    enter-from-class="opacity-0 translate-y-2"
+                    leave-active-class="transition duration-200"
+                    leave-to-class="opacity-0"
+                >
+                    <div
+                        v-if="ultimo"
+                        class="absolute inset-x-3 bottom-2 flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-semibold text-white shadow-lg"
+                        :class="ultimo.ok ? 'bg-emerald-600' : 'bg-red-600'"
+                    >
+                        <CircleCheck v-if="ultimo.ok" class="size-5 shrink-0" />
+                        <CircleAlert v-else class="size-5 shrink-0" />
+                        <span class="min-w-0 flex-1">{{ ultimo.mensaje }}</span>
+                        <span v-if="ultimo.detalle" class="shrink-0 text-base font-bold">{{ ultimo.detalle }}</span>
+                    </div>
+                </Transition>
+            </div>
+
             <!-- Pie -->
-            <div class="flex items-center justify-between gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div v-if="conLista" class="border-t border-stone-200 bg-white px-3 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-neutral-800 dark:bg-neutral-900">
+                <slot name="pie" :cerrar="cerrar" />
+            </div>
+            <div v-else class="flex items-center justify-between gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <p class="min-w-0 truncate text-sm text-white/80">{{ resumen || (unaLectura ? '' : 'Carrito vacío') }}</p>
                 <button type="button" class="h-11 shrink-0 rounded-xl bg-emerald-600 px-6 text-sm font-semibold" @click="cerrar">
                     {{ unaLectura ? 'Cancelar' : 'Listo' }}
