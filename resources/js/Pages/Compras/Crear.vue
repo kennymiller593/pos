@@ -1,8 +1,8 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Boxes, Building2, ChevronRight, HandCoins, Info, LoaderCircle, MapPin, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
+import { Boxes, Building2, ChevronRight, HandCoins, Info, LoaderCircle, MapPin, Minus, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
 import { puedeEscanear } from '@/composables/escaner'
@@ -143,13 +143,15 @@ function alPresionarEnter() {
 
 // ---- escáner con la cámara (celulares) ----
 const escanerAbierto = ref(false)
+const ultimoEscaneado = ref(null) // presentación recién leída (se resalta en la lista)
 
 function leerCodigoCamara(codigo) {
     const encontrado = buscarPorCodigo(codigo)
     if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
     const fila = agregarProducto(encontrado.producto, encontrado.presentacion)
-    const pres = encontrado.presentacion.nombre !== 'Unidad' ? ` (${encontrado.presentacion.nombre})` : ''
-    return { ok: true, mensaje: `${encontrado.producto.nombre}${pres} · ${fila.cantidad} en la compra` }
+    ultimoEscaneado.value = fila.presentacion_id
+    nextTick(() => document.getElementById(`escaner-fila-${fila.presentacion_id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+    return { ok: true, mensaje: `${encontrado.producto.nombre} agregado`, detalle: `x${fila.cantidad}` }
 }
 
 // filas: { producto, presentacion_id, cantidad, costo_unitario }
@@ -625,9 +627,97 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                             v-if="puedeEscanear"
                             :abierto="escanerAbierto"
                             :al-leer="leerCodigoCamara"
-                            :resumen="filas.length ? `${filas.length} ${filas.length === 1 ? 'producto' : 'productos'} en la compra` : ''"
                             @cerrar="escanerAbierto = false"
-                        />
+                        >
+                            <!-- el detalle de la compra queda a la vista bajo la cámara mientras se escanea -->
+                            <div class="mb-2 flex items-center gap-2 px-1">
+                                <p class="text-base font-semibold">Detalle de la compra</p>
+                                <span class="rounded-full bg-stone-200 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                                    {{ filas.length }} {{ filas.length === 1 ? 'item' : 'items' }}
+                                </span>
+                            </div>
+                            <p v-if="!filas.length" class="rounded-2xl border border-dashed border-stone-300 px-4 py-8 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                                Aún no hay productos.<br />Apunta la cámara a un código de barras.
+                            </p>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="(fila, i) in filas"
+                                    :id="`escaner-fila-${fila.presentacion_id}`"
+                                    :key="fila.presentacion_id"
+                                    class="rounded-2xl border bg-white p-3 transition-colors dark:bg-neutral-900"
+                                    :class="ultimoEscaneado === fila.presentacion_id
+                                        ? 'border-emerald-400 ring-2 ring-emerald-400/25'
+                                        : 'border-stone-200 dark:border-neutral-800'"
+                                >
+                                    <div class="flex items-start gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <p class="truncate text-sm font-semibold">{{ fila.producto.nombre }}</p>
+                                            <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                                                {{ presentacionDe(fila)?.nombre }}<template v-if="Number(presentacionDe(fila)?.factor_conversion) !== 1"> (x{{ presentacionDe(fila)?.factor_conversion }})</template>
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="grid size-8 shrink-0 place-items-center rounded-lg text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            :aria-label="`Quitar ${fila.producto.nombre} de la compra`"
+                                            @click="filas.splice(i, 1)"
+                                        >
+                                            <Trash2 class="size-4" />
+                                        </button>
+                                    </div>
+                                    <div class="mt-2 flex items-end gap-3">
+                                        <div class="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                class="grid size-9 place-items-center rounded-lg border border-stone-200 disabled:opacity-40 dark:border-neutral-700"
+                                                aria-label="Restar uno"
+                                                :disabled="Number(fila.cantidad) <= 1"
+                                                @click="fila.cantidad = Number(fila.cantidad) - 1"
+                                            >
+                                                <Minus class="size-3.5" />
+                                            </button>
+                                            <span class="min-w-8 text-center text-sm font-semibold">{{ fila.cantidad }}</span>
+                                            <button
+                                                type="button"
+                                                class="grid size-9 place-items-center rounded-lg border border-stone-200 dark:border-neutral-700"
+                                                aria-label="Sumar uno"
+                                                @click="fila.cantidad = Number(fila.cantidad) + 1"
+                                            >
+                                                <Plus class="size-3.5" />
+                                            </button>
+                                        </div>
+                                        <label class="block w-24">
+                                            <span class="mb-0.5 block text-[11px] text-neutral-500 dark:text-neutral-400">Costo unit. S/</span>
+                                            <input
+                                                v-model="fila.costo_unitario"
+                                                type="number"
+                                                inputmode="decimal"
+                                                step="0.000001"
+                                                min="0"
+                                                placeholder="0.00"
+                                                :class="[claseCelda, 'h-9 w-full text-right text-base', fila.costo_unitario === '' ? '!border-amber-300 dark:!border-amber-700' : '']"
+                                            />
+                                        </label>
+                                        <p class="ml-auto pb-1.5 text-base font-bold tabular-nums">{{ soles(subtotal(fila)) }}</p>
+                                    </div>
+                                    <p v-if="fila.producto.controla_lote && !fila.numero_lote" class="mt-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                                        Lleva lote: complétalo al terminar de escanear.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <template #pie="{ cerrar }">
+                                <div class="flex items-center gap-2">
+                                    <div class="min-w-0 flex-1 px-1">
+                                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Total · {{ unidades }} {{ unidades === 1 ? 'unidad' : 'unidades' }}</p>
+                                        <p class="text-lg leading-tight font-bold tracking-tight">{{ soles(total) }}</p>
+                                    </div>
+                                    <button type="button" class="h-11 shrink-0 rounded-xl bg-emerald-600 px-8 text-sm font-semibold text-white" @click="cerrar">
+                                        Listo
+                                    </button>
+                                </div>
+                            </template>
+                        </EscanerCamara>
 
                         <p v-if="form.errors.items" :class="claseError">{{ form.errors.items }}</p>
 
