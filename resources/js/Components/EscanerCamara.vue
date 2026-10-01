@@ -13,6 +13,10 @@ const props = defineProps({
     alLeer: { type: Function, required: true },
     // texto de resumen al pie, p. ej. "3 productos · S/ 85.00"
     resumen: { type: String, default: '' },
+    // una sola lectura: al primer código aceptado (ok) el escáner se cierra solo.
+    // Sirve para llenar un campo (p. ej. el código de barras de un producto).
+    unaLectura: { type: Boolean, default: false },
+    titulo: { type: String, default: 'Escanear productos' },
 })
 
 const emit = defineEmits(['cerrar'])
@@ -194,6 +198,15 @@ function leido(codigo) {
     ultimo.value = { ...resultado, codigo }
     avisar(resultado.ok)
 
+    if (props.unaLectura && resultado.ok) {
+        // se detiene la lectura ya, y se deja ver el aviso un instante antes de cerrar
+        detenerLectura?.()
+        detenerLectura = null
+        clearTimeout(temporizadorAviso)
+        temporizadorAviso = setTimeout(cerrar, 500)
+        return
+    }
+
     clearTimeout(temporizadorAviso)
     temporizadorAviso = setTimeout(() => (ultimo.value = null), 2500)
 }
@@ -235,7 +248,7 @@ async function alternarLinterna() {
             <div class="flex items-center justify-between gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
                 <p class="inline-flex items-center gap-2 text-sm font-semibold">
                     <ScanBarcode class="size-5" />
-                    Escanear productos
+                    {{ titulo }}
                 </p>
                 <div class="flex items-center gap-2">
                     <button
@@ -274,7 +287,7 @@ async function alternarLinterna() {
                     </div>
                     <p class="absolute bottom-6 px-6 text-center text-sm text-white/80">
                         Apunta al código de barras del producto.<br />
-                        <span class="text-xs text-white/60">Para sumar otra unidad del mismo, aparta la cámara y vuelve a apuntar.</span>
+                        <span v-if="!unaLectura" class="text-xs text-white/60">Para sumar otra unidad del mismo, aparta la cámara y vuelve a apuntar.</span>
                     </p>
                 </div>
 
@@ -317,9 +330,9 @@ async function alternarLinterna() {
 
             <!-- Pie -->
             <div class="flex items-center justify-between gap-3 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <p class="min-w-0 truncate text-sm text-white/80">{{ resumen || 'Carrito vacío' }}</p>
+                <p class="min-w-0 truncate text-sm text-white/80">{{ resumen || (unaLectura ? '' : 'Carrito vacío') }}</p>
                 <button type="button" class="h-11 shrink-0 rounded-xl bg-emerald-600 px-6 text-sm font-semibold" @click="cerrar">
-                    Listo
+                    {{ unaLectura ? 'Cancelar' : 'Listo' }}
                 </button>
             </div>
         </div>

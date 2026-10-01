@@ -1,9 +1,11 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
-import { ImagePlus, LoaderCircle, Package, Plus, Trash2, X } from '@lucide/vue'
+import { ImagePlus, LoaderCircle, Package, Plus, ScanBarcode, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
 import { optimizarImagenProducto } from '@/composables/imagenProducto'
+import { puedeEscanear } from '@/composables/escaner'
+import EscanerCamara from '@/Components/EscanerCamara.vue'
 import SelectorBuscable from '@/Components/SelectorBuscable.vue'
 
 const props = defineProps({
@@ -39,6 +41,20 @@ const form = useForm({
     imagen_eliminar: false,
     presentaciones: [],
 })
+
+// ---- código de barras con la cámara del celular ----
+// la pistola lectora escribe directo en el campo; en el celular se abre la cámara
+const escaneando = ref(null) // índice de la presentación que se está escaneando
+
+function leerCodigoCamara(codigo) {
+    const i = escaneando.value
+    const repetida = form.presentaciones.findIndex((p, j) => j !== i && String(p.codigo_barras ?? '').trim() === codigo)
+    if (repetida !== -1) {
+        return { ok: false, mensaje: `Ese código (${codigo}) ya lo tiene otra presentación de este producto.` }
+    }
+    form.presentaciones[i].codigo_barras = codigo
+    return { ok: true, mensaje: `Código leído: ${codigo}` }
+}
 
 // ---- imagen ----
 const inputImagen = ref(null)
@@ -513,7 +529,26 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     </div>
                                     <div>
                                         <label :class="claseLabel">Código de barras</label>
-                                        <input v-model="pres.codigo_barras" type="text" :class="claseInput" />
+                                        <div class="relative">
+                                            <!-- Enter no guarda: las pistolas lectoras lo envían al terminar de leer -->
+                                            <input
+                                                v-model="pres.codigo_barras"
+                                                type="text"
+                                                autocomplete="off"
+                                                :class="[claseInput, puedeEscanear && 'pr-11']"
+                                                :placeholder="puedeEscanear ? 'Escanea o escribe' : 'Escanea con el lector o escribe'"
+                                                @keydown.enter.prevent
+                                            />
+                                            <button
+                                                v-if="puedeEscanear"
+                                                type="button"
+                                                class="absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                                aria-label="Escanear código de barras con la cámara"
+                                                @click="escaneando = i"
+                                            >
+                                                <ScanBarcode class="size-5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="mt-3 flex items-center justify-between">
@@ -561,5 +596,13 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </form>
             </div>
         </div>
+        <EscanerCamara
+            v-if="puedeEscanear"
+            :abierto="abierto && escaneando !== null"
+            :al-leer="leerCodigoCamara"
+            una-lectura
+            titulo="Escanear código de barras"
+            @cerrar="escaneando = null"
+        />
     </Teleport>
 </template>
