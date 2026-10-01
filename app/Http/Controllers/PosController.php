@@ -12,6 +12,7 @@ use App\Models\MedioPago;
 use App\Models\Producto;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
+use App\Services\CotizacionService;
 use App\Services\VentaService;
 use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ class PosController extends Controller
     public function __construct(
         private readonly CajaService $caja,
         private readonly VentaService $ventas,
+        private readonly CotizacionService $cotizaciones,
     ) {}
 
     public function index(Request $request): Response
@@ -75,7 +77,46 @@ class PosController extends Controller
             'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             'tiposDocumento' => TipoDocumentoIdentidad::orderBy('codigo')->get(['codigo', 'nombre']),
+            'cotizacion' => $this->cotizacionParaCarrito($request),
         ]);
+    }
+
+    /**
+     * /pos?cotizacion={id}: la cotización aceptada por el cliente se carga en el carrito.
+     * Mientras siga vigente se respetan sus precios; vencida, entran los precios de lista de hoy.
+     */
+    private function cotizacionParaCarrito(Request $request): ?array
+    {
+        $cotizacion = $this->cotizaciones->paraVender($request->user()->empresa_id, $request->query('cotizacion'));
+
+        if (! $cotizacion) {
+            return null;
+        }
+
+        $cliente = $cotizacion->cliente;
+
+        return [
+            'id' => $cotizacion->id,
+            'codigo' => $cotizacion->codigo(),
+            'vigente' => ! $cotizacion->estaVencida(),
+            'cliente' => $cliente ? [
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre,
+                'tipo_documento_codigo' => $cliente->tipo_documento_codigo,
+                'numero_documento' => $cliente->numero_documento,
+                'direccion' => $cliente->direccion,
+                'email' => $cliente->email,
+                'limite_credito' => (float) $cliente->limite_credito,
+                'deuda' => (float) CuentaPorCobrar::where('cliente_id', $cliente->id)->where('estado', '!=', 'pagado')->sum(\Illuminate\Support\Facades\DB::raw('monto_total - monto_pagado')),
+            ] : null,
+            'items' => $cotizacion->detalles->map(fn ($d) => [
+                'presentacion_id' => $d->presentacion_id,
+                'descripcion' => $d->descripcion,
+                'cantidad' => (float) $d->cantidad,
+                'precio_unitario' => (float) $d->precio_unitario,
+                'descuento' => (float) $d->descuento,
+            ]),
+        ];
     }
 
     public function clientes(Request $request): JsonResponse
@@ -205,6 +246,7 @@ class PosController extends Controller
         $datos = $request->validate([
             'tipo_comprobante_codigo' => ['required', $tiposPermitidos],
             'cliente_id' => [$esCredito ? 'required' : 'nullable', 'uuid'],
+            'cotizacion_id' => ['nullable', 'uuid'],
             'es_credito' => ['required', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.presentacion_id' => ['required', 'uuid'],
@@ -221,7 +263,12 @@ class PosController extends Controller
             'cliente_id.required' => 'La venta al crédito necesita un cliente.',
         ]);
 
-        $conPrecioManual = collect($datos['items'])->contains(fn ($i) => filled($i['precio_unitario'] ?? null));
+        // venta de una cotizacion vigente: sus precios se respetan aunque el rol no pueda cambiar precios
+        $cotizacion = $this->cotizaciones->paraVender($empresa->id, $datos['cotizacion_id'] ?? null);
+        $cotizados = $this->cotizaciones->preciosVigentes($cotizacion);
+
+        $conPrecioManual = collect($datos['items'])->contains(fn ($i) => filled($i['precio_unitario'] ?? null)
+            && abs((float) $i['precio_unitario'] - ($cotizados[$i['presentacion_id']] ?? -1)) >= 0.005);
         if ($conPrecioManual && ! $request->user()->can('pos.precio_manual')) {
             return back()->with('error', 'Tu rol no puede cambiar el precio de lista. Pide a un administrador o cajero que lo haga.');
         }
@@ -234,6 +281,10 @@ class PosController extends Controller
             report($e);
 
             return back()->with('error', 'No se pudo registrar la venta. Intenta de nuevo.');
+        }
+
+        if ($cotizacion) {
+            $this->cotizaciones->marcarConvertida($cotizacion, $comprobante);
         }
 
         // el envio a SUNAT corre despues de responder para no demorar la caja

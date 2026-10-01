@@ -45,6 +45,7 @@ const form = useForm({
     rubro_codigo: props.empresa.rubro_codigo,
     logo: null,
     logo_eliminar: false,
+    cuentas_bancarias: props.empresa.cuentas_bancarias ?? '',
     usuario_sol: props.empresa.usuario_sol ?? '',
     certificado_digital: '',
     clave_sol: '',
@@ -78,6 +79,7 @@ function enviar() {
     form.transform((data) => ({
         ...data,
         nombre_comercial: data.nombre_comercial || null,
+        cuentas_bancarias: data.cuentas_bancarias.trim() || null,
         usuario_sol: data.usuario_sol || null,
         certificado_digital: data.certificado_digital || null,
         clave_sol: data.clave_sol || null,
@@ -167,6 +169,19 @@ const certificadoVencimiento = computed(() => {
                             <option value="MYPE">MYPE Tributario</option>
                             <option value="GENERAL">Régimen General</option>
                         </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label :class="claseLabel" for="cuentas_bancarias">Cuentas para el pago <span class="font-normal text-neutral-400">(opcional)</span></label>
+                        <textarea
+                            id="cuentas_bancarias"
+                            v-model="form.cuentas_bancarias"
+                            rows="3"
+                            maxlength="500"
+                            :class="[claseInput, 'h-auto py-2']"
+                            placeholder="BCP Soles 191-1234567-0-12 · CCI 002-191-001234567012-55&#10;Yape / Plin 999 999 999"
+                        />
+                        <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">Se imprimen al pie de tus cotizaciones para que el cliente sepa dónde pagar. Una cuenta por línea.</p>
+                        <p v-if="form.errors.cuentas_bancarias" :class="claseError">{{ form.errors.cuentas_bancarias }}</p>
                     </div>
                     <div class="sm:col-span-2">
                         <label :class="claseLabel">Logo</label>

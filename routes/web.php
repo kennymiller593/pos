@@ -18,6 +18,7 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\ComprobanteController;
 use App\Http\Controllers\ConsultaController;
+use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
@@ -42,6 +43,11 @@ use Illuminate\Support\Facades\Route;
 Route::get('/c/{comprobante}', [ComprobanteController::class, 'publico'])
     ->middleware(['signed', 'throttle:30,1'])
     ->name('comprobantes.publico');
+
+// PDF de una cotizacion para el cliente final (enlace firmado que se envia por WhatsApp)
+Route::get('/q/{cotizacion}', [CotizacionController::class, 'publico'])
+    ->middleware(['signed', 'throttle:30,1'])
+    ->name('cotizaciones.publico');
 
 // pagina publica del producto (un usuario con sesion va directo a su dashboard)
 Route::get('/', [LandingController::class, 'index'])->name('landing');
@@ -189,6 +195,22 @@ Route::middleware('auth')->group(function () {
         Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
         Route::get('/caja/turnos/{apertura}/ticket', [CajaController::class, 'ticketCierre'])->name('caja.turnos.ticket');
     });
+
+    // ---- cotizaciones (no van a SUNAT ni mueven stock; se venden desde el POS) ----
+    Route::middleware('can:cotizaciones.ver')->group(function () {
+        Route::get('/cotizaciones', [CotizacionController::class, 'index'])->name('cotizaciones.index');
+        Route::get('/cotizaciones/{cotizacion}/pdf', [CotizacionController::class, 'pdf'])->whereUuid('cotizacion')->name('cotizaciones.pdf');
+    });
+    Route::middleware('can:cotizaciones.gestionar')->group(function () {
+        Route::get('/cotizaciones/crear', [CotizacionController::class, 'crear'])->name('cotizaciones.crear');
+        Route::get('/cotizaciones/clientes', [PosController::class, 'clientes'])->name('cotizaciones.clientes');
+        Route::post('/cotizaciones/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('cotizaciones.clientes.crear');
+        Route::post('/cotizaciones', [CotizacionController::class, 'store'])->name('cotizaciones.store');
+        Route::get('/cotizaciones/{cotizacion}/editar', [CotizacionController::class, 'editar'])->whereUuid('cotizacion')->name('cotizaciones.editar');
+        Route::put('/cotizaciones/{cotizacion}', [CotizacionController::class, 'update'])->whereUuid('cotizacion')->name('cotizaciones.update');
+        Route::post('/cotizaciones/{cotizacion}/correo', [CotizacionController::class, 'correo'])->whereUuid('cotizacion')->middleware('throttle:30,1')->name('cotizaciones.correo');
+    });
+    Route::post('/cotizaciones/{cotizacion}/anular', [CotizacionController::class, 'anular'])->whereUuid('cotizacion')->middleware('can:cotizaciones.anular')->name('cotizaciones.anular');
 
     // ---- comprobantes ----
     Route::middleware('can:comprobantes.ver')->group(function () {

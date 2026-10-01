@@ -16,6 +16,7 @@ import {
     ChevronDown,
     CreditCard,
     CirclePlay,
+    FileText,
     HandCoins,
     LayoutDashboard,
     LogOut,
@@ -79,6 +80,7 @@ const menuBase = [
         seccion: 'Ventas',
         items: [
             { label: 'POS', href: '/pos', icon: ShoppingCart, permiso: 'pos.vender' },
+            { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, permiso: 'cotizaciones.ver' },
             { label: 'Comprobantes', href: '/comprobantes', icon: ReceiptText, permiso: 'comprobantes.ver' },
             { label: 'Cuentas por cobrar', href: '/cuentas-por-cobrar', icon: HandCoins, permiso: 'cuentas_cobrar.ver' },
         ],

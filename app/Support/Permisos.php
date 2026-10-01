@@ -17,6 +17,9 @@ final class Permisos
         'caja.operar' => 'Abrir y cerrar su caja, registrar ingresos',
         'caja.egresos' => 'Registrar egresos de caja',
         'caja.ver_todas' => 'Ver los turnos de caja de todos los usuarios',
+        'cotizaciones.ver' => 'Ver cotizaciones',
+        'cotizaciones.gestionar' => 'Crear, editar y enviar cotizaciones',
+        'cotizaciones.anular' => 'Anular cotizaciones',
         'comprobantes.ver' => 'Ver e imprimir comprobantes',
         'comprobantes.sunat' => 'Reenviar comprobantes a SUNAT',
         'comprobantes.convertir' => 'Convertir notas de venta en boleta o factura',
@@ -66,6 +69,7 @@ final class Permisos
         'cajero' => [
             'pos.vender', 'pos.precio_manual',
             'caja.operar', 'caja.egresos',
+            'cotizaciones.ver', 'cotizaciones.gestionar',
             'comprobantes.ver', 'comprobantes.sunat', 'comprobantes.convertir',
             'clientes.ver', 'clientes.gestionar',
             'cuentas_cobrar.ver', 'cuentas_cobrar.cobrar',
@@ -75,6 +79,7 @@ final class Permisos
         'vendedor' => [
             'pos.vender',
             'caja.operar',
+            'cotizaciones.ver', 'cotizaciones.gestionar',
             'comprobantes.ver',
             'clientes.ver', 'clientes.gestionar',
             'cuentas_cobrar.ver',

@@ -28,6 +28,7 @@ class Empresa extends Model
         'regimen_tributario',
         'rubro_codigo',
         'logo_url',
+        'cuentas_bancarias',
         'usuario_sol',
         'certificado_digital',
         'clave_sol',

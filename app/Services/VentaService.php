@@ -486,11 +486,12 @@ class VentaService
     }
 
     /**
-     * Construye las lineas de venta con su calculo de IGV.
+     * Construye las lineas de venta con su calculo de IGV (tambien las usa la cotizacion,
+     * para que cotizar y vender den exactamente los mismos importes).
      *
      * @return array{0: list<array<string, mixed>>, 1: array<string, float>}
      */
-    private function calcularLineas(string $empresaId, array $items, bool $esRus = false): array
+    public function calcularLineas(string $empresaId, array $items, bool $esRus = false): array
     {
         $presentaciones = ProductoPresentacion::query()
             ->where('empresa_id', $empresaId)

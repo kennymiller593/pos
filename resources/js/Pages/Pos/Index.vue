@@ -5,6 +5,7 @@ import { StorageSerializers, useIntersectionObserver, useMediaQuery, useResizeOb
 import {
     Banknote,
     CheckCircle2,
+    FileText,
     ChevronLeft,
     ChevronRight,
     CircleHelp,
@@ -42,6 +43,8 @@ const props = defineProps({
     mediosPago: { type: Array, default: () => [] },
     tiposDocumento: { type: Array, default: () => [] },
     facturacionElectronica: { type: Boolean, default: false },
+    // /pos?cotizacion={id}: cotización aceptada por el cliente, lista para cargar en el carrito
+    cotizacion: { type: Object, default: null },
 })
 
 const page = usePage()
@@ -125,12 +128,14 @@ function alPresionarEnter() {
 }
 
 // ================= carrito =================
-const carrito = ref([]) // { producto, presentacion, cantidad, descuento, conDescuento }
+const carrito = ref([]) // { producto, presentacion, cantidad, precio, precioCotizado, descuento, conDescuento }
 
 // persistencia: el carrito y el cliente sobreviven recargas y navegacion
 const empresaId = page.props.auth?.user?.empresa?.id ?? 'sin-empresa'
 const carritoGuardado = useStorage(`pos-carrito-${empresaId}`, [])
 const clienteGuardado = useStorage(`pos-cliente-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
+// cotización que se está vendiendo: { id, codigo, vigente } (al cobrar queda enlazada a la venta)
+const cotizacionEnVenta = useStorage(`pos-cotizacion-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
 
 // aviso flotante cuando se intenta vender sin stock
 const avisoSinStock = ref(null)
@@ -162,7 +167,7 @@ function agregar(producto, presentacion = null) {
     if (existente) {
         existente.cantidad = Number(existente.cantidad) + 1
     } else {
-        carrito.value.push({ producto, presentacion, cantidad: 1, precio: '', descuento: '', conDescuento: false })
+        carrito.value.push({ producto, presentacion, cantidad: 1, precio: '', precioCotizado: null, descuento: '', conDescuento: false })
     }
     return true
 }
@@ -267,8 +272,8 @@ const esMayorista = (item) => {
 const precioLista = (item) => (esMayorista(item) ? Number(item.presentacion.precio_mayorista) : Number(item.presentacion.precio_venta))
 // el cajero puede escribir un precio distinto en la linea; vacio = precio de lista
 const precioManual = (item) => {
-    // sin permiso de precio manual siempre se cobra el precio de lista
-    if (!puede('pos.precio_manual')) return null
+    // sin permiso de precio manual se cobra el precio de lista, salvo el pactado en una cotización vigente
+    if (!puede('pos.precio_manual')) return item.precioCotizado ?? null
     const valor = Number(item.precio)
     return item.precio !== '' && item.precio !== null && !Number.isNaN(valor) && valor > 0 ? valor : null
 }
@@ -361,6 +366,7 @@ if (props.productos.length && carritoGuardado.value.length) {
                     presentacion,
                     cantidad: guardado.cantidad,
                     precio: guardado.precio ?? '',
+                    precioCotizado: guardado.precioCotizado ?? null,
                     descuento: guardado.descuento ?? '',
                     conDescuento: !!guardado.conDescuento,
                 })
@@ -376,9 +382,12 @@ watch(carrito, (items) => {
         presentacion_id: i.presentacion.id,
         cantidad: i.cantidad,
         precio: i.precio,
+        precioCotizado: i.precioCotizado ?? null,
         descuento: i.descuento,
         conDescuento: i.conDescuento,
     }))
+    // carrito vacío: ya no se está vendiendo ninguna cotización
+    if (!items.length) cotizacionEnVenta.value = null
 }, { deep: true })
 
 // ================= cliente =================
@@ -410,6 +419,57 @@ if (clienteGuardado.value && props.productos.length) {
     clienteSeleccionado.value = clienteGuardado.value
 }
 watch(clienteSeleccionado, (cliente) => (clienteGuardado.value = cliente))
+
+// ================= venta de una cotización =================
+// El carrito se reemplaza por lo cotizado. Vigente: se respetan sus precios (aunque el cajero no
+// pueda cambiar precios). Vencida: entran los precios de lista de hoy.
+const avisoCotizacion = ref('')
+
+if (props.cotizacion && props.productos.length) {
+    const cot = props.cotizacion
+    const faltantes = []
+    carrito.value = []
+
+    for (const item of cot.items) {
+        const producto = props.productos.find((p) => p.presentaciones.some((pres) => pres.id === item.presentacion_id))
+        if (!producto) {
+            faltantes.push(item.descripcion)
+            continue
+        }
+        const linea = {
+            producto,
+            presentacion: producto.presentaciones.find((pres) => pres.id === item.presentacion_id),
+            cantidad: item.cantidad,
+            precio: '',
+            precioCotizado: null,
+            descuento: item.descuento > 0 ? item.descuento : '',
+            conDescuento: item.descuento > 0,
+        }
+        if (cot.vigente) {
+            linea.precioCotizado = item.precio_unitario
+            if (Math.abs(item.precio_unitario - precioLista(linea)) >= 0.005) linea.precio = String(item.precio_unitario)
+        }
+        carrito.value.push(linea)
+    }
+
+    clienteSeleccionado.value = cot.cliente
+    cotizacionEnVenta.value = { id: cot.id, codigo: cot.codigo, vigente: cot.vigente }
+    if (faltantes.length) {
+        avisoCotizacion.value = `No se cargó: ${faltantes.join(', ')} (ya no está activo en tu catálogo).`
+    }
+
+    // la dirección vuelve a /pos: recargar la página no debe pisar los cambios hechos al carrito
+    if (typeof window !== 'undefined') window.history.replaceState(window.history.state, '', '/pos')
+}
+
+function soltarCotizacion() {
+    cotizacionEnVenta.value = null
+    avisoCotizacion.value = ''
+    for (const item of carrito.value) {
+        // quien no puede cambiar precios vuelve al de lista; quien sí, conserva el que ve
+        item.precioCotizado = null
+    }
+}
 
 // --- creacion rapida de cliente ---
 const modalCliente = ref(false)
@@ -736,6 +796,7 @@ function cobrar() {
     router.post('/pos/ventas', {
         tipo_comprobante_codigo: tipoComprobante.value,
         cliente_id: clienteSeleccionado.value?.id ?? null,
+        cotizacion_id: cotizacionEnVenta.value?.id ?? null,
         es_credito: esCredito,
         items: carrito.value.map((i) => ({
             presentacion_id: i.presentacion.id,
@@ -1149,6 +1210,29 @@ const claseInput =
                             <Plus class="size-4" />
                         </button>
                     </div>
+                </div>
+
+                <!-- Venta de una cotización -->
+                <div
+                    v-if="cotizacionEnVenta && carrito.length"
+                    class="flex items-start gap-2.5 border-b border-stone-100 bg-sky-50 px-4 py-2.5 text-xs text-sky-900 dark:border-neutral-800 dark:bg-sky-500/10 dark:text-sky-200"
+                >
+                    <FileText class="mt-0.5 size-4 shrink-0" />
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold">Vendiendo la cotización {{ cotizacionEnVenta.codigo }}</p>
+                        <p v-if="cotizacionEnVenta.vigente">Se respetan los precios cotizados. Al cobrar quedará como vendida.</p>
+                        <p v-else class="text-amber-700 dark:text-amber-300">Ya venció: se cargó con los precios de lista de hoy.</p>
+                        <p v-if="avisoCotizacion" class="mt-0.5 font-medium text-amber-700 dark:text-amber-300">{{ avisoCotizacion }}</p>
+                    </div>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-lg p-1 hover:bg-sky-100 dark:hover:bg-sky-500/20"
+                        title="Desvincular: vender como una venta normal"
+                        aria-label="Desvincular la cotización"
+                        @click="soltarCotizacion"
+                    >
+                        <X class="size-4" />
+                    </button>
                 </div>
 
                 <!-- Items -->
