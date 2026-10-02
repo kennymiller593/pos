@@ -48,7 +48,7 @@ class TransferenciaController extends Controller
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->whereNotNull('codigo_barras')->where('codigo_barras', '!=', '')
                 ->select('id', 'producto_id', 'codigo_barras', 'factor_conversion')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion']);
+            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'imagen_url']);
 
         return Inertia::render('Transferencias/Crear', [
             'origen' => Sucursal::find($origenId)?->only('id', 'nombre'),
@@ -63,6 +63,7 @@ class TransferenciaController extends Controller
                 'nombre' => $p->nombre,
                 'codigo_interno' => $p->codigo_interno,
                 'permite_fraccion' => $p->permite_fraccion,
+                'imagen_url' => $p->imagen_url,
                 'stock' => (float) ($p->stock ?? 0),
                 'codigos' => $p->presentaciones->map(fn ($pres) => [
                     'codigo' => $pres->codigo_barras,

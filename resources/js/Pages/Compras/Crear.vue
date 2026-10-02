@@ -682,7 +682,10 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                     class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
                                     @click="agregarProducto(p)"
                                 >
-                                    <Package class="size-4 shrink-0 text-neutral-400" />
+                                    <span class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#F8FAFC] text-neutral-400 dark:bg-neutral-900">
+                                        <img v-if="p.imagen_url" :src="p.imagen_url" :alt="p.nombre" loading="lazy" class="size-full bg-white object-contain" />
+                                        <Package v-else class="size-4" />
+                                    </span>
                                     <span class="font-medium">{{ p.nombre }}</span>
                                     <span class="ml-auto font-mono text-xs text-neutral-500 dark:text-neutral-400">{{ p.codigo_interno }}</span>
                                 </button>

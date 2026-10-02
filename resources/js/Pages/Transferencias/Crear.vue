@@ -196,7 +196,10 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm hover:bg-stone-50 dark:hover:bg-neutral-700"
                                 @click="agregar(p)"
                             >
-                                <Package class="size-4 shrink-0 text-neutral-400" />
+                                <span class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#F8FAFC] text-neutral-400 dark:bg-neutral-900">
+                                        <img v-if="p.imagen_url" :src="p.imagen_url" :alt="p.nombre" loading="lazy" class="size-full bg-white object-contain" />
+                                        <Package v-else class="size-4" />
+                                    </span>
                                 <span class="font-medium">{{ p.nombre }}</span>
                                 <span class="ml-auto text-xs text-neutral-500 dark:text-neutral-400">{{ cantidad(p.stock) }} disp.</span>
                             </button>
@@ -219,6 +222,10 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             :key="fila.producto.id"
                             class="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 dark:bg-neutral-950"
                         >
+                            <div class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-white text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
+                                <img v-if="fila.producto.imagen_url" :src="fila.producto.imagen_url" :alt="fila.producto.nombre" class="size-full bg-white object-contain" />
+                                <Package v-else class="size-5" />
+                            </div>
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-sm font-medium">{{ fila.producto.nombre }}</p>
                                 <p class="text-xs" :class="excedeStock(fila) ? 'font-medium text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'">
