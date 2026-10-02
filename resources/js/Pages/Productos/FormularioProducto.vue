@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
-import { ImagePlus, LoaderCircle, Package, Plus, ScanBarcode, Trash2, X } from '@lucide/vue'
+import { ImagePlus, LoaderCircle, Package, Plus, ScanBarcode, Sparkles, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
 import { optimizarImagenProducto } from '@/composables/imagenProducto'
 import { puedeEscanear } from '@/composables/escaner'
@@ -54,6 +54,31 @@ function leerCodigoCamara(codigo) {
     }
     form.presentaciones[i].codigo_barras = codigo
     return { ok: true, mensaje: `Código leído: ${codigo}` }
+}
+
+// ---- código interno para productos sin código de fábrica ----
+const generandoCodigo = ref(null) // índice de la presentación para la que se está pidiendo
+
+async function generarCodigo(i) {
+    if (generandoCodigo.value !== null) return
+    generandoCodigo.value = i
+    try {
+        const r = await fetch('/productos/codigos-barras/generar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': decodeURIComponent(document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? ''),
+            },
+            // que no repita uno recién generado para otra presentación de este mismo formulario
+            body: JSON.stringify({ evitar: form.presentaciones.map((p) => String(p.codigo_barras ?? '').trim()).filter(Boolean) }),
+        })
+        if (r.ok) form.presentaciones[i].codigo_barras = (await r.json()).codigo
+    } catch {
+        // sin conexión: se puede escribir a mano
+    } finally {
+        generandoCodigo.value = null
+    }
 }
 
 // ---- imagen ----
@@ -549,6 +574,17 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                                 <ScanBarcode class="size-5" />
                                             </button>
                                         </div>
+                                        <button
+                                            v-if="!String(pres.codigo_barras ?? '').trim()"
+                                            type="button"
+                                            class="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline disabled:opacity-60 dark:text-emerald-400"
+                                            :disabled="generandoCodigo !== null"
+                                            @click="generarCodigo(i)"
+                                        >
+                                            <LoaderCircle v-if="generandoCodigo === i" class="size-3.5 animate-spin" />
+                                            <Sparkles v-else class="size-3.5" />
+                                            ¿No tiene código? Generar uno
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="mt-3 flex items-center justify-between">

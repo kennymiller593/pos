@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
-import { Ban, Download, Eye, Plus, Truck, X } from '@lucide/vue'
+import { Ban, Barcode, Download, Eye, Plus, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
 
@@ -239,13 +239,22 @@ function anular() {
                             <p class="text-xs text-neutral-500 dark:text-neutral-400">Total de la compra</p>
                             <p class="text-xl font-bold tracking-tight">{{ soles(compraVer.total) }}</p>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap justify-end gap-2">
                             <button
                                 class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
                                 @click="compraVer = null"
                             >
                                 Cerrar
                             </button>
+                            <Link
+                                v-if="compraVer.estado === 'registrada' && puede('productos.ver')"
+                                :href="`/productos/etiquetas?compra=${compraVer.id}`"
+                                class="inline-flex items-center gap-2 rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                title="Imprimir etiquetas con código de barras de lo que entró"
+                            >
+                                <Barcode class="size-4" />
+                                Etiquetas
+                            </Link>
                             <a
                                 :href="`/compras/${compraVer.id}/pdf`"
                                 class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"

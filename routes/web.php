@@ -22,6 +22,7 @@ use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\EtiquetaController;
 use App\Http\Controllers\GuiaRemisionController;
 use App\Http\Controllers\ImportacionProductoController;
 use App\Http\Controllers\InicioController;
@@ -162,6 +163,10 @@ Route::middleware('auth')->group(function () {
     // ---- productos y catalogos ----
     Route::get('/productos', [ProductoController::class, 'index'])->middleware('can:productos.ver')->name('productos.index');
     Route::post('/productos', [ProductoController::class, 'store'])->middleware('can:productos.gestionar')->name('productos.store');
+    // etiquetas con codigo de barras (ticketera o impresora de etiquetas)
+    Route::get('/productos/etiquetas', [EtiquetaController::class, 'index'])->middleware('can:productos.ver')->name('productos.etiquetas');
+    Route::post('/productos/codigos-barras/generar', [EtiquetaController::class, 'generar'])->middleware(['can:productos.gestionar', 'throttle:120,1'])->name('productos.codigos.generar');
+    Route::post('/productos/codigos-barras/asignar', [EtiquetaController::class, 'asignar'])->middleware('can:productos.gestionar')->name('productos.codigos.asignar');
     Route::middleware('can:productos.gestionar')->group(function () {
         Route::get('/productos/importar/plantilla', [ImportacionProductoController::class, 'plantilla'])->name('productos.importar.plantilla');
         Route::post('/productos/importar/previsualizar', [ImportacionProductoController::class, 'previsualizar'])->middleware('throttle:20,1')->name('productos.importar.previsualizar');
