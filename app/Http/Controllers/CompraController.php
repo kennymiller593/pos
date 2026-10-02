@@ -77,7 +77,7 @@ class CompraController extends Controller
             ->where('activo', true)
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'permite_fraccion'])
+            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'permite_fraccion', 'imagen_url'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
 
@@ -89,6 +89,7 @@ class CompraController extends Controller
                 'controla_stock' => $p->controla_stock,
                 'controla_lote' => $p->controla_lote,
                 'permite_fraccion' => $p->permite_fraccion,
+                'imagen_url' => $p->imagen_url,
                 'presentaciones' => $p->presentaciones->map(fn ($pres) => [
                     'id' => $pres->id,
                     'nombre' => $pres->nombre,
