@@ -81,8 +81,8 @@ const menuBase = [
         seccion: 'Ventas',
         items: [
             { label: 'POS', href: '/pos', icon: ShoppingCart, permiso: 'pos.vender' },
-            { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, permiso: 'cotizaciones.ver' },
             { label: 'Comprobantes', href: '/comprobantes', icon: ReceiptText, permiso: 'comprobantes.ver' },
+            { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, permiso: 'cotizaciones.ver' },
             { label: 'Guías de remisión', href: '/guias', icon: Navigation, permiso: 'guias.ver' },
             { label: 'Cuentas por cobrar', href: '/cuentas-por-cobrar', icon: HandCoins, permiso: 'cuentas_cobrar.ver' },
         ],
@@ -100,26 +100,36 @@ const menuBase = [
         seccion: 'Compras',
         items: [
             { label: 'Compras', href: '/compras', icon: Truck, permiso: 'compras.ver' },
-            { label: 'Cuentas por pagar', href: '/cuentas-por-pagar', icon: Banknote, permiso: 'cuentas_pagar.ver' },
             { label: 'Proveedores', href: '/proveedores', icon: Building2, permiso: 'proveedores.ver' },
+            { label: 'Cuentas por pagar', href: '/cuentas-por-pagar', icon: Banknote, permiso: 'cuentas_pagar.ver' },
         ],
     },
     {
-        seccion: 'Caja y clientes',
+        seccion: 'Caja',
         items: [
             { label: 'Caja', href: '/caja', icon: Wallet, permiso: 'caja.operar' },
+        ],
+    },
+    {
+        seccion: 'Clientes',
+        items: [
             { label: 'Clientes', href: '/clientes', icon: Users, permiso: 'clientes.ver' },
+        ],
+    },
+    {
+        seccion: 'Reportes',
+        items: [
+            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
         ],
     },
     {
         seccion: 'Configuración',
         items: [
-            { label: 'Reportes', href: '/reportes', icon: ChartColumnBig, permiso: 'reportes.ver' },
+            { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
             { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
             { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
-            { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
-            { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
             { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
+            { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
         ],
     },
 ]
