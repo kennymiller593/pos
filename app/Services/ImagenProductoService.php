@@ -24,20 +24,73 @@ class ImagenProductoService
 
     private const CARPETA = 'productos';
 
-    /** Guarda la imagen subida ya optimizada y devuelve su ruta en el disco public. */
+    /** Disco de las fotos en la nube (si no está configurado, van al disco public del servidor). */
+    public const DISCO = 'imagenes';
+
+    /** Cada foto tiene un nombre único que nunca cambia: el navegador y la CDN la pueden guardar un año. */
+    private const CACHE = 'public, max-age=31536000, immutable';
+
+    /** Guarda la imagen subida ya optimizada y devuelve la dirección con que se muestra (imagen_url). */
     public function guardar(UploadedFile $archivo): string
     {
-        $optimizada = $this->optimizar((string) file_get_contents($archivo->getRealPath()));
+        $original = (string) file_get_contents($archivo->getRealPath());
+        $optimizada = $this->optimizar($original);
 
-        if ($optimizada === null) {
-            return $archivo->store(self::CARPETA, 'public');
+        [$contenido, $extension] = $optimizada ?? [$original, strtolower($archivo->guessExtension() ?: 'jpg')];
+
+        return $this->subir($contenido, $extension);
+    }
+
+    /** Sube un binario ya listo y devuelve su dirección. */
+    public function subir(string $contenido, string $extension): string
+    {
+        $ruta = self::CARPETA.'/'.Str::uuid().'.'.$extension;
+
+        // sin nube configurada se usa el disco publico de siempre
+        Storage::disk($this->enNube() ? self::DISCO : 'public')->put($ruta, $contenido, [
+            'CacheControl' => self::CACHE,
+            'ContentType' => ['webp' => 'image/webp', 'png' => 'image/png'][$extension] ?? 'image/jpeg',
+        ]);
+
+        return $this->direccion($ruta);
+    }
+
+    /** true si las fotos se guardan en la nube (bucket con dirección pública). */
+    public function enNube(): bool
+    {
+        return config('filesystems.disks.'.self::DISCO.'.driver') === 's3' && filled($this->baseNube());
+    }
+
+    private function baseNube(): string
+    {
+        return rtrim((string) config('filesystems.disks.'.self::DISCO.'.url'), '/');
+    }
+
+    /** Dirección pública de una ruta del disco: absoluta en la nube, /storage/... en el servidor. */
+    public function direccion(string $ruta): string
+    {
+        return $this->enNube() ? $this->baseNube().'/'.$ruta : '/storage/'.$ruta;
+    }
+
+    /**
+     * Borra la foto si la guardamos nosotros (en el servidor o en la nube).
+     * Una dirección externa pegada a mano no se toca.
+     */
+    public function eliminar(?string $url): void
+    {
+        if (blank($url)) {
+            return;
         }
 
-        [$contenido, $extension] = $optimizada;
-        $ruta = self::CARPETA.'/'.Str::uuid().'.'.$extension;
-        Storage::disk('public')->put($ruta, $contenido);
-
-        return $ruta;
+        try {
+            if (str_starts_with($url, '/storage/')) {
+                Storage::disk('public')->delete(substr($url, strlen('/storage/')));
+            } elseif ($this->enNube() && str_starts_with($url, $this->baseNube().'/')) {
+                Storage::disk(self::DISCO)->delete(substr($url, strlen($this->baseNube()) + 1));
+            }
+        } catch (\Throwable $e) {
+            report($e); // una foto huérfana no debe impedir guardar el producto
+        }
     }
 
     /** true si la imagen ya tiene el formato final (para no reprocesarla). */

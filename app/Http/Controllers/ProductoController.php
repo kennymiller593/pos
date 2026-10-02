@@ -113,9 +113,9 @@ class ProductoController extends Controller
         }
 
         if ($request->hasFile('imagen')) {
-            $ruta = app(ImagenProductoService::class)->guardar($request->file('imagen'));
+            $nueva = app(ImagenProductoService::class)->guardar($request->file('imagen'));
             $this->eliminarImagenLocal($producto->imagen_url);
-            $datos['imagen_url'] = Storage::url($ruta);
+            $datos['imagen_url'] = $nueva;
         } elseif ($request->boolean('imagen_eliminar')) {
             $this->eliminarImagenLocal($producto->imagen_url);
             $datos['imagen_url'] = null;
@@ -187,8 +187,6 @@ class ProductoController extends Controller
     /** Borra el archivo de imagen solo si fue subido a nuestro almacenamiento. */
     private function eliminarImagenLocal(?string $url): void
     {
-        if ($url && str_starts_with($url, '/storage/')) {
-            Storage::disk('public')->delete(substr($url, strlen('/storage/')));
-        }
+        app(ImagenProductoService::class)->eliminar($url);
     }
 }

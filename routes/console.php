@@ -10,3 +10,6 @@ Schedule::command('sunat:sincronizar')
 
 // Deja el historial de suscripciones al dia (el bloqueo por vencimiento no depende de esto).
 Schedule::command('suscripciones:vencer')->dailyAt('00:10');
+
+// Copia la base y los archivos (XML/CDR, fotos, logos) fuera del servidor. Sin RESPALDO_* en .env no hace nada.
+Schedule::command('respaldo:nube')->dailyAt('02:30')->withoutOverlapping();

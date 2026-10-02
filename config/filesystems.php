@@ -47,6 +47,41 @@ return [
             'report' => false,
         ],
 
+        // copia de seguridad fuera del servidor (Cloudflare R2 u otro compatible con S3): ver respaldo:nube
+        'respaldo' => [
+            'driver' => 's3',
+            'key' => env('RESPALDO_ACCESS_KEY_ID'),
+            'secret' => env('RESPALDO_SECRET_ACCESS_KEY'),
+            'region' => env('RESPALDO_REGION', 'auto'),
+            'bucket' => env('RESPALDO_BUCKET'),
+            'endpoint' => env('RESPALDO_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'throw' => true,
+            'report' => false,
+        ],
+
+        // fotos de productos: bucket publico (Cloudflare R2 con dominio propio) si IMAGENES_BUCKET
+        // esta definido; si no, la carpeta publica del servidor, como siempre
+        'imagenes' => env('IMAGENES_BUCKET') ? [
+            'driver' => 's3',
+            'key' => env('IMAGENES_ACCESS_KEY_ID', env('RESPALDO_ACCESS_KEY_ID')),
+            'secret' => env('IMAGENES_SECRET_ACCESS_KEY', env('RESPALDO_SECRET_ACCESS_KEY')),
+            'region' => env('IMAGENES_REGION', 'auto'),
+            'bucket' => env('IMAGENES_BUCKET'),
+            'endpoint' => env('IMAGENES_ENDPOINT', env('RESPALDO_ENDPOINT')),
+            // direccion publica del bucket, p. ej. https://img.inkanet.pro
+            'url' => env('IMAGENES_URL'),
+            'use_path_style_endpoint' => true,
+            'throw' => true,
+            'report' => false,
+        ] : [
+            'driver' => 'local',
+            'root' => storage_path('app/public'),
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
