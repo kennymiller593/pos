@@ -31,20 +31,20 @@ class ImagenProductoService
     private const CACHE = 'public, max-age=31536000, immutable';
 
     /** Guarda la imagen subida ya optimizada y devuelve la dirección con que se muestra (imagen_url). */
-    public function guardar(UploadedFile $archivo): string
+    public function guardar(UploadedFile $archivo, string $empresaId): string
     {
         $original = (string) file_get_contents($archivo->getRealPath());
         $optimizada = $this->optimizar($original);
 
         [$contenido, $extension] = $optimizada ?? [$original, strtolower($archivo->guessExtension() ?: 'jpg')];
 
-        return $this->subir($contenido, $extension);
+        return $this->subir($contenido, $extension, $empresaId);
     }
 
     /** Sube un binario ya listo y devuelve su dirección. */
-    public function subir(string $contenido, string $extension): string
+    public function subir(string $contenido, string $extension, string $empresaId): string
     {
-        $ruta = self::CARPETA.'/'.Str::uuid().'.'.$extension;
+        $ruta = $this->carpeta($empresaId).'/'.Str::uuid().'.'.$extension;
 
         // sin nube configurada se usa el disco publico de siempre
         Storage::disk($this->enNube() ? self::DISCO : 'public')->put($ruta, $contenido, [
@@ -53,6 +53,21 @@ class ImagenProductoService
         ]);
 
         return $this->direccion($ruta);
+    }
+
+    /**
+     * En la nube cada empresa tiene su carpeta (empresas/{id}/productos): al dar de baja una
+     * empresa se borra de una vez, y se puede medir cuánto ocupa. En el servidor siguen juntas.
+     */
+    public function carpeta(string $empresaId): string
+    {
+        return $this->enNube() ? "empresas/{$empresaId}/".self::CARPETA : self::CARPETA;
+    }
+
+    /** Dirección base de las fotos en la nube que aún no están en la carpeta de su empresa. */
+    public function baseSinEmpresa(): string
+    {
+        return $this->baseNube().'/'.self::CARPETA.'/';
     }
 
     /** true si las fotos se guardan en la nube (bucket con dirección pública). */

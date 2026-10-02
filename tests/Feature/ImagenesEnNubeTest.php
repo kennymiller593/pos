@@ -62,7 +62,8 @@ class ImagenesEnNubeTest extends TestCase
 
         $producto = Producto::where('empresa_id', $this->empresa->id)->firstOrFail();
 
-        $this->assertStringStartsWith(self::BASE.'/productos/', $producto->imagen_url);
+        // cada empresa tiene su carpeta en el bucket
+        $this->assertStringStartsWith(self::BASE."/empresas/{$this->empresa->id}/productos/", $producto->imagen_url);
         $ruta = substr($producto->imagen_url, strlen(self::BASE) + 1);
         Storage::disk(ImagenProductoService::DISCO)->assertExists($ruta);
         $this->assertEmpty(Storage::disk('public')->allFiles()); // nada queda en el servidor
@@ -115,7 +116,7 @@ class ImagenesEnNubeTest extends TestCase
         $this->artisan('productos:imagenes-a-nube')->assertSuccessful();
 
         $url = $a->fresh()->imagen_url;
-        $this->assertStringStartsWith(self::BASE.'/productos/', $url);
+        $this->assertStringStartsWith(self::BASE."/empresas/{$this->empresa->id}/productos/", $url);
         $this->assertSame($url, $b->fresh()->imagen_url); // un solo archivo subido para los dos
         $this->assertSame('FOTO', Storage::disk(ImagenProductoService::DISCO)->get(substr($url, strlen(self::BASE) + 1)));
         $this->assertCount(1, Storage::disk(ImagenProductoService::DISCO)->allFiles());
@@ -126,5 +127,42 @@ class ImagenesEnNubeTest extends TestCase
         // repetirlo no vuelve a subir nada
         $this->artisan('productos:imagenes-a-nube')->assertSuccessful();
         $this->assertCount(1, Storage::disk(ImagenProductoService::DISCO)->allFiles());
+    }
+
+    public function test_las_fotos_de_la_carpeta_comun_pasan_a_la_carpeta_de_su_empresa(): void
+    {
+        $this->activarNube();
+        $nube = Storage::disk(ImagenProductoService::DISCO);
+        $nube->put('productos/compartida.webp', 'FOTO-A');
+        $nube->put('productos/sola.webp', 'FOTO-B');
+
+        $a = $this->crearProducto();
+        $b = $this->crearProducto();
+        $a->update(['imagen_url' => self::BASE.'/productos/compartida.webp']);
+        $b->update(['imagen_url' => self::BASE.'/productos/sola.webp']);
+        $perdida = $this->crearProducto();
+        $perdida->update(['imagen_url' => self::BASE.'/productos/no-existe.webp']);
+        $empresaA = $this->empresa->id;
+
+        $this->crearEscenarioBase(); // otra empresa que usa el mismo archivo
+        $c = $this->crearProducto();
+        $c->update(['imagen_url' => self::BASE.'/productos/compartida.webp']);
+        $empresaB = $this->empresa->id;
+
+        $this->artisan('productos:imagenes-por-empresa')->assertSuccessful();
+
+        $this->assertSame(self::BASE."/empresas/{$empresaA}/productos/compartida.webp", $a->fresh()->imagen_url);
+        $this->assertSame(self::BASE."/empresas/{$empresaA}/productos/sola.webp", $b->fresh()->imagen_url);
+        $this->assertSame(self::BASE."/empresas/{$empresaB}/productos/compartida.webp", $c->fresh()->imagen_url);
+        $this->assertSame('FOTO-A', $nube->get("empresas/{$empresaA}/productos/compartida.webp"));
+        $this->assertSame('FOTO-A', $nube->get("empresas/{$empresaB}/productos/compartida.webp"));
+        $this->assertSame('FOTO-B', $nube->get("empresas/{$empresaA}/productos/sola.webp"));
+        // la carpeta común queda vacía y lo que no tenía archivo no se toca
+        $this->assertEmpty($nube->files('productos'));
+        $this->assertSame(self::BASE.'/productos/no-existe.webp', $perdida->fresh()->imagen_url);
+
+        // repetirlo no cambia nada
+        $this->artisan('productos:imagenes-por-empresa')->assertSuccessful();
+        $this->assertCount(3, $nube->allFiles());
     }
 }

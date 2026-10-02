@@ -113,7 +113,7 @@ class ProductoController extends Controller
         }
 
         if ($request->hasFile('imagen')) {
-            $nueva = app(ImagenProductoService::class)->guardar($request->file('imagen'));
+            $nueva = app(ImagenProductoService::class)->guardar($request->file('imagen'), $producto->empresa_id);
             $this->eliminarImagenLocal($producto->imagen_url);
             $datos['imagen_url'] = $nueva;
         } elseif ($request->boolean('imagen_eliminar')) {
