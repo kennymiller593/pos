@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Jobs\CopiarArchivosANube;
 use App\Models\Auditoria;
 use App\Models\Cliente;
 use App\Models\Comprobante;
@@ -341,6 +342,12 @@ class GuiaRemisionService
             Storage::put("{$carpeta}/R-{$nombre}.zip", $respuesta->cdrZip);
             $guia->cdr_url = "{$carpeta}/R-{$nombre}.zip";
         }
+
+        // copia inmediata a la nube (en segundo plano: si la nube falla, la guia no se entera)
+        CopiarArchivosANube::encolar([
+            $respuesta->xml ? $guia->xml_url : null,
+            $respuesta->cdrZip ? $guia->cdr_url : null,
+        ]);
 
         $guia->estado_sunat = match (true) {
             $respuesta->enProceso => 'en_proceso',

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Jobs\CopiarArchivosANube;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\Ubigeo;
@@ -340,6 +341,7 @@ class SunatService
                 $nombre = "R-BAJA-{$comprobante->empresa->ruc}-{$comprobante->tipo_comprobante_codigo}-{$comprobante->serie}-{$comprobante->correlativo}";
                 Storage::put("{$carpeta}/{$nombre}.zip", $respuesta->cdrZip);
                 $registro->cdr_url = "{$carpeta}/{$nombre}.zip";
+                CopiarArchivosANube::encolar([$registro->cdr_url]);
             }
 
             $registro->estado = 'baja';
@@ -466,6 +468,12 @@ class SunatService
             Storage::put("{$carpeta}/R-{$nombre}.zip", $respuesta->cdrZip);
             $registro->cdr_url = "{$carpeta}/R-{$nombre}.zip";
         }
+
+        // copia inmediata a la nube (en segundo plano: si la nube falla, la emision no se entera)
+        CopiarArchivosANube::encolar([
+            $respuesta->xml ? $registro->xml_url : null,
+            $respuesta->cdrZip ? $registro->cdr_url : null,
+        ]);
 
         $registro->estado = match (true) {
             $respuesta->aceptado && $respuesta->observaciones !== [] => 'observado',

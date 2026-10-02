@@ -152,6 +152,9 @@ class GuiaRemisionTest extends TestCase
         $this->assertStringContainsString('unitCode="KGM">12.500<', $xml);
         $this->assertStringContainsString($this->ubigeo, $xml);
 
+        // sin nube configurada, nada se copia (el disco de respaldo no existe en el test)
+        $this->assertFalse(\App\Console\Commands\RespaldarEnNube::configurado());
+
         // una guia ya aceptada no se reenvia
         app(GuiaRemisionService::class)->enviar($guia);
         $this->assertSame(1, $this->enviador->envios);

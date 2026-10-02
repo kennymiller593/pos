@@ -25,15 +25,23 @@ class RespaldarEnNube extends Command
 
     protected $description = 'Respalda la base de datos y los archivos (XML/CDR, fotos, logos) en almacenamiento externo';
 
+    /** Dónde quedan en la nube los archivos privados (XML/CDR); también lo usa la copia inmediata. */
+    public const PREFIJO_PRIVADO = 'archivos/privado';
+
     /** Carpetas locales que se copian y con qué prefijo quedan en la nube. */
     private const CARPETAS = [
-        'archivos/privado' => 'app/private',
+        self::PREFIJO_PRIVADO => 'app/private',
         'archivos/publico' => 'app/public',
     ];
 
+    public static function configurado(): bool
+    {
+        return filled(config('filesystems.disks.respaldo.bucket')) && filled(config('filesystems.disks.respaldo.key'));
+    }
+
     public function handle(): int
     {
-        if (blank(config('filesystems.disks.respaldo.bucket')) || blank(config('filesystems.disks.respaldo.key'))) {
+        if (! self::configurado()) {
             $this->info('Respaldo en la nube sin configurar (faltan las variables RESPALDO_* en .env): no se hizo nada.');
 
             return self::SUCCESS;

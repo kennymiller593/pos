@@ -95,6 +95,37 @@ class EnvioSunatTest extends TestCase
         Storage::assertExists("sunat/{$this->empresa->id}/beta/R-{$nombre}.zip");
     }
 
+    public function test_el_xml_y_el_cdr_se_copian_a_la_nube_apenas_se_guardan(): void
+    {
+        config(['filesystems.disks.respaldo.bucket' => 'inkapos-respaldos', 'filesystems.disks.respaldo.key' => 'clave']);
+        Storage::fake('respaldo');
+
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<xml-firmado/>', hash: 'H', cdrZip: 'zip-binario',
+        );
+
+        $this->venderBoleta();
+
+        $nombre = "{$this->empresa->ruc}-03-B001-1";
+        $carpeta = "archivos/privado/sunat/{$this->empresa->id}/beta";
+        $this->assertSame('<xml-firmado/>', Storage::disk('respaldo')->get("{$carpeta}/{$nombre}.xml"));
+        $this->assertSame('zip-binario', Storage::disk('respaldo')->get("{$carpeta}/R-{$nombre}.zip"));
+    }
+
+    public function test_sin_nube_configurada_no_se_encola_ninguna_copia(): void
+    {
+        config(['filesystems.disks.respaldo.bucket' => null, 'filesystems.disks.respaldo.key' => null]);
+        \Illuminate\Support\Facades\Bus::fake([\App\Jobs\CopiarArchivosANube::class]);
+
+        $this->enviador->respuesta = new RespuestaSunat(
+            aceptado: true, codigo: '0', mensaje: 'Aceptada', xml: '<xml-firmado/>', hash: 'H', cdrZip: 'zip-binario',
+        );
+
+        $this->venderBoleta();
+
+        \Illuminate\Support\Facades\Bus::assertNotDispatched(\App\Jobs\CopiarArchivosANube::class);
+    }
+
     public function test_el_rechazo_de_sunat_queda_registrado(): void
     {
         $this->enviador->respuesta = new RespuestaSunat(

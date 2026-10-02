@@ -28,6 +28,13 @@
              corren contra la BD real y cada test se revierte con DatabaseTransactions. -->
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- los tests nunca deben escribir en la nube real, aunque el .env local tenga credenciales de R2 -->
+        <env name="RESPALDO_BUCKET" value="" force="true"/>
+        <env name="RESPALDO_ACCESS_KEY_ID" value="" force="true"/>
+        <env name="RESPALDO_SECRET_ACCESS_KEY" value="" force="true"/>
+        <env name="IMAGENES_BUCKET" value="" force="true"/>
+        <env name="IMAGENES_ACCESS_KEY_ID" value="" force="true"/>
+        <env name="IMAGENES_SECRET_ACCESS_KEY" value="" force="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
