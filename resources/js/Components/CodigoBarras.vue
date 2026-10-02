@@ -7,7 +7,14 @@ import JsBarcode from 'jsbarcode'
 
 const props = defineProps({
     valor: { type: String, required: true },
+    // ancho disponible en mm. Con este dato cada barra se ajusta a un número entero de puntos de
+    // la impresora térmica (203 dpi = 8 puntos por mm): si una barra mide 3,6 puntos, la impresora
+    // la redondea distinto cada vez y el código sale "pixeleado" y con barras desiguales.
+    anchoMax: { type: Number, default: 0 },
 })
+
+const PUNTO_MM = 0.125 // 1 punto a 203 dpi
+const PUNTOS_MAX = 4 // 0,5 mm por barra: más ancho no se lee mejor
 
 const svg = ref(null)
 const invalido = ref(false)
@@ -41,15 +48,20 @@ function dibujar() {
         // se estira al ancho y alto que le dé la etiqueta
         svg.value.setAttribute('preserveAspectRatio', 'none')
         svg.value.removeAttribute('style')
+
+        // ancho exacto: módulos × puntos enteros (la unidad --mm la pone la etiqueta: 1mm o escala de vista previa)
+        const modulos = svg.value.viewBox.baseVal.width
+        const puntos = Math.min(PUNTOS_MAX, Math.floor(props.anchoMax / (modulos * PUNTO_MM)))
+        svg.value.style.width = puntos >= 1 ? `calc(${modulos * puntos * PUNTO_MM} * var(--mm, 1mm))` : '100%'
     } catch {
         invalido.value = true
     }
 }
 
 onMounted(dibujar)
-watch(() => props.valor, dibujar)
+watch(() => [props.valor, props.anchoMax], dibujar)
 </script>
 
 <template>
-    <svg v-show="!invalido" ref="svg" class="block size-full" shape-rendering="crispEdges" aria-hidden="true" />
+    <svg v-show="!invalido" ref="svg" class="mx-auto block h-full max-w-full" shape-rendering="crispEdges" aria-hidden="true" />
 </template>

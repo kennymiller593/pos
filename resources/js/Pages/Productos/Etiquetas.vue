@@ -41,6 +41,9 @@ const altoMm = computed(() => Math.min(150, Math.max(15, Number(config.value.alt
 // en etiquetas chicas todo se reduce para que entre sin cortarse
 const compacta = computed(() => anchoMm.value < 45 || (esAdhesiva.value && altoMm.value < 28))
 
+// ancho útil para las barras: el papel menos los márgenes de la etiqueta (ver CSS)
+const anchoBarras = computed(() => Math.min(52, anchoMm.value - (!esAdhesiva.value ? 10 : compacta.value ? 4 : 6)))
+
 // ================= productos =================
 const buscar = ref('')
 
@@ -414,7 +417,7 @@ const claseOpcion = (activa) => [
                                 <p v-if="config.negocio" class="etiqueta__negocio">{{ empresaNombre }}</p>
                                 <p class="etiqueta__nombre">{{ muestra.nombre }}</p>
                                 <p v-if="config.precio" class="etiqueta__precio">{{ muestra.precio }}</p>
-                                <div class="etiqueta__barras"><CodigoBarras :valor="muestra.codigo" /></div>
+                                <div class="etiqueta__barras"><CodigoBarras :valor="muestra.codigo" :ancho-max="anchoBarras" /></div>
                                 <p class="etiqueta__codigo">{{ muestra.codigo }}</p>
                             </div>
                         </div>
@@ -457,7 +460,7 @@ const claseOpcion = (activa) => [
                     <p v-if="config.negocio" class="etiqueta__negocio">{{ empresaNombre }}</p>
                     <p class="etiqueta__nombre">{{ e.nombre }}</p>
                     <p v-if="config.precio" class="etiqueta__precio">{{ e.precio }}</p>
-                    <div class="etiqueta__barras"><CodigoBarras :valor="e.codigo" /></div>
+                    <div class="etiqueta__barras"><CodigoBarras :valor="e.codigo" :ancho-max="anchoBarras" /></div>
                     <p class="etiqueta__codigo">{{ e.codigo }}</p>
                 </div>
             </div>
@@ -471,6 +474,9 @@ const claseOpcion = (activa) => [
 
 .etiqueta {
     box-sizing: border-box;
+    /* texto y barras en negro puro, sin suavizado: la térmica solo imprime punto o no punto */
+    -webkit-font-smoothing: none;
+    print-color-adjust: exact;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -487,8 +493,8 @@ const claseOpcion = (activa) => [
 .etiqueta__negocio { font-size: calc(2.4 * var(--mm)); letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .etiqueta__nombre { font-size: calc(3.1 * var(--mm)); font-weight: 700; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .etiqueta__precio { font-size: calc(5 * var(--mm)); font-weight: 800; line-height: 1; }
-/* el ancho se limita para que cada barra no pase de ~0,45 mm: más ancho no se lee mejor */
-.etiqueta__barras { width: 100%; max-width: calc(52 * var(--mm)); height: calc(11 * var(--mm)); flex-shrink: 0; }
+/* el ancho exacto lo pone CodigoBarras (barras de puntos enteros para la térmica) */
+.etiqueta__barras { width: 100%; height: calc(11 * var(--mm)); flex-shrink: 0; }
 .etiqueta__codigo { font-family: 'Courier New', monospace; font-size: calc(2.8 * var(--mm)); letter-spacing: 0.08em; line-height: 1; }
 
 .etiqueta--compacta { padding: calc(1.2 * var(--mm)) calc(2 * var(--mm)); gap: calc(0.4 * var(--mm)); }
