@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
+use App\Models\GuiaRemision;
+use App\Services\GuiaRemisionService;
 use App\Services\SunatService;
 use App\Services\VentaService;
 use Illuminate\Console\Command;
@@ -23,12 +25,13 @@ class SincronizarSunat extends Command
     /** Tras este número de intentos fallidos se deja de reintentar solo (queda el reenvío manual). */
     private const MAX_INTENTOS = 20;
 
-    public function handle(SunatService $sunat, VentaService $ventas): int
+    public function handle(SunatService $sunat, VentaService $ventas, GuiaRemisionService $guias): int
     {
         $reenviados = $this->reenviarPendientes($sunat, (int) $this->option('limite'));
         $bajas = $this->confirmarBajas($ventas);
+        $guiasResueltas = $this->sincronizarGuias($guias, (int) $this->option('limite'));
 
-        $this->info("Reenviados: {$reenviados['ok']} aceptados, {$reenviados['rechazados']} rechazados, {$reenviados['pendientes']} siguen pendientes. Bajas confirmadas: {$bajas}.");
+        $this->info("Reenviados: {$reenviados['ok']} aceptados, {$reenviados['rechazados']} rechazados, {$reenviados['pendientes']} siguen pendientes. Bajas confirmadas: {$bajas}. Guías resueltas: {$guiasResueltas}.");
 
         return self::SUCCESS;
     }
@@ -80,6 +83,44 @@ class SincronizarSunat extends Command
         $esperaMinutos = min(360, 5 * (2 ** ($intentos - 1)));
 
         return $registro->enviado_en->addMinutes($esperaMinutos)->isPast();
+    }
+
+    /**
+     * Guías de remisión: consulta los tickets en proceso y reenvía las pendientes
+     * (con la misma espera creciente entre intentos). Devuelve cuántas quedaron resueltas.
+     */
+    private function sincronizarGuias(GuiaRemisionService $guias, int $limite): int
+    {
+        $resueltas = 0;
+
+        $pendientes = GuiaRemision::query()
+            ->where('estado', 'emitida')
+            ->where(fn ($q) => $q
+                ->where('estado_sunat', 'en_proceso')
+                ->orWhere(fn ($p) => $p->where('estado_sunat', 'pendiente')->where('intentos', '<', self::MAX_INTENTOS)))
+            ->whereHas('empresa', fn ($e) => $e->where('facturacion_electronica', true))
+            ->with('empresa')
+            ->orderBy('creado_en')
+            ->limit($limite)
+            ->get();
+
+        foreach ($pendientes as $guia) {
+            if ($guia->estado_sunat === 'en_proceso') {
+                $guias->consultar($guia);
+            } else {
+                $esperaMinutos = min(360, 5 * (2 ** (max(1, (int) $guia->intentos) - 1)));
+                if ($guia->enviado_en && ! $guia->enviado_en->addMinutes($esperaMinutos)->isPast()) {
+                    continue;
+                }
+                $guias->enviar($guia);
+            }
+
+            if (in_array($guia->estado_sunat, ['aceptado', 'observado', 'rechazado'], true)) {
+                $resueltas++;
+            }
+        }
+
+        return $resueltas;
     }
 
     private function confirmarBajas(VentaService $ventas): int

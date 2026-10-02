@@ -18,6 +18,8 @@ final class RespuestaSunat
         public readonly bool $errorComunicacion = false,
         public readonly ?string $ticket = null,
         public readonly bool $enProceso = false,
+        // enlace de consulta que SUNAT devuelve en el CDR de una guia (va en el QR)
+        public readonly ?string $referencia = null,
     ) {
     }
 }

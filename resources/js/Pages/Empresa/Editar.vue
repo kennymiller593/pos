@@ -47,6 +47,8 @@ const form = useForm({
     logo_eliminar: false,
     cuentas_bancarias: props.empresa.cuentas_bancarias ?? '',
     usuario_sol: props.empresa.usuario_sol ?? '',
+    gre_client_id: props.empresa.gre_client_id ?? '',
+    gre_client_secret: '',
     certificado_digital: '',
     clave_sol: '',
     clave_certificado: '',
@@ -84,10 +86,12 @@ function enviar() {
         certificado_digital: data.certificado_digital || null,
         clave_sol: data.clave_sol || null,
         clave_certificado: data.clave_certificado || null,
+        gre_client_id: data.gre_client_id.trim() || null,
+        gre_client_secret: data.gre_client_secret || null,
     })).post('/empresa', {
         preserveScroll: true,
         onSuccess: () => {
-            form.reset('certificado_digital', 'clave_sol', 'clave_certificado', 'logo', 'logo_eliminar')
+            form.reset('certificado_digital', 'clave_sol', 'clave_certificado', 'gre_client_secret', 'logo', 'logo_eliminar')
             if (inputLogo.value) inputLogo.value.value = ''
         },
     })
@@ -334,6 +338,38 @@ const certificadoVencimiento = computed(() => {
                             class="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
                         >
                             Estás en el ambiente de pruebas de SUNAT: las boletas y facturas que emitas NO tienen valor tributario y se imprimen con esa leyenda.
+                        </p>
+                    </div>
+
+                    <!-- Guías de remisión: SUNAT las recibe por otra plataforma, con credenciales propias -->
+                    <div class="rounded-xl border border-stone-200 p-4 sm:col-span-2 dark:border-neutral-800">
+                        <p class="text-sm font-semibold">Guías de remisión <span class="font-normal text-neutral-400">(opcional)</span></p>
+                        <p class="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            Para enviar guías a SUNAT se necesita una credencial extra. Se genera en
+                            <strong>SUNAT Operaciones en Línea → Empresas → Credenciales de API SUNAT → Gestión de credenciales</strong>,
+                            creando una aplicación con el alcance "Guía de remisión electrónica".
+                        </p>
+                        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label :class="claseLabel" for="gre_client_id">Client ID</label>
+                                <input id="gre_client_id" v-model="form.gre_client_id" type="text" autocomplete="off" :class="[claseInput, 'font-mono text-xs']" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                                <p v-if="form.errors.gre_client_id" :class="claseError">{{ form.errors.gre_client_id }}</p>
+                            </div>
+                            <div>
+                                <label :class="claseLabel" for="gre_client_secret">Client Secret (clave)</label>
+                                <input
+                                    id="gre_client_secret"
+                                    v-model="form.gre_client_secret"
+                                    type="password"
+                                    autocomplete="new-password"
+                                    :class="claseInput"
+                                    :placeholder="empresa.tiene_gre_client_secret ? '••••••• (guardada, escribe para cambiarla)' : 'Clave de la credencial'"
+                                />
+                                <p v-if="form.errors.gre_client_secret" :class="claseError">{{ form.errors.gre_client_secret }}</p>
+                            </div>
+                        </div>
+                        <p v-if="form.entorno_sunat === 'beta'" class="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
+                            En el entorno Beta las guías van a un simulador y no necesitan esta credencial.
                         </p>
                     </div>
                 </div>

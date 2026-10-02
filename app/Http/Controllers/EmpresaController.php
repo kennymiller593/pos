@@ -32,6 +32,8 @@ class EmpresaController extends Controller
                 'logo_url' => $empresa->logo_url,
                 'cuentas_bancarias' => $empresa->cuentas_bancarias,
                 'usuario_sol' => $empresa->usuario_sol,
+                'gre_client_id' => $empresa->gre_client_id,
+                'tiene_gre_client_secret' => filled($empresa->gre_client_secret),
                 'tiene_certificado' => filled($empresa->certificado_digital),
                 'tiene_clave_sol' => filled($empresa->clave_sol),
                 'tiene_clave_certificado' => filled($empresa->clave_certificado),
@@ -118,6 +120,8 @@ class EmpresaController extends Controller
             'usuario_sol' => ['nullable', 'string', 'max:50'],
             'certificado_digital' => ['nullable', 'string'],
             'clave_sol' => ['nullable', 'string', 'max:100'],
+            'gre_client_id' => ['nullable', 'string', 'max:100'],
+            'gre_client_secret' => ['nullable', 'string', 'max:200'],
             'clave_certificado' => ['nullable', 'string', 'max:100'],
             'entorno_sunat' => ['nullable', Rule::in(['beta', 'produccion'])],
         ], [
@@ -142,7 +146,7 @@ class EmpresaController extends Controller
         unset($datos['logo'], $datos['logo_eliminar']);
 
         // credenciales de solo escritura: si vienen vacias, se conserva la actual
-        foreach (['certificado_digital', 'clave_sol', 'clave_certificado'] as $campo) {
+        foreach (['certificado_digital', 'clave_sol', 'clave_certificado', 'gre_client_secret'] as $campo) {
             if (blank($datos[$campo] ?? null)) {
                 unset($datos[$campo]);
             }

@@ -79,6 +79,7 @@ INSERT INTO public.tipos_comprobante (codigo, nombre, es_electronico) VALUES ('0
 INSERT INTO public.tipos_comprobante (codigo, nombre, es_electronico) VALUES ('07', 'Nota de credito', true);
 INSERT INTO public.tipos_comprobante (codigo, nombre, es_electronico) VALUES ('08', 'Nota de debito', true);
 INSERT INTO public.tipos_comprobante (codigo, nombre, es_electronico) VALUES ('00', 'Nota de venta interna', false);
+INSERT INTO public.tipos_comprobante (codigo, nombre, es_electronico) VALUES ('09', 'Guia de remision remitente', true);
 
 
 --

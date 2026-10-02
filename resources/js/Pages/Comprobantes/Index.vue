@@ -10,6 +10,7 @@ import {
     FileText,
     LoaderCircle,
     Mail,
+    Navigation,
     Printer,
     ReceiptText,
     RefreshCw,
@@ -438,6 +439,15 @@ const claseInput =
                                         >
                                             <Mail class="size-4" />
                                         </button>
+                                        <Link
+                                            v-if="puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)"
+                                            :href="`/guias/crear?comprobante=${c.id}`"
+                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                            title="Generar guía de remisión para entregar esta venta"
+                                            @click.stop
+                                        >
+                                            <Navigation class="size-4" />
+                                        </Link>
                                         <button
                                             v-if="puedeConvertir(c)"
                                             class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"

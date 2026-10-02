@@ -24,7 +24,7 @@ class VentaService
 {
     private const IGV = 0.18;
 
-    private const SERIES_POR_DEFECTO = ['00' => 'NV01', '03' => 'B001', '01' => 'F001'];
+    private const SERIES_POR_DEFECTO = ['00' => 'NV01', '03' => 'B001', '01' => 'F001', '09' => 'T001'];
 
     /** Dias calendario, contados desde la emision, en que SUNAT admite el envio (facturas 3, boletas 7). */
     private const PLAZO_ENVIO_DIAS = ['01' => 3, '03' => 7];
@@ -649,7 +649,7 @@ class VentaService
         }
     }
 
-    private function tomarCorrelativo(string $empresaId, string $sucursalId, ?string $cajaId, string $tipoComprobante): SerieCorrelativo
+    public function tomarCorrelativo(string $empresaId, string $sucursalId, ?string $cajaId, string $tipoComprobante): SerieCorrelativo
     {
         // prefiere la serie asignada a la caja; si no hay, usa la general de la sucursal
         $serie = SerieCorrelativo::query()

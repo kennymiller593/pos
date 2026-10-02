@@ -29,6 +29,8 @@ class Empresa extends Model
         'rubro_codigo',
         'logo_url',
         'cuentas_bancarias',
+        'gre_client_id',
+        'gre_client_secret',
         'usuario_sol',
         'certificado_digital',
         'clave_sol',
@@ -43,6 +45,7 @@ class Empresa extends Model
         'certificado_digital',
         'clave_sol',
         'clave_certificado',
+        'gre_client_secret',
     ];
 
     protected function casts(): array
@@ -51,6 +54,7 @@ class Empresa extends Model
             'activo' => 'boolean',
             'facturacion_electronica' => 'boolean',
             'clave_sol' => 'encrypted',
+            'gre_client_secret' => 'encrypted',
             'clave_certificado' => 'encrypted',
             // la llave privada de firma no puede quedar en claro en un backup
             'certificado_digital' => 'encrypted',

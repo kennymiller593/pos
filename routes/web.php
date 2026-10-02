@@ -22,6 +22,7 @@ use App\Http\Controllers\CotizacionController;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\GuiaRemisionController;
 use App\Http\Controllers\ImportacionProductoController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LandingController;
@@ -211,6 +212,22 @@ Route::middleware('auth')->group(function () {
         Route::post('/cotizaciones/{cotizacion}/correo', [CotizacionController::class, 'correo'])->whereUuid('cotizacion')->middleware('throttle:30,1')->name('cotizaciones.correo');
     });
     Route::post('/cotizaciones/{cotizacion}/anular', [CotizacionController::class, 'anular'])->whereUuid('cotizacion')->middleware('can:cotizaciones.anular')->name('cotizaciones.anular');
+
+    // ---- guias de remision (sustentan el traslado; no mueven stock ni caja) ----
+    Route::middleware('can:guias.ver')->group(function () {
+        Route::get('/guias', [GuiaRemisionController::class, 'index'])->name('guias.index');
+        Route::get('/guias/{guia}/pdf', [GuiaRemisionController::class, 'pdf'])->whereUuid('guia')->name('guias.pdf');
+        Route::get('/guias/{guia}/xml', [GuiaRemisionController::class, 'xml'])->whereUuid('guia')->name('guias.xml');
+        Route::get('/guias/{guia}/cdr', [GuiaRemisionController::class, 'cdr'])->whereUuid('guia')->name('guias.cdr');
+    });
+    Route::middleware('can:guias.gestionar')->group(function () {
+        Route::get('/guias/crear', [GuiaRemisionController::class, 'crear'])->name('guias.crear');
+        Route::get('/guias/clientes', [PosController::class, 'clientes'])->name('guias.clientes');
+        Route::post('/guias/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('guias.clientes.crear');
+        Route::post('/guias', [GuiaRemisionController::class, 'store'])->name('guias.store');
+        Route::post('/guias/{guia}/sunat', [GuiaRemisionController::class, 'enviarSunat'])->whereUuid('guia')->middleware('throttle:30,1')->name('guias.sunat');
+    });
+    Route::post('/guias/{guia}/anular', [GuiaRemisionController::class, 'anular'])->whereUuid('guia')->middleware('can:guias.anular')->name('guias.anular');
 
     // ---- comprobantes ----
     Route::middleware('can:comprobantes.ver')->group(function () {

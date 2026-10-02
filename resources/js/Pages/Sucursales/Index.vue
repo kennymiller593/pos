@@ -84,6 +84,7 @@ const TIPOS_COMPROBANTE = [
     { codigo: '00', nombre: 'Nota de venta', ejemplo: 'NV02' },
     { codigo: '03', nombre: 'Boleta', ejemplo: 'B002' },
     { codigo: '01', nombre: 'Factura', ejemplo: 'F002' },
+    { codigo: '09', nombre: 'Guía de remisión', ejemplo: 'T002' },
 ]
 
 const nombreTipo = (codigo) => TIPOS_COMPROBANTE.find((t) => t.codigo === codigo)?.nombre ?? codigo

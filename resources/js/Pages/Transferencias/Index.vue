@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Plus } from '@lucide/vue'
+import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Navigation, Plus } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
@@ -117,6 +117,16 @@ async function anular(t) {
                                 <td class="px-3 py-3 text-neutral-600 dark:text-neutral-300">{{ t.usuario?.nombre_completo ?? '—' }}</td>
                                 <td class="px-3 py-3">
                                     <div class="flex justify-end gap-1.5">
+                                        <Link
+                                            v-if="puede('guias.gestionar') && t.estado !== 'anulada'"
+                                            :href="`/guias/crear?transferencia=${t.id}`"
+                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                            title="Generar la guía de remisión de este traslado"
+                                            @click.stop
+                                        >
+                                            <Navigation class="size-3.5" />
+                                            Guía
+                                        </Link>
                                         <button
                                             v-if="puede('transferencias.gestionar') && ['pendiente', 'en_transito'].includes(t.estado)"
                                             class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"

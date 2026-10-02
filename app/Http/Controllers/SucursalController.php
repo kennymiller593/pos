@@ -161,7 +161,7 @@ class SucursalController extends Controller
 
         $datos = $request->validate([
             'serie_id' => ['nullable', 'uuid', Rule::exists('series_correlativos', 'id')->where('sucursal_id', $sucursal->id)],
-            'tipo_comprobante_codigo' => ['required', Rule::in(['00', '03', '01'])],
+            'tipo_comprobante_codigo' => ['required', Rule::in(['00', '03', '01', '09'])],
             'serie' => ['required', 'string', 'size:4', 'regex:/^[A-Z][A-Z0-9]{3}$/'],
             'caja_id' => ['nullable', 'uuid', Rule::exists('cajas', 'id')->where('sucursal_id', $sucursal->id)],
             'correlativo' => ['required', 'integer', 'min:0', 'max:99999999'],
@@ -173,8 +173,8 @@ class SucursalController extends Controller
             'correlativo.min' => 'El correlativo no puede ser negativo.',
         ]);
 
-        // prefijo segun SUNAT: boletas B, facturas F
-        $prefijos = ['03' => 'B', '01' => 'F'];
+        // prefijo segun SUNAT: boletas B, facturas F, guias de remision T
+        $prefijos = ['03' => 'B', '01' => 'F', '09' => 'T'];
         $prefijo = $prefijos[$datos['tipo_comprobante_codigo']] ?? null;
         if ($prefijo && ! str_starts_with($datos['serie'], $prefijo)) {
             return back()->with('error', "Las series de este comprobante deben empezar con \"{$prefijo}\" (ej. {$prefijo}002).");

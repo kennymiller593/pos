@@ -56,6 +56,9 @@ class ConsultaController extends Controller
         return response()->json([
             'dni' => $datos['document_number'] ?? $numero,
             'nombre_completo' => $datos['full_name'] ?? trim(($datos['first_name'] ?? '').' '.($datos['first_last_name'] ?? '').' '.($datos['second_last_name'] ?? '')),
+            // por separado para quien los necesita asi (p. ej. el conductor de una guia de remision)
+            'nombres' => $datos['first_name'] ?? null,
+            'apellidos' => trim(($datos['first_last_name'] ?? '').' '.($datos['second_last_name'] ?? '')) ?: null,
         ]);
     }
 
