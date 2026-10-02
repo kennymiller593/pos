@@ -2,11 +2,19 @@
 import { computed, ref, watch } from 'vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
+import { onClickOutside, useEventListener } from '@vueuse/core'
 import {
     Ban,
+    CalendarDays,
     CheckCircle2,
     ChevronDown,
+    ChevronsUpDown,
+    ChevronUp,
+    Clock3,
     CloudUpload,
+    EllipsisVertical,
+    Eye,
+    FileCode2,
     FileText,
     LoaderCircle,
     Mail,
@@ -15,11 +23,26 @@ import {
     ReceiptText,
     RefreshCw,
     Search,
+    ShieldCheck,
     Undo2,
     UserRound,
+    Users,
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import DetalleComprobante from './DetalleComprobante.vue'
+import {
+    AYUDA_REEMITIR,
+    MOTIVOS_NC,
+    TIPOS,
+    badgeSunat,
+    bajaPendiente,
+    esElectronico,
+    numero,
+    puedeReemitir,
+    puedeReenviar,
+    soles,
+} from './comun'
 import { usePermisos } from '@/composables/permisos'
 import { useImpresion } from '@/composables/impresion'
 
@@ -28,6 +51,7 @@ const { imprimirTicket } = useImpresion()
 const props = defineProps({
     comprobantes: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
+    orden: { type: Object, default: () => ({ columna: 'fecha', dir: 'desc' }) },
     mediosPago: { type: Array, default: () => [] },
 })
 
@@ -36,14 +60,57 @@ const page = usePage()
 const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 const facturacionElectronica = computed(() => !!page.props.auth?.user?.empresa?.facturacion_electronica)
 
-const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
-const numero = (c) => `${c.serie}-${String(c.correlativo).padStart(6, '0')}`
-const TIPOS = { '00': 'Nota de venta', '01': 'Factura', '03': 'Boleta', '07': 'Nota de crédito', '08': 'Nota de débito' }
+const momento = (c) => new Date(`${c.fecha_emision.slice(0, 10)}T${c.hora_emision}`)
+const fecha = (c) => momento(c).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
+const hora = (c) => momento(c).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 
-function fechaHora(c) {
-    const fecha = new Date(`${c.fecha_emision.slice(0, 10)}T${c.hora_emision}`)
-    return fecha.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) + ' ' +
-        fecha.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+// ---- presentación ----
+const ESTILO_OK = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+const ESTILO_ERROR = 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400'
+const ESTILOS_TIPO = {
+    '00': 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+    '01': 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+    '03': 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+}
+const estiloTipo = (c) => ({
+    texto: TIPOS[c.tipo_comprobante_codigo] ?? c.tipo_comprobante_codigo,
+    clase: ESTILOS_TIPO[c.tipo_comprobante_codigo] ?? 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-neutral-300',
+})
+const inicial = (nombre) => (nombre ?? '?').trim().charAt(0).toUpperCase() || '?'
+const primerNombre = (nombre) => (nombre ?? '—').trim().split(/\s+/)[0]
+// cada cliente con un color fijo (derivado de su nombre), para reconocerlo de un vistazo
+const COLORES_AVATAR = [
+    'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
+    'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300',
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+    'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
+    'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300',
+    'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+]
+const colorAvatar = (nombre) => COLORES_AVATAR[[...nombre].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 997, 7) % COLORES_AVATAR.length]
+const claseAccion =
+    'grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#475569] transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400'
+
+// ---- orden por columna ----
+const COLUMNAS = [
+    { id: 'numero', titulo: 'Número' },
+    { id: 'tipo', titulo: 'Tipo' },
+    { id: 'fecha', titulo: 'Fecha' },
+    { id: 'cliente', titulo: 'Cliente' },
+    { id: 'total', titulo: 'Total', clase: 'text-right' },
+    { id: 'estado', titulo: 'Estado' },
+    { id: 'sunat', titulo: 'SUNAT' },
+    { id: 'vendedor', titulo: 'Vendedor' },
+]
+const orden = ref({ ...props.orden })
+
+function ordenarPor(columna) {
+    // la primera vez, montos y fechas de mayor a menor; textos de la A a la Z
+    const dir = orden.value.columna === columna
+        ? (orden.value.dir === 'asc' ? 'desc' : 'asc')
+        : (['fecha', 'total'].includes(columna) ? 'desc' : 'asc')
+    orden.value = { columna, dir }
+    aplicarFiltros()
 }
 
 // ---- filtros ----
@@ -58,7 +125,17 @@ function aplicarFiltros() {
         tipo: tipo.value || undefined,
         estado: estado.value || undefined,
         sunat: sunat.value || undefined,
+        orden: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.columna : undefined,
+        dir: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.dir : undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
+}
+
+const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value))
+function limpiarFiltros() {
+    buscar.value = ''
+    tipo.value = ''
+    estado.value = ''
+    sunat.value = ''
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
@@ -66,25 +143,41 @@ watch([tipo, estado, sunat], aplicarFiltros)
 
 // ---- detalle expandible ----
 const expandido = ref(null)
+const alternarDetalle = (c) => (expandido.value = expandido.value === c.id ? null : c.id)
+
+const puedeGuia = (c) => puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)
+const puedeAnular = (c) => puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)
+
+// algo espera una acción del usuario (se marca con un punto en el botón de más acciones)
+const requiereAtencion = (c) => puede('comprobantes.sunat') && (puedeReenviar(c) || puedeReemitir(c) || bajaPendiente(c))
+
+// ---- menú de más acciones (fuera de la tabla, para que el desplazamiento horizontal no lo corte) ----
+const menu = ref(null) // { c, top, left, arriba }
+const panelMenu = ref(null)
+
+function abrirMenu(c, evento) {
+    if (menu.value?.c.id === c.id) return (menu.value = null)
+    const r = evento.currentTarget.getBoundingClientRect()
+    const arriba = r.bottom + 320 > window.innerHeight && r.top > 320
+    abiertoEn = Date.now()
+    menu.value = { c, left: Math.max(8, r.right - 256), top: arriba ? r.top - 6 : r.bottom + 6, arriba }
+}
+
+function accion(fn) {
+    const c = menu.value?.c
+    menu.value = null
+    if (c) fn(c)
+}
+
+onClickOutside(panelMenu, () => (menu.value = null))
+// al desplazar la página el menú quedaría flotando fuera de su fila: se cierra (salvo el
+// desplazamiento que el propio navegador hace justo al tocar el botón)
+let abiertoEn = 0
+useEventListener(window, 'scroll', () => Date.now() - abiertoEn > 400 && (menu.value = null), { capture: true, passive: true })
+useEventListener(window, 'resize', () => (menu.value = null))
+useEventListener(document, 'keydown', (e) => e.key === 'Escape' && (menu.value = null))
 
 // ---- envio a SUNAT ----
-const esElectronico = (c) => ['01', '03', '07'].includes(c.tipo_comprobante_codigo)
-const SUNAT_BADGES = {
-    aceptado: ['Aceptado', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'],
-    observado: ['Observado', 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'],
-    rechazado: ['Rechazado', 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'],
-    pendiente: ['Pendiente', 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'],
-    baja_pendiente: ['Baja en proceso', 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'],
-    baja: ['Dada de baja', 'bg-stone-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'],
-}
-const bajaPendiente = (c) => c.sunat?.estado === 'baja_pendiente'
-const badgeSunat = (c) => SUNAT_BADGES[c.sunat?.estado ?? 'pendiente'] ?? SUNAT_BADGES.pendiente
-const puedeReenviar = (c) =>
-    esElectronico(c) && c.estado === 'emitido' && ['pendiente', undefined].includes(c.sunat?.estado)
-// un rechazado no se reenvia tal cual: se reemite con el mismo numero y los datos del cliente actualizados
-const puedeReemitir = (c) =>
-    esElectronico(c) && c.estado === 'emitido' && c.sunat?.estado === 'rechazado'
-const AYUDA_REEMITIR = 'Actualiza los datos del cliente desde Clientes y vuelve a enviar con el mismo número'
 
 const enviandoSunat = ref(null)
 
@@ -183,13 +276,6 @@ function convertir() {
 }
 
 // ---- nota de credito ----
-const MOTIVOS_NC = [
-    { codigo: '01', nombre: 'Anulación de la operación (total)' },
-    { codigo: '06', nombre: 'Devolución total' },
-    { codigo: '07', nombre: 'Devolución por ítem (parcial)' },
-]
-const nombreMotivo = (codigo) =>
-    MOTIVOS_NC.find((m) => m.codigo === codigo?.trim())?.nombre ?? 'Nota de crédito'
 const comprobanteNota = ref(null)
 const formNota = useForm({ motivo: '06', items: [], medio_pago_codigo: 'efectivo', referencia: '' })
 const cantidadesNota = ref({}) // detalle_id -> cantidad a devolver
@@ -275,43 +361,51 @@ function anular() {
     })
 }
 
+const claseItemMenu =
+    'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left font-medium transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800'
 const claseInput =
-    'h-10 rounded-xl border border-stone-200 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500'
+    'h-10 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500'
 </script>
 
 <template>
     <AppLayout titulo="Comprobantes">
         <!-- Filtros -->
-        <div class="mb-4 flex flex-col gap-3 sm:flex-row">
-            <div class="relative w-full sm:max-w-xs">
+        <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div class="relative w-full lg:max-w-sm">
                 <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
-                <input
-                    v-model="buscar"
-                    type="text"
-                    placeholder="Buscar por número, cliente o documento..."
-                    :class="[claseInput, 'w-full pl-10']"
-                />
+                <input v-model="buscar" type="text" placeholder="Buscar por número, cliente o documento..." :class="[claseInput, 'w-full pl-10']" />
             </div>
-            <select v-model="tipo" :class="claseInput">
-                <option value="">Todos los tipos</option>
-                <option value="00">Notas de venta</option>
-                <option value="03">Boletas</option>
-                <option value="01">Facturas</option>
-            </select>
-            <select v-model="estado" :class="claseInput">
-                <option value="">Todos los estados</option>
-                <option value="emitido">Emitidos</option>
-                <option value="anulado">Anulados</option>
-            </select>
-            <select v-model="sunat" :class="claseInput">
-                <option value="">SUNAT: todos</option>
-                <option value="pendiente">Sin aceptar (pendientes y rechazados)</option>
-                <option value="aceptado">Aceptados</option>
-                <option value="observado">Observados</option>
-                <option value="rechazado">Rechazados</option>
-                <option value="baja_pendiente">Baja en proceso</option>
-                <option value="baja">Dados de baja</option>
-            </select>
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:items-center">
+                <select v-model="tipo" :class="claseInput" aria-label="Tipo">
+                    <option value="">Todos los tipos</option>
+                    <option value="00">Notas de venta</option>
+                    <option value="03">Boletas</option>
+                    <option value="01">Facturas</option>
+                </select>
+                <select v-model="estado" :class="claseInput" aria-label="Estado">
+                    <option value="">Todos los estados</option>
+                    <option value="emitido">Emitidos</option>
+                    <option value="anulado">Anulados</option>
+                </select>
+                <select v-model="sunat" :class="[claseInput, 'col-span-2 sm:col-span-1']" aria-label="Estado en SUNAT">
+                    <option value="">SUNAT: todos</option>
+                    <option value="pendiente">Sin aceptar (pendientes y rechazados)</option>
+                    <option value="aceptado">Aceptados</option>
+                    <option value="observado">Observados</option>
+                    <option value="rechazado">Rechazados</option>
+                    <option value="baja_pendiente">Baja en proceso</option>
+                    <option value="baja">Dados de baja</option>
+                </select>
+                <button
+                    v-if="hayFiltros"
+                    type="button"
+                    class="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 sm:col-span-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                    @click="limpiarFiltros"
+                >
+                    <X class="size-4" />
+                    Limpiar
+                </button>
+            </div>
         </div>
 
         <!-- Aviso tras convertir una nota de venta -->
@@ -342,27 +436,33 @@ const claseInput =
             </div>
         </div>
 
-        <!-- Tabla -->
-        <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            <div class="@container overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
+        <!-- Tabla (PC) y tarjetas (celular) -->
+        <div class="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            <div class="@container relative hidden overflow-x-auto md:block">
+                <table class="w-full min-w-[68rem] text-left text-sm">
+                    <thead class="border-b border-[#E2E8F0] bg-slate-50/70 text-[11px] text-[#64748B] uppercase dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
                         <tr>
-                            <th class="w-8 px-2 py-3.5" />
-                            <th class="px-3 py-3.5 font-semibold tracking-wider">Número</th>
-                            <th class="px-3 py-3.5 font-semibold tracking-wider">Tipo</th>
-                            <th class="px-3 py-3.5 font-semibold tracking-wider">Fecha</th>
-                            <th class="px-3 py-3.5 font-semibold tracking-wider">Cliente</th>
-                            <th class="px-3 py-3.5 text-right font-semibold tracking-wider">Total</th>
-                            <th class="px-3 py-3.5 text-center font-semibold tracking-wider">Estado</th>
-                            <th class="px-3 py-3.5 text-center font-semibold tracking-wider">SUNAT</th>
-                            <th class="px-3 py-3.5 font-semibold tracking-wider">Vendedor</th>
-                            <th class="px-3 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
+                            <th class="w-10 py-3 pl-4" />
+                            <th v-for="col in COLUMNAS" :key="col.id" class="px-3 py-3" :class="col.clase">
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 font-semibold tracking-wider uppercase transition-colors hover:text-[#0F172A] dark:hover:text-neutral-100"
+                                    :class="orden.columna === col.id ? 'text-[#0F172A] dark:text-neutral-100' : ''"
+                                    :aria-label="`Ordenar por ${col.titulo}`"
+                                    @click="ordenarPor(col.id)"
+                                >
+                                    {{ col.titulo }}
+                                    <ChevronUp v-if="orden.columna === col.id && orden.dir === 'asc'" class="size-3.5" />
+                                    <ChevronDown v-else-if="orden.columna === col.id" class="size-3.5" />
+                                    <ChevronsUpDown v-else class="size-3.5 opacity-60" />
+                                </button>
+                            </th>
+                            <th class="py-3 pr-4 text-right font-semibold tracking-wider">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
+                    <tbody class="divide-y divide-[#F1F5F9] dark:divide-neutral-800">
                         <tr v-if="!comprobantes.data.length">
-                            <td colspan="10" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td colspan="10" class="px-4 py-14 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <ReceiptText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay comprobantes que mostrar.
@@ -371,128 +471,112 @@ const claseInput =
                         </tr>
                         <template v-for="c in comprobantes.data" :key="c.id">
                             <tr
-                                class="cursor-pointer transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50"
-                                @click="expandido = expandido === c.id ? null : c.id"
+                                class="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-neutral-800/40"
+                                :class="[expandido === c.id ? 'bg-slate-50/80 dark:bg-neutral-800/40' : '', c.estado === 'anulado' ? 'opacity-70' : '']"
+                                @click="alternarDetalle(c)"
                             >
-                                <td class="px-2 py-3 text-center">
-                                    <ChevronDown
-                                        class="size-4 text-neutral-400 transition-transform"
-                                        :class="expandido === c.id ? 'rotate-180' : ''"
-                                    />
+                                <td class="py-4 pl-4">
+                                    <ChevronDown class="size-4 text-[#64748B] transition-transform" :class="expandido === c.id ? 'rotate-180' : ''" />
                                 </td>
-                                <td class="px-3 py-3 font-mono text-xs font-semibold">{{ numero(c) }}</td>
-                                <td class="px-3 py-3">
-                                    {{ TIPOS[c.tipo_comprobante_codigo] ?? c.tipo_comprobante_codigo }}
-                                    <span v-if="c.notas?.length" class="block text-xs text-amber-600 dark:text-amber-400">
+                                <td class="px-3 py-4">
+                                    <p class="font-semibold whitespace-nowrap text-[#0F172A] dark:text-neutral-100">{{ numero(c) }}</p>
+                                    <p v-if="c.notas?.length" class="text-xs whitespace-nowrap text-amber-600 dark:text-amber-400">
                                         {{ c.notas.length }} nota{{ c.notas.length > 1 ? 's' : '' }} de crédito
+                                    </p>
+                                </td>
+                                <td class="px-3 py-4">
+                                    <span class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="estiloTipo(c).clase">
+                                        <FileText class="size-3.5" />
+                                        {{ estiloTipo(c).texto }}
                                     </span>
                                 </td>
-                                <td class="px-3 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ fechaHora(c) }}</td>
-                                <td class="px-3 py-3 text-neutral-600 dark:text-neutral-300">{{ c.cliente_nombre ?? 'Público general' }}</td>
-                                <td class="px-3 py-3 text-right font-semibold">{{ soles(c.total) }}</td>
-                                <td class="px-3 py-3 text-center">
-                                    <span
-                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
-                                        :class="c.estado === 'emitido'
-                                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
-                                            : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'"
-                                    >
+                                <td class="px-3 py-4 whitespace-nowrap">
+                                    <p class="flex items-center gap-2 text-[#0F172A] dark:text-neutral-100"><CalendarDays class="size-4 text-[#94A3B8]" />{{ fecha(c) }}</p>
+                                    <p class="mt-0.5 flex items-center gap-2 text-xs text-[#64748B] dark:text-neutral-400"><Clock3 class="size-4 text-[#94A3B8]" />{{ hora(c) }}</p>
+                                </td>
+                                <td class="px-3 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold" :class="c.cliente_nombre ? colorAvatar(c.cliente_nombre) : 'bg-slate-100 text-[#64748B] dark:bg-neutral-800 dark:text-neutral-400'">
+                                            <template v-if="c.cliente_nombre">{{ inicial(c.cliente_nombre) }}</template>
+                                            <Users v-else class="size-4" />
+                                        </span>
+                                        <div class="min-w-0">
+                                            <p class="max-w-56 truncate font-medium text-[#0F172A] dark:text-neutral-100" :title="c.cliente_nombre ?? ''">{{ c.cliente_nombre ?? 'Público general' }}</p>
+                                            <p class="text-xs text-[#94A3B8]">{{ c.cliente_numero_doc || '—' }}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-3 py-4 text-right text-base font-bold whitespace-nowrap text-[#0F172A] tabular-nums dark:text-neutral-100">{{ soles(c.total) }}</td>
+                                <td class="px-3 py-4">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="c.estado === 'emitido' ? ESTILO_OK : ESTILO_ERROR">
+                                        <span class="size-1.5 rounded-full bg-current" />
                                         {{ c.estado === 'emitido' ? 'Emitido' : 'Anulado' }}
                                     </span>
                                 </td>
-                                <td class="px-3 py-3 text-center">
+                                <td class="px-3 py-4">
+                                    <button
+                                        v-if="esElectronico(c) && puede('comprobantes.sunat') && (puedeReenviar(c) || bajaPendiente(c))"
+                                        type="button"
+                                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ring-1 ring-transparent transition hover:ring-current disabled:opacity-60"
+                                        :class="badgeSunat(c)[1]"
+                                        :disabled="enviandoSunat === c.id"
+                                        :title="(bajaPendiente(c) ? 'Consultar la baja en SUNAT' : 'Enviar a SUNAT') + (c.sunat?.mensaje_sunat ? ` · ${c.sunat.mensaje_sunat}` : '')"
+                                        @click.stop="enviarSunat(c)"
+                                    >
+                                        <LoaderCircle v-if="enviandoSunat === c.id" class="size-3 animate-spin" />
+                                        <CloudUpload v-else class="size-3" />
+                                        {{ badgeSunat(c)[0] }}
+                                    </button>
                                     <span
-                                        v-if="esElectronico(c)"
-                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
+                                        v-else-if="esElectronico(c)"
+                                        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
                                         :class="badgeSunat(c)[1]"
                                         :title="c.sunat?.mensaje_sunat ?? ''"
                                     >
+                                        <span class="size-1.5 rounded-full bg-current" />
                                         {{ badgeSunat(c)[0] }}
                                     </span>
-                                    <span v-else class="text-neutral-400 dark:text-neutral-600">—</span>
+                                    <span v-else class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[#94A3B8] dark:bg-neutral-800 dark:text-neutral-500" title="Las notas de venta no van a SUNAT">No aplica</span>
                                 </td>
-                                <td class="px-3 py-3 text-neutral-600 dark:text-neutral-300">{{ c.usuario?.nombre_completo ?? '—' }}</td>
-                                <td class="px-3 py-3">
-                                    <div class="flex items-center justify-end gap-1">
-                                        <button
-                                            type="button"
-                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-                                            title="Imprimir ticket"
-                                            @click.stop="imprimirTicket(`/comprobantes/${c.id}/ticket`)"
-                                        >
+                                <td class="px-3 py-4">
+                                    <div class="flex items-center gap-2.5">
+                                        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-slate-100 text-xs font-semibold text-[#475569] dark:bg-neutral-800 dark:text-neutral-300">{{ inicial(c.usuario?.nombre_completo) }}</span>
+                                        <span class="max-w-32 truncate text-[#475569] dark:text-neutral-300">{{ primerNombre(c.usuario?.nombre_completo) }}</span>
+                                    </div>
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <div class="flex items-center justify-end gap-1.5">
+                                        <button type="button" :class="claseAccion" title="Imprimir ticket" aria-label="Imprimir ticket" @click.stop="imprimirTicket(`/comprobantes/${c.id}/ticket`)">
                                             <Printer class="size-4" />
                                         </button>
-                                        <a
-                                            :href="`/comprobantes/${c.id}/a4`"
-                                            target="_blank"
-                                            rel="noopener"
-                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-                                            title="PDF en A4"
-                                            @click.stop
-                                        >
+                                        <a :href="`/comprobantes/${c.id}/a4`" target="_blank" rel="noopener" :class="claseAccion" title="PDF en A4" aria-label="PDF en A4" @click.stop>
                                             <FileText class="size-4" />
                                         </a>
-                                        <button
-                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-                                            title="Enviar por correo"
-                                            @click.stop="abrirCorreo(c)"
-                                        >
+                                        <button type="button" :class="claseAccion" title="Enviar por correo" aria-label="Enviar por correo" @click.stop="abrirCorreo(c)">
                                             <Mail class="size-4" />
                                         </button>
                                         <Link
-                                            v-if="puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)"
+                                            v-if="puedeGuia(c)"
                                             :href="`/guias/crear?comprobante=${c.id}`"
-                                            class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                            :class="claseAccion"
                                             title="Generar guía de remisión para entregar esta venta"
+                                            aria-label="Generar guía de remisión"
                                             @click.stop
                                         >
                                             <Navigation class="size-4" />
                                         </Link>
+                                        <span v-else class="size-10" aria-hidden="true" />
+                                        <span class="mx-1 h-7 w-px bg-[#E2E8F0] dark:bg-neutral-700" />
                                         <button
-                                            v-if="puedeConvertir(c)"
-                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                                            title="Emitir boleta o factura a partir de esta nota de venta"
-                                            @click.stop="abrirConversion(c)"
+                                            type="button"
+                                            class="relative grid size-9 place-items-center rounded-xl text-[#475569] transition-colors hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                            :class="menu?.c.id === c.id ? 'bg-slate-100 dark:bg-neutral-800' : ''"
+                                            title="Más acciones"
+                                            aria-label="Más acciones"
+                                            @click.stop="abrirMenu(c, $event)"
                                         >
-                                            <ReceiptText class="size-3.5" />
-                                            Emitir boleta/factura
-                                        </button>
-                                        <button
-                                            v-if="puede('comprobantes.sunat') && puedeReemitir(c)"
-                                            :disabled="enviandoSunat === c.id"
-                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                                            :title="AYUDA_REEMITIR"
-                                            @click.stop="reemitir(c)"
-                                        >
-                                            <RefreshCw class="size-3.5" :class="enviandoSunat === c.id ? 'animate-spin' : ''" />
-                                            {{ enviandoSunat === c.id ? 'Reenviando...' : 'Corregir y reenviar' }}
-                                        </button>
-                                        <button
-                                            v-if="puede('comprobantes.sunat') && (puedeReenviar(c) || bajaPendiente(c))"
-                                            :disabled="enviandoSunat === c.id"
-                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                                            :title="bajaPendiente(c) ? 'Consultar baja en SUNAT' : 'Enviar a SUNAT'"
-                                            @click.stop="enviarSunat(c)"
-                                        >
-                                            <CloudUpload class="size-3.5" />
-                                            {{ enviandoSunat === c.id ? 'Consultando...' : bajaPendiente(c) ? 'Consultar baja' : 'SUNAT' }}
-                                        </button>
-                                        <button
-                                            v-if="puedeNotaCredito(c)"
-                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
-                                            title="Emitir nota de crédito"
-                                            @click.stop="abrirNotaCredito(c)"
-                                        >
-                                            <Undo2 class="size-3.5" />
-                                            N. crédito
-                                        </button>
-                                        <button
-                                            v-if="puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)"
-                                            class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                                            @click.stop="abrirAnulacion(c)"
-                                        >
-                                            <Ban class="size-3.5" />
-                                            Anular
+                                            <EllipsisVertical class="size-5" />
+                                            <span v-if="requiereAtencion(c)" class="absolute top-1.5 right-1.5 size-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-neutral-900" />
                                         </button>
                                     </div>
                                 </td>
@@ -500,135 +584,64 @@ const claseInput =
 
                             <!-- Detalle expandido -->
                             <tr v-if="expandido === c.id">
-                                <td colspan="10" class="bg-stone-50 px-6 py-4 dark:bg-neutral-950/50">
-                                    <div class="grid gap-4 lg:grid-cols-[1fr_260px]">
-                                        <div>
-                                            <p class="mb-2 text-xs font-semibold tracking-wider text-neutral-400 uppercase">Productos</p>
-                                            <div class="space-y-1.5">
-                                                <div
-                                                    v-for="d in c.detalles"
-                                                    :key="d.id"
-                                                    class="flex items-center justify-between gap-3 text-sm"
-                                                >
-                                                    <span>{{ Number(d.cantidad) }} × {{ d.descripcion }}</span>
-                                                    <span class="font-medium whitespace-nowrap">{{ soles(d.total) }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p class="mb-2 text-xs font-semibold tracking-wider text-neutral-400 uppercase">Pagos</p>
-                                            <div v-if="c.pagos.length" class="space-y-1.5">
-                                                <div v-for="p in c.pagos" :key="p.id" class="flex items-center justify-between gap-3 text-sm">
-                                                    <span>
-                                                        {{ p.medio_pago?.nombre ?? p.medio_pago_codigo }}
-                                                        <span v-if="p.referencia" class="text-xs text-neutral-500 dark:text-neutral-400">({{ p.referencia }})</span>
-                                                    </span>
-                                                    <span class="font-medium">{{ soles(p.monto) }}</span>
-                                                </div>
-                                            </div>
-                                            <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">Sin pagos (anulado)</p>
-
-                                            <p
-                                                v-if="c.sunat_respuesta?.convertido_de"
-                                                class="mt-3 text-xs text-neutral-500 dark:text-neutral-400"
-                                            >
-                                                Emitido a partir de la nota de venta
-                                                <span class="font-mono font-semibold">{{ c.sunat_respuesta.convertido_de }}</span>
-                                            </p>
-
-                                            <div v-if="c.estado === 'anulado'" class="mt-3 rounded-xl bg-red-100 px-3 py-2 text-xs text-red-800 dark:bg-red-500/15 dark:text-red-300">
-                                                Anulado: {{ c.motivo_anulacion }}
-                                            </div>
-
-                                            <div
-                                                v-if="esElectronico(c) && c.sunat?.mensaje_sunat"
-                                                class="mt-3 rounded-xl bg-stone-100 px-3 py-2 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
-                                            >
-                                                <span class="font-semibold">SUNAT:</span> {{ c.sunat.mensaje_sunat }}
-                                                <span v-if="c.sunat.intentos > 1" class="text-neutral-400">({{ c.sunat.intentos }} intentos)</span>
-                                            </div>
-
-                                            <div v-if="c.notas?.length" class="mt-3">
-                                                <p class="mb-1.5 text-xs font-semibold tracking-wider text-neutral-400 uppercase">Notas de crédito</p>
-                                                <div
-                                                    v-for="n in c.notas"
-                                                    :key="n.id"
-                                                    class="mb-1.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs dark:border-amber-500/20 dark:bg-amber-500/10"
-                                                >
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="font-mono font-semibold">{{ numero(n) }}</span>
-                                                        <span class="text-neutral-500 dark:text-neutral-400">{{ nombreMotivo(n.motivo_nota) }}</span>
-                                                        <span
-                                                            class="inline-flex rounded-full px-2 py-0.5 font-semibold"
-                                                            :class="SUNAT_BADGES[n.sunat?.estado ?? 'pendiente']?.[1]"
-                                                            :title="n.sunat?.mensaje_sunat ?? ''"
-                                                        >
-                                                            {{ SUNAT_BADGES[n.sunat?.estado ?? 'pendiente']?.[0] }}
-                                                        </span>
-                                                    </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="font-semibold text-amber-700 dark:text-amber-400">-{{ soles(n.total) }}</span>
-                                                        <button
-                                                            v-if="puede('comprobantes.sunat') && puedeReemitir(n)"
-                                                            :disabled="enviandoSunat === n.id"
-                                                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                                                            :title="AYUDA_REEMITIR"
-                                                            @click.stop="reemitir(n)"
-                                                        >
-                                                            <RefreshCw class="size-3.5" :class="enviandoSunat === n.id ? 'animate-spin' : ''" />
-                                                            {{ enviandoSunat === n.id ? 'Reenviando...' : 'Corregir y reenviar' }}
-                                                        </button>
-                                                        <button
-                                                            v-else-if="puede('comprobantes.sunat') && ['pendiente', undefined].includes(n.sunat?.estado)"
-                                                            :disabled="enviandoSunat === n.id"
-                                                            class="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-                                                            title="Reenviar la nota de crédito a SUNAT"
-                                                            @click.stop="enviarSunat(n)"
-                                                        >
-                                                            <CloudUpload class="size-3.5" />
-                                                            {{ enviandoSunat === n.id ? 'Enviando...' : 'SUNAT' }}
-                                                        </button>
-                                                        <button type="button" title="Ticket" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400" @click.stop="imprimirTicket(`/comprobantes/${n.id}/ticket`)">
-                                                            <Printer class="size-3.5" />
-                                                        </button>
-                                                        <a :href="`/comprobantes/${n.id}/a4`" target="_blank" rel="noopener" title="PDF A4" class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
-                                                            <FileText class="size-3.5" />
-                                                        </a>
-                                                        <button
-                                                            type="button"
-                                                            title="Enviar por correo"
-                                                            class="text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400"
-                                                            @click.stop="abrirCorreo(n)"
-                                                        >
-                                                            <Mail class="size-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div v-if="c.sunat?.xml_url || c.sunat?.cdr_url" class="mt-2 flex gap-2">
-                                                <a
-                                                    v-if="c.sunat?.xml_url"
-                                                    :href="`/comprobantes/${c.id}/xml`"
-                                                    class="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-stone-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                                                >
-                                                    Descargar XML
-                                                </a>
-                                                <a
-                                                    v-if="c.sunat?.cdr_url"
-                                                    :href="`/comprobantes/${c.id}/cdr`"
-                                                    class="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-stone-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                                                >
-                                                    Descargar CDR
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <td colspan="10" class="bg-slate-50/80 px-6 pt-1 pb-5 dark:bg-neutral-950/40">
+                                    <DetalleComprobante :c="c" :enviando-sunat="enviandoSunat" @enviar-sunat="enviarSunat" @reemitir="reemitir" @correo="abrirCorreo" />
                                 </td>
                             </tr>
                         </template>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Celular: tarjetas -->
+            <div class="divide-y divide-[#F1F5F9] md:hidden dark:divide-neutral-800">
+                <p v-if="!comprobantes.data.length" class="px-4 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                    <ReceiptText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
+                    No hay comprobantes que mostrar.
+                </p>
+                <div v-for="c in comprobantes.data" :key="c.id" class="p-4" :class="c.estado === 'anulado' ? 'opacity-70' : ''">
+                    <div class="flex items-start justify-between gap-3" @click="alternarDetalle(c)">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ numero(c) }}</span>
+                                <span class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold" :class="estiloTipo(c).clase">{{ estiloTipo(c).texto }}</span>
+                            </div>
+                            <p class="mt-1 truncate text-sm text-[#475569] dark:text-neutral-300">{{ c.cliente_nombre ?? 'Público general' }}</p>
+                            <p class="text-xs text-[#94A3B8]">{{ fecha(c) }} · {{ hora(c) }} · {{ primerNombre(c.usuario?.nombre_completo) }}</p>
+                        </div>
+                        <p class="shrink-0 text-lg font-bold text-[#0F172A] tabular-nums dark:text-neutral-100">{{ soles(c.total) }}</p>
+                    </div>
+                    <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
+                        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="c.estado === 'emitido' ? ESTILO_OK : ESTILO_ERROR">
+                            <span class="size-1.5 rounded-full bg-current" />{{ c.estado === 'emitido' ? 'Emitido' : 'Anulado' }}
+                        </span>
+                        <span v-if="esElectronico(c)" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="badgeSunat(c)[1]">
+                            <span class="size-1.5 rounded-full bg-current" />SUNAT: {{ badgeSunat(c)[0] }}
+                        </span>
+                        <span v-if="c.notas?.length" class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ c.notas.length }} N. crédito</span>
+                    </div>
+                    <div class="mt-3 flex items-center gap-1.5">
+                        <button type="button" :class="claseAccion" aria-label="Imprimir ticket" @click="imprimirTicket(`/comprobantes/${c.id}/ticket`)"><Printer class="size-4" /></button>
+                        <a :href="`/comprobantes/${c.id}/a4`" target="_blank" rel="noopener" :class="claseAccion" aria-label="PDF en A4"><FileText class="size-4" /></a>
+                        <button type="button" :class="claseAccion" aria-label="Enviar por correo" @click="abrirCorreo(c)"><Mail class="size-4" /></button>
+                        <Link v-if="puedeGuia(c)" :href="`/guias/crear?comprobante=${c.id}`" :class="claseAccion" aria-label="Generar guía de remisión"><Navigation class="size-4" /></Link>
+                        <button
+                            type="button"
+                            class="ml-auto inline-flex h-10 items-center gap-1 rounded-xl px-3 text-sm font-medium text-[#475569] hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                            @click="alternarDetalle(c)"
+                        >
+                            Detalle
+                            <ChevronDown class="size-4 transition-transform" :class="expandido === c.id ? 'rotate-180' : ''" />
+                        </button>
+                        <button type="button" class="relative grid size-10 place-items-center rounded-xl text-[#475569] hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800" aria-label="Más acciones" @click.stop="abrirMenu(c, $event)">
+                            <EllipsisVertical class="size-5" />
+                            <span v-if="requiereAtencion(c)" class="absolute top-2 right-2 size-2 rounded-full bg-amber-500" />
+                        </button>
+                    </div>
+                    <div v-if="expandido === c.id" class="mt-3 rounded-xl bg-slate-50 p-3 dark:bg-neutral-950/50">
+                        <DetalleComprobante :c="c" :enviando-sunat="enviandoSunat" @enviar-sunat="enviarSunat" @reemitir="reemitir" @correo="abrirCorreo" />
+                    </div>
+                </div>
             </div>
 
             <!-- Paginación -->
@@ -659,6 +672,54 @@ const claseInput =
                 </div>
             </div>
         </div>
+
+        <!-- Menú de más acciones -->
+        <Teleport to="body">
+            <div
+                v-if="menu"
+                ref="panelMenu"
+                class="fixed z-40 w-64 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white p-1.5 text-sm text-[#0F172A] shadow-xl shadow-slate-900/10 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                :style="{ left: `${menu.left}px`, top: `${menu.top}px`, transform: menu.arriba ? 'translateY(-100%)' : undefined }"
+                role="menu"
+            >
+                <p class="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-[#94A3B8] uppercase">{{ numero(menu.c) }}</p>
+                <button type="button" :class="claseItemMenu" role="menuitem" @click="accion(alternarDetalle)">
+                    <Eye class="size-4 text-[#64748B]" />
+                    {{ expandido === menu.c.id ? 'Ocultar detalle' : 'Ver detalle' }}
+                </button>
+                <button v-if="puedeConvertir(menu.c)" type="button" :class="claseItemMenu" role="menuitem" @click="accion(abrirConversion)">
+                    <ReceiptText class="size-4 text-emerald-600" />
+                    Emitir boleta o factura
+                </button>
+                <button v-if="puede('comprobantes.sunat') && puedeReemitir(menu.c)" type="button" :class="claseItemMenu" role="menuitem" :title="AYUDA_REEMITIR" @click="accion(reemitir)">
+                    <RefreshCw class="size-4 text-emerald-600" />
+                    Corregir y reenviar a SUNAT
+                </button>
+                <button v-if="puede('comprobantes.sunat') && (puedeReenviar(menu.c) || bajaPendiente(menu.c))" type="button" :class="claseItemMenu" role="menuitem" @click="accion(enviarSunat)">
+                    <CloudUpload class="size-4 text-emerald-600" />
+                    {{ bajaPendiente(menu.c) ? 'Consultar la baja en SUNAT' : 'Enviar a SUNAT' }}
+                </button>
+                <button v-if="puedeNotaCredito(menu.c)" type="button" :class="claseItemMenu" role="menuitem" @click="accion(abrirNotaCredito)">
+                    <Undo2 class="size-4 text-amber-600" />
+                    Emitir nota de crédito
+                </button>
+                <a v-if="menu.c.sunat?.xml_url" :href="`/comprobantes/${menu.c.id}/xml`" :class="claseItemMenu" role="menuitem" @click="menu = null">
+                    <FileCode2 class="size-4 text-[#64748B]" />
+                    Descargar XML
+                </a>
+                <a v-if="menu.c.sunat?.cdr_url" :href="`/comprobantes/${menu.c.id}/cdr`" :class="claseItemMenu" role="menuitem" @click="menu = null">
+                    <ShieldCheck class="size-4 text-[#64748B]" />
+                    Descargar CDR
+                </a>
+                <template v-if="puedeAnular(menu.c)">
+                    <div class="my-1 h-px bg-[#F1F5F9] dark:bg-neutral-800" />
+                    <button type="button" :class="[claseItemMenu, '!text-red-600 hover:!bg-red-50 dark:!text-red-400 dark:hover:!bg-red-950/40']" role="menuitem" @click="accion(abrirAnulacion)">
+                        <Ban class="size-4" />
+                        Anular
+                    </button>
+                </template>
+            </div>
+        </Teleport>
 
         <!-- Modal nota de crédito -->
         <Teleport to="body">

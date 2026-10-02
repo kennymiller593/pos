@@ -8,6 +8,7 @@ use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\MedioPago;
+use App\Models\Usuario;
 use App\Services\ComprobantePdfService;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
@@ -32,6 +33,10 @@ class ComprobanteController extends Controller
     public function index(Request $request): Response
     {
         $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
+
+        // orden por columna (?orden=total&dir=asc); por defecto, lo mas reciente primero
+        $orden = in_array($request->query('orden'), array_keys(self::ORDENES), true) ? $request->query('orden') : 'fecha';
+        $dir = $request->query('dir') === 'asc' ? 'asc' : 'desc';
 
         $comprobantes = Comprobante::query()
             ->where('empresa_id', $request->user()->empresa_id)
@@ -67,15 +72,37 @@ class ComprobanteController extends Controller
                 ? $q->whereIn('tipo_comprobante_codigo', ['01', '03'])
                     ->where(fn ($w) => $w->whereDoesntHave('sunat')->orWhereHas('sunat', fn ($s) => $s->whereIn('estado', ['pendiente', 'rechazado'])))
                 : $q->whereHas('sunat', fn ($s) => $s->where('estado', $sunat)))
-            ->latest('creado_en')
+            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir))
             ->paginate(15)
             ->withQueryString();
 
         return Inertia::render('Comprobantes/Index', [
             'comprobantes' => $comprobantes,
             'filtros' => $filtros,
+            'orden' => ['columna' => $orden, 'dir' => $dir],
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
         ]);
+    }
+
+    /** Columnas por las que se puede ordenar la lista. */
+    private const ORDENES = [
+        'numero' => null, 'tipo' => 'tipo_comprobante_codigo', 'fecha' => null, 'cliente' => 'cliente_nombre',
+        'total' => 'total', 'estado' => 'estado', 'sunat' => null, 'vendedor' => null,
+    ];
+
+    private function ordenar($query, string $orden, string $dir): void
+    {
+        match ($orden) {
+            'numero' => $query->orderBy('serie', $dir)->orderBy('correlativo', $dir),
+            'fecha' => $query->orderBy('fecha_emision', $dir)->orderBy('hora_emision', $dir),
+            'sunat' => $query->orderBy(ComprobanteSunat::select('estado')->whereColumn('comprobante_id', 'comprobantes.id'), $dir),
+            'vendedor' => $query->orderBy(Usuario::select('nombre_completo')->whereColumn('id', 'comprobantes.usuario_id'), $dir),
+            // "Publico general" (sin cliente) va al final al ordenar por nombre
+            'cliente' => $query->orderByRaw("cliente_nombre IS NULL, cliente_nombre {$dir}"),
+            default => $query->orderBy(self::ORDENES[$orden], $dir),
+        };
+
+        $query->orderByDesc('creado_en'); // desempate estable
     }
 
     /** Ticket imprimible en formato térmico de 80mm. */
