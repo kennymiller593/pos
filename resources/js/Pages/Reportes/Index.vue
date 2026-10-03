@@ -82,12 +82,12 @@ const claseInput =
 
             <div class="flex gap-2">
                 <a
-                    :href="puedeExportar ? urlExportar('csv') : undefined"
+                    :href="puedeExportar ? urlExportar('xlsx') : undefined"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-medium transition-colors dark:border-neutral-700"
                     :class="puedeExportar ? 'hover:bg-stone-50 dark:hover:bg-neutral-800' : 'cursor-not-allowed opacity-50'"
                 >
                     <Download class="size-4" />
-                    Excel (CSV)
+                    Excel
                 </a>
                 <a
                     :href="puedeExportar ? urlExportar('pdf') : undefined"

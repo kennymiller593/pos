@@ -9,12 +9,14 @@ use App\Services\Sunat\RespuestaSunat;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\CreaEscenarioPos;
+use Tests\Concerns\LeeExcel;
 use Tests\Fakes\EnviadorSunatFalso;
 use Tests\TestCase;
 
 class ReporteTest extends TestCase
 {
     use CreaEscenarioPos;
+    use LeeExcel;
 
     protected function setUp(): void
     {
@@ -82,15 +84,14 @@ class ReporteTest extends TestCase
             );
     }
 
-    public function test_exportaciones_csv_y_pdf(): void
+    public function test_exportaciones_excel_y_pdf(): void
     {
         $this->venderConCosto();
 
-        $csv = $this->actingAs($this->admin)->get('/reportes/exportar?tipo=margen&formato=csv');
-        $csv->assertOk();
-        $this->assertStringContainsString('text/csv', $csv->headers->get('content-type'));
-        $this->assertStringContainsString('Margen', $csv->getContent());
-        $this->assertStringContainsString('7.00', $csv->getContent());
+        $filas = $this->filasDe($this->abrirExcel($this->actingAs($this->admin)->get('/reportes/exportar?tipo=margen&formato=xlsx')));
+        $this->assertSame('Margen por producto', $filas[0][0]);
+        $this->assertContains('Margen', $filas[2]);
+        $this->assertContains(7.0, $filas[3]); // el margen va como numero, no como texto
 
         $pdf = $this->actingAs($this->admin)->get('/reportes/exportar?tipo=ventas&formato=pdf');
         $pdf->assertOk();
@@ -142,17 +143,16 @@ class ReporteTest extends TestCase
             ->where('datos.filas.1.11', '0.00')
             ->where('datos.resumen.4.valor', 'S/ 11.80'));
 
-        $csv = $this->actingAs($this->admin)->get('/reportes/exportar?tipo=libro&formato=csv');
-        $csv->assertOk();
-        $this->assertStringContainsString('Base gravada', $csv->getContent());
+        $filas = $this->filasDe($this->abrirExcel($this->actingAs($this->admin)->get('/reportes/exportar?tipo=libro&formato=xlsx')));
+        $this->assertContains('Base gravada', $filas[2]);
     }
 
-    public function test_fechas_invalidas_y_formulas_en_csv(): void
+    public function test_fechas_invalidas_y_formulas_en_excel(): void
     {
         $this->actingAs($this->admin)->from('/reportes')->get('/reportes?tipo=ventas&desde=xx')->assertSessionHasErrors('desde');
         $this->actingAs($this->admin)->from('/reportes')->get('/reportes?tipo=ventas&desde=2026-01-01&hasta=2025-01-01')->assertSessionHasErrors('hasta');
 
-        // un cliente con nombre malicioso no se convierte en formula al abrir el CSV
+        // un cliente con nombre malicioso queda como texto, no como formula, al abrir el Excel
         $cliente = $this->crearCliente();
         $cliente->update(['nombre' => '=HYPERLINK("http://malo")']);
         $producto = $this->crearProducto(precio: 5.00);
@@ -164,8 +164,14 @@ class ReporteTest extends TestCase
             'pagos' => [['medio_pago_codigo' => 'efectivo', 'monto' => 5, 'referencia' => null]],
         ])->assertSessionHas('success');
 
-        $csv = $this->actingAs($this->admin)->get('/reportes/exportar?tipo=ventas&formato=csv')->getContent();
-        $this->assertStringContainsString("'=HYPERLINK", $csv);
+        $libro = $this->abrirExcel($this->actingAs($this->admin)->get('/reportes/exportar?tipo=ventas&formato=xlsx'));
+        $celda = collect($libro->getSheet(0)->toArray(null, false, false))->flatten()->first(fn ($v) => is_string($v) && str_contains($v, 'HYPERLINK'));
+        $this->assertSame('=HYPERLINK("http://malo")', $celda);
+        $tipos = collect($libro->getSheet(0)->getCellCollection()->getCoordinates())
+            ->map(fn ($c) => $libro->getSheet(0)->getCell($c))
+            ->filter(fn ($c) => is_string($c->getValue()) && str_contains($c->getValue(), 'HYPERLINK'))
+            ->map(fn ($c) => $c->getDataType())->unique()->values()->all();
+        $this->assertSame(['s'], $tipos);
     }
 
     public function test_solo_admin_accede_a_reportes(): void

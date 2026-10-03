@@ -12,6 +12,7 @@ import {
     ChevronUp,
     Clock3,
     CloudUpload,
+    Download,
     EllipsisVertical,
     Eye,
     FileCode2,
@@ -135,6 +136,20 @@ function aplicarFiltros() {
         dir: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.dir : undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
+
+// Excel con lo que se ve en la lista (mismos filtros y orden), sin paginar
+const urlExportar = computed(() => {
+    const parametros = new URLSearchParams()
+    for (const [clave, valor] of Object.entries({ buscar: buscar.value, tipo: tipo.value, estado: estado.value, sunat: sunat.value, desde: desde.value, hasta: hasta.value })) {
+        if (valor) parametros.set(clave, valor)
+    }
+    if (orden.value.columna !== 'fecha' || orden.value.dir !== 'desc') {
+        parametros.set('orden', orden.value.columna)
+        parametros.set('dir', orden.value.dir)
+    }
+    const q = parametros.toString()
+    return '/comprobantes/exportar' + (q ? `?${q}` : '')
+})
 
 const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || desde.value || hasta.value))
 function limpiarFiltros() {
@@ -433,6 +448,14 @@ const claseInput =
                     Limpiar
                 </button>
             </div>
+            <a
+                :href="urlExportar"
+                class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium transition-colors hover:bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                title="Descargar en Excel los comprobantes de la lista"
+            >
+                <Download class="size-4" />
+                Exportar Excel
+            </a>
         </div>
 
         <!-- Aviso tras convertir una nota de venta -->

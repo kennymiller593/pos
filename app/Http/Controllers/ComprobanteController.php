@@ -14,6 +14,7 @@ use App\Services\ComprobantePdfService;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
 use App\Services\VentaService;
+use App\Support\ExportadorExcel;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -33,23 +34,9 @@ class ComprobanteController extends Controller
 
     public function index(Request $request): Response
     {
-        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
-        // rango de fechas de emision (AAAA-MM-DD); una fecha mal escrita se ignora
-        foreach (['desde', 'hasta'] as $campo) {
-            $valor = (string) $request->query($campo);
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor) && strtotime($valor)) {
-                $filtros[$campo] = $valor;
-            }
-        }
+        [$consulta, $filtros, $orden, $dir] = $this->consulta($request);
 
-        // orden por columna (?orden=total&dir=asc); por defecto, lo mas reciente primero
-        $orden = in_array($request->query('orden'), array_keys(self::ORDENES), true) ? $request->query('orden') : 'fecha';
-        $dir = $request->query('dir') === 'asc' ? 'asc' : 'desc';
-
-        $comprobantes = Comprobante::query()
-            ->where('empresa_id', $request->user()->empresa_id)
-            // las notas de credito no se listan sueltas: viajan dentro de su comprobante original
-            ->where('tipo_comprobante_codigo', '!=', '07')
+        $comprobantes = $consulta
             ->with([
                 'usuario:id,nombre_completo',
                 'cliente:id,email',
@@ -63,6 +50,39 @@ class ComprobanteController extends Controller
                     ->orderBy('creado_en')
                     ->with('sunat:comprobante_id,estado,mensaje_sunat'),
             ])
+            ->paginate(15)
+            ->withQueryString();
+
+        return Inertia::render('Comprobantes/Index', [
+            'comprobantes' => $comprobantes,
+            'filtros' => $filtros,
+            'orden' => ['columna' => $orden, 'dir' => $dir],
+            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            // nombre de cada unidad para el detalle (KGM -> Kilogramo)
+            'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
+        ]);
+    }
+
+    /** La lista con sus filtros y orden (la comparten la pantalla y la exportacion). */
+    private function consulta(Request $request): array
+    {
+        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
+        // rango de fechas de emision (AAAA-MM-DD); una fecha mal escrita se ignora
+        foreach (['desde', 'hasta'] as $campo) {
+            $valor = (string) $request->query($campo);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor) && strtotime($valor)) {
+                $filtros[$campo] = $valor;
+            }
+        }
+
+        // orden por columna (?orden=total&dir=asc); por defecto, lo mas reciente primero
+        $orden = in_array($request->query('orden'), array_keys(self::ORDENES), true) ? $request->query('orden') : 'fecha';
+        $dir = $request->query('dir') === 'asc' ? 'asc' : 'desc';
+
+        $consulta = Comprobante::query()
+            ->where('empresa_id', $request->user()->empresa_id)
+            // las notas de credito no se listan sueltas: viajan dentro de su comprobante original
+            ->where('tipo_comprobante_codigo', '!=', '07')
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
                 $q->where(function ($w) use ($buscar) {
                     $w->where('serie', 'ilike', "%{$buscar}%")
@@ -82,18 +102,70 @@ class ComprobanteController extends Controller
                 ? $q->whereIn('tipo_comprobante_codigo', ['01', '03'])
                     ->where(fn ($w) => $w->whereDoesntHave('sunat')->orWhereHas('sunat', fn ($s) => $s->whereIn('estado', ['pendiente', 'rechazado'])))
                 : $q->whereHas('sunat', fn ($s) => $s->where('estado', $sunat)))
-            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir))
-            ->paginate(15)
-            ->withQueryString();
+            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir));
 
-        return Inertia::render('Comprobantes/Index', [
-            'comprobantes' => $comprobantes,
-            'filtros' => $filtros,
-            'orden' => ['columna' => $orden, 'dir' => $dir],
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
-            // nombre de cada unidad para el detalle (KGM -> Kilogramo)
-            'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
-        ]);
+        return [$consulta, $filtros, $orden, $dir];
+    }
+
+    /** Excel con los comprobantes tal como se ven en la lista (mismos filtros y orden), sin paginar. */
+    public function exportar(Request $request)
+    {
+        [$consulta, $filtros] = $this->consulta($request);
+
+        $tipos = ['00' => 'Nota de venta', '01' => 'Factura', '03' => 'Boleta'];
+        $sunat = ['aceptado' => 'Aceptado', 'observado' => 'Observado', 'rechazado' => 'Rechazado', 'pendiente' => 'Pendiente', 'baja_pendiente' => 'Baja en proceso', 'baja' => 'Dado de baja'];
+        $total = 0.0;
+        $cantidad = 0;
+
+        $filas = $consulta
+            ->with(['usuario:id,nombre_completo', 'sunat:comprobante_id,estado'])
+            ->lazy(500)
+            ->map(function (Comprobante $c) use ($tipos, $sunat, &$total, &$cantidad) {
+                if ($c->estado === 'emitido') {
+                    $total += (float) $c->total;
+                    $cantidad++;
+                }
+
+                return [
+                    "{$c->serie}-".str_pad((string) $c->correlativo, 6, '0', STR_PAD_LEFT),
+                    $tipos[$c->tipo_comprobante_codigo] ?? $c->tipo_comprobante_codigo,
+                    $c->fecha_emision->format('d/m/Y'),
+                    substr((string) $c->hora_emision, 0, 5),
+                    $c->cliente_nombre ?? 'Público general',
+                    $c->cliente_numero_doc,
+                    (float) $c->total_gravado,
+                    (float) $c->total_exonerado,
+                    (float) $c->total_inafecto,
+                    (float) $c->total_igv,
+                    (float) $c->total_descuentos,
+                    (float) $c->total,
+                    $c->es_credito ? 'Crédito' : 'Contado',
+                    $c->estado === 'emitido' ? 'Emitido' : 'Anulado',
+                    in_array($c->tipo_comprobante_codigo, ['01', '03'], true) ? ($sunat[$c->sunat?->estado ?? 'pendiente'] ?? 'Pendiente') : 'No aplica',
+                    $c->usuario?->nombre_completo,
+                ];
+            });
+
+        // lazy(): las filas se generan al escribir, y el resumen recien queda completo al final
+        $filas = $filas->all();
+
+        $periodo = ($filtros['desde'] ?? null) || ($filtros['hasta'] ?? null)
+            ? 'Del '.($filtros['desde'] ?? 'inicio').' al '.($filtros['hasta'] ?? 'hoy')
+            : 'Todos los comprobantes';
+
+        return (new ExportadorExcel)
+            ->hoja(
+                'Comprobantes',
+                'Comprobantes',
+                $periodo.' · '.now()->format('d/m/Y H:i'),
+                ['Número', 'Tipo', 'Fecha', 'Hora', 'Cliente', 'Documento', 'Gravado', 'Exonerado', 'Inafecto', 'IGV', 'Descuentos', 'Total', 'Condición', 'Estado', 'SUNAT', 'Vendedor'],
+                $filas,
+                [
+                    ['etiqueta' => 'Comprobantes emitidos', 'valor' => $cantidad],
+                    ['etiqueta' => 'Total emitido', 'valor' => 'S/ '.number_format($total, 2)],
+                ],
+            )
+            ->descargar('comprobantes-'.now()->format('Ymd-Hi'));
     }
 
     /** Columnas por las que se puede ordenar la lista. */

@@ -162,6 +162,7 @@ Route::middleware('auth')->group(function () {
 
     // ---- productos y catalogos ----
     Route::get('/productos', [ProductoController::class, 'index'])->middleware('can:productos.ver')->name('productos.index');
+    Route::get('/productos/exportar', [ProductoController::class, 'exportar'])->middleware('can:productos.ver')->name('productos.exportar');
     Route::post('/productos', [ProductoController::class, 'store'])->middleware('can:productos.gestionar')->name('productos.store');
     // etiquetas con codigo de barras (ticketera o impresora de etiquetas)
     Route::get('/productos/etiquetas', [EtiquetaController::class, 'index'])->middleware('can:productos.ver')->name('productos.etiquetas');
@@ -237,6 +238,7 @@ Route::middleware('auth')->group(function () {
     // ---- comprobantes ----
     Route::middleware('can:comprobantes.ver')->group(function () {
         Route::get('/comprobantes', [ComprobanteController::class, 'index'])->name('comprobantes.index');
+        Route::get('/comprobantes/exportar', [ComprobanteController::class, 'exportar'])->name('comprobantes.exportar');
         Route::get('/comprobantes/{comprobante}/ticket', [ComprobanteController::class, 'ticket'])->name('comprobantes.ticket');
         Route::get('/comprobantes/{comprobante}/a4', [ComprobanteController::class, 'a4'])->name('comprobantes.a4');
         Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');

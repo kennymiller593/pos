@@ -13,6 +13,7 @@ use App\Models\ProductoPresentacion;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
 use App\Services\ImagenProductoService;
+use App\Support\ExportadorExcel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -26,29 +27,9 @@ class ProductoController extends Controller
     public function index(Request $request): Response
     {
         $empresaId = $request->user()->empresa_id;
-        $filtros = $request->only(['buscar', 'categoria_id', 'estado']);
+        [$consulta, $filtros, $orden, $dir] = $this->consulta($request);
 
-        // orden por columna (?orden=precio&dir=desc); por defecto, por nombre
-        $orden = in_array($request->query('orden'), self::ORDENES, true) ? $request->query('orden') : 'producto';
-        $dir = $request->query('dir') === 'desc' ? 'desc' : 'asc';
-
-        $productos = Producto::query()
-            ->where('empresa_id', $empresaId)
-            ->with([
-                'categoria:id,nombre',
-                'marca:id,nombre',
-                'unidadBase:codigo,nombre',
-                'presentaciones' => fn ($q) => $q->orderByDesc('es_default')->orderBy('nombre'),
-            ])
-            ->withSum('stock as stock_total', 'cantidad')
-            ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where(fn ($w) => $w
-                ->where('nombre', 'ilike', "%{$buscar}%")
-                ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
-            ->when($filtros['categoria_id'] ?? null, fn ($q, $categoria) => $q->where('categoria_id', $categoria))
-            ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('activo', $estado === 'activo'))
-            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir))
-            ->paginate(10)
-            ->withQueryString();
+        $productos = $consulta->paginate(10)->withQueryString();
 
         return Inertia::render('Productos/Index', [
             'productos' => $productos,
@@ -63,6 +44,84 @@ class ProductoController extends Controller
                 'tiposAfectacion' => TipoAfectacionIgv::orderBy('codigo')->get(['codigo', 'nombre']),
             ],
         ]);
+    }
+
+    /** La lista con sus filtros y orden (la comparten la pantalla y la exportacion). */
+    private function consulta(Request $request): array
+    {
+        $filtros = $request->only(['buscar', 'categoria_id', 'estado']);
+
+        // orden por columna (?orden=precio&dir=desc); por defecto, por nombre
+        $orden = in_array($request->query('orden'), self::ORDENES, true) ? $request->query('orden') : 'producto';
+        $dir = $request->query('dir') === 'desc' ? 'desc' : 'asc';
+
+        $consulta = Producto::query()
+            ->where('empresa_id', $request->user()->empresa_id)
+            ->with([
+                'categoria:id,nombre',
+                'marca:id,nombre',
+                'unidadBase:codigo,nombre',
+                'presentaciones' => fn ($q) => $q->orderByDesc('es_default')->orderBy('nombre'),
+            ])
+            ->withSum('stock as stock_total', 'cantidad')
+            ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where(fn ($w) => $w
+                ->where('nombre', 'ilike', "%{$buscar}%")
+                ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
+            ->when($filtros['categoria_id'] ?? null, fn ($q, $categoria) => $q->where('categoria_id', $categoria))
+            ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('activo', $estado === 'activo'))
+            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir));
+
+        return [$consulta, $filtros, $orden, $dir];
+    }
+
+    /** Excel con los productos tal como se ven en la lista (mismos filtros y orden) y una hoja con todas las presentaciones. */
+    public function exportar(Request $request)
+    {
+        [$consulta] = $this->consulta($request);
+        $productos = $consulta->get();
+        $principal = fn ($p) => $p->presentaciones->firstWhere('es_default', true) ?? $p->presentaciones->first();
+
+        return (new ExportadorExcel)
+            ->hoja(
+                'Productos',
+                'Productos',
+                $productos->count().' productos · '.now()->format('d/m/Y H:i'),
+                ['Código', 'Producto', 'Marca', 'Categoría', 'Unidad base', 'Presentación principal', 'Precio venta', 'Precio mayorista', 'Código de barras', 'Stock', 'Stock mínimo', 'Controla stock', 'Estado'],
+                $productos->map(fn ($p) => [
+                    $p->codigo_interno,
+                    $p->nombre,
+                    $p->marca?->nombre,
+                    $p->categoria?->nombre,
+                    $p->unidadBase?->nombre ?? $p->unidad_base_codigo,
+                    $principal($p)?->nombre,
+                    $principal($p) ? (float) $principal($p)->precio_venta : null,
+                    $principal($p)?->precio_mayorista !== null ? (float) $principal($p)->precio_mayorista : null,
+                    $principal($p)?->codigo_barras,
+                    $p->controla_stock ? (float) ($p->stock_total ?? 0) : null,
+                    (float) $p->stock_minimo,
+                    (bool) $p->controla_stock,
+                    $p->activo ? 'Activo' : 'Inactivo',
+                ]),
+            )
+            ->hoja(
+                'Presentaciones',
+                'Presentaciones',
+                'Todas las presentaciones de los productos exportados',
+                ['Código', 'Producto', 'Presentación', 'Unidad', 'Equivalencia', 'Precio venta', 'Precio mayorista', 'Mayorista desde', 'Código de barras', 'Principal'],
+                $productos->flatMap(fn ($p) => $p->presentaciones->map(fn ($pres) => [
+                    $p->codigo_interno,
+                    $p->nombre,
+                    $pres->nombre,
+                    trim((string) $pres->unidad_codigo),
+                    (float) $pres->factor_conversion,
+                    (float) $pres->precio_venta,
+                    $pres->precio_mayorista !== null ? (float) $pres->precio_mayorista : null,
+                    $pres->cantidad_mayorista !== null ? (float) $pres->cantidad_mayorista : null,
+                    $pres->codigo_barras,
+                    (bool) $pres->es_default,
+                ])),
+            )
+            ->descargar('productos-'.now()->format('Ymd-Hi'));
     }
 
     /** Columnas por las que se puede ordenar la lista. */

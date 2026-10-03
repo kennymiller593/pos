@@ -1,8 +1,8 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
+import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
@@ -57,6 +57,20 @@ function aplicarFiltros() {
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
 watch([categoriaId, estado], aplicarFiltros)
+
+// Excel con lo que se ve en la lista (mismos filtros y orden), sin paginar
+const urlExportar = computed(() => {
+    const parametros = new URLSearchParams()
+    if (buscar.value) parametros.set('buscar', buscar.value)
+    if (categoriaId.value) parametros.set('categoria_id', categoriaId.value)
+    if (estado.value) parametros.set('estado', estado.value)
+    if (orden.value.columna !== 'producto' || orden.value.dir !== 'asc') {
+        parametros.set('orden', orden.value.columna)
+        parametros.set('dir', orden.value.dir)
+    }
+    const q = parametros.toString()
+    return '/productos/exportar' + (q ? `?${q}` : '')
+})
 
 const modalAbierto = ref(false)
 const productoEditar = ref(null)
@@ -137,6 +151,14 @@ function claseStock(producto) {
                 </select>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
+                <a
+                    :href="urlExportar"
+                    class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    title="Descargar en Excel los productos de la lista"
+                >
+                    <Download class="size-4" />
+                    Exportar Excel
+                </a>
                 <Link
                     href="/productos/etiquetas"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"

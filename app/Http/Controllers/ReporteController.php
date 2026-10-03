@@ -6,6 +6,7 @@ use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
 use App\Models\MovimientoInventario;
 use App\Models\Producto;
+use App\Support\ExportadorExcel;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -44,13 +45,15 @@ class ReporteController extends Controller
     public function exportar(Request $request)
     {
         [$tipo, $desde, $hasta, $productoId] = $this->filtros($request);
-        $formato = $request->query('formato') === 'pdf' ? 'pdf' : 'csv';
+        $formato = $request->query('formato') === 'pdf' ? 'pdf' : 'xlsx';
 
         $datos = $this->construir($request, $tipo, $desde, $hasta, $productoId);
         $nombre = "reporte-{$tipo}-{$desde}-a-{$hasta}";
 
-        if ($formato === 'csv') {
-            return $this->descargarCsv($datos, $nombre);
+        if ($formato === 'xlsx') {
+            return (new ExportadorExcel)
+                ->hoja($datos['titulo'], $datos['titulo'], "Del {$desde} al {$hasta}".($datos['contexto'] ?? null ? " · {$datos['contexto']}" : ''), $datos['columnas'], $datos['filas'], $datos['resumen'])
+                ->descargar($nombre);
         }
 
         return SnappyPdf::loadView('pdf.reporte', [
@@ -343,36 +346,5 @@ class ReporteController extends Controller
                 ['etiqueta' => 'Saldo final', 'valor' => $numero($saldo)],
             ],
         ];
-    }
-
-    private function descargarCsv(array $datos, string $nombre)
-    {
-        $flujo = fopen('php://temp', 'r+');
-        // BOM UTF-8 para que Excel muestre bien tildes y enes
-        fwrite($flujo, "\xEF\xBB\xBF");
-
-        // un nombre de cliente o producto que empiece con "=" seria una formula al abrir en Excel
-        $segura = fn ($celda) => is_string($celda) && $celda !== '' && (
-            in_array($celda[0], ['=', '@'], true) || (in_array($celda[0], ['+', '-'], true) && ! is_numeric($celda))
-        ) ? "'".$celda : $celda;
-
-        fputcsv($flujo, $datos['columnas'], ';');
-        foreach ($datos['filas'] as $fila) {
-            fputcsv($flujo, array_map($segura, (array) $fila), ';');
-        }
-
-        fputcsv($flujo, [], ';');
-        foreach ($datos['resumen'] as $linea) {
-            fputcsv($flujo, [$linea['etiqueta'], $segura($linea['valor'])], ';');
-        }
-
-        rewind($flujo);
-        $contenido = stream_get_contents($flujo);
-        fclose($flujo);
-
-        return response($contenido, 200, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$nombre}.csv\"",
-        ]);
     }
 }
