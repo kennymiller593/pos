@@ -32,6 +32,7 @@ final class Permisos
         'clientes.gestionar' => 'Crear y editar clientes',
         'clientes.credito' => 'Asignar línea de crédito a clientes',
         'clientes.eliminar' => 'Eliminar clientes',
+        'clientes.puntos' => 'Configurar el programa de puntos y ajustar puntos',
         'cuentas_cobrar.ver' => 'Ver cuentas por cobrar',
         'cuentas_cobrar.cobrar' => 'Registrar cobros de clientes',
         'productos.ver' => 'Ver productos',

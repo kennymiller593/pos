@@ -1,8 +1,8 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { LoaderCircle, Pencil, Plus, Search, Trash2, UserRound, X } from '@lucide/vue'
+import { Eye, LoaderCircle, Pencil, Plus, Search, Star, Trash2, UserRound, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
@@ -12,6 +12,8 @@ const props = defineProps({
     clientes: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
     tiposDocumento: { type: Array, required: true },
+    // { activo, soles_por_punto, valor, minimo_canje }
+    programaPuntos: { type: Object, default: () => ({ activo: false, soles_por_punto: 10, valor: 0.2, minimo_canje: 0 }) },
 })
 
 const { confirmar } = useConfirmar()
@@ -84,6 +86,34 @@ async function eliminar(cliente) {
     }
 }
 
+// ---- programa de puntos ----
+const modalPuntos = ref(false)
+const formPuntos = useForm({ activo: false, soles_por_punto: 10, valor: 0.2, minimo_canje: 0 })
+
+function abrirPuntos() {
+    formPuntos.clearErrors()
+    formPuntos.activo = props.programaPuntos.activo
+    formPuntos.soles_por_punto = props.programaPuntos.soles_por_punto
+    formPuntos.valor = props.programaPuntos.valor
+    formPuntos.minimo_canje = props.programaPuntos.minimo_canje
+    modalPuntos.value = true
+}
+
+function guardarPuntos() {
+    formPuntos
+        .transform((datos) => ({ ...datos, minimo_canje: datos.minimo_canje === '' ? 0 : datos.minimo_canje }))
+        .put('/programa-puntos', { preserveScroll: true, onSuccess: () => (modalPuntos.value = false) })
+}
+
+// "con una compra de S/ 100 gana 10 puntos, que valen S/ 2.00": el dueño ve cuánto está regalando
+const ejemploPuntos = computed(() => {
+    const cada = Number(formPuntos.soles_por_punto)
+    const valor = Number(formPuntos.valor)
+    if (!(cada > 0) || !(valor > 0)) return null
+    const ganados = Math.floor(100 / cada + 1e-9)
+    return { ganados, descuento: ganados * valor, retorno: (valor / cada) * 100 }
+})
+
 // "Sin documento" no lleva numero
 watch(() => form.tipo_documento_codigo, (tipo) => {
     if (esSinDocumento(tipo)) form.numero_documento = ''
@@ -141,14 +171,25 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     class="h-10 w-full rounded-xl border border-stone-200 bg-white pr-4 pl-10 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500"
                 />
             </div>
-            <button
-                v-if="puede('clientes.gestionar')"
-                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-                @click="abrir()"
-            >
-                <Plus class="size-4" />
-                Nuevo cliente
-            </button>
+            <div class="flex gap-2">
+                <button
+                    v-if="puede('clientes.puntos')"
+                    class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 sm:flex-none dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    @click="abrirPuntos"
+                >
+                    <Star class="size-4" :class="programaPuntos.activo ? 'fill-amber-400 text-amber-400' : 'text-neutral-400'" />
+                    Puntos
+                    <span class="text-xs font-normal text-neutral-500 dark:text-neutral-400">{{ programaPuntos.activo ? 'activo' : 'apagado' }}</span>
+                </button>
+                <button
+                    v-if="puede('clientes.gestionar')"
+                    class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 sm:flex-none"
+                    @click="abrir()"
+                >
+                    <Plus class="size-4" />
+                    Nuevo cliente
+                </button>
+            </div>
         </div>
 
         <!-- Tabla -->
@@ -162,12 +203,13 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Teléfono</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Límite crédito</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Deuda</th>
+                            <th v-if="programaPuntos.activo" class="px-4 py-3.5 text-right font-semibold tracking-wider">Puntos</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!clientes.data.length">
-                            <td colspan="6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="programaPuntos.activo ? 7 : 6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <UserRound class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay clientes que mostrar.
@@ -184,7 +226,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         {{ c.nombre.charAt(0).toUpperCase() }}
                                     </div>
                                     <div>
-                                        <p class="font-medium">{{ c.nombre }}</p>
+                                        <Link :href="`/clientes/${c.id}`" class="font-medium hover:text-emerald-700 hover:underline dark:hover:text-emerald-400">{{ c.nombre }}</Link>
                                         <p v-if="c.email" class="text-xs text-neutral-500 dark:text-neutral-400">{{ c.email }}</p>
                                     </div>
                                 </div>
@@ -203,8 +245,22 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 </span>
                                 <span v-else class="text-neutral-400">—</span>
                             </td>
+                            <td v-if="programaPuntos.activo" class="px-4 py-3 text-right tabular-nums">
+                                <span v-if="c.puntos > 0" class="inline-flex items-center gap-1 font-semibold">
+                                    <Star class="size-3.5 fill-amber-400 text-amber-400" />{{ c.puntos }}
+                                </span>
+                                <span v-else class="text-neutral-400">—</span>
+                            </td>
                             <td class="px-4 py-3">
                                 <div class="flex justify-end gap-1">
+                                    <Link
+                                        :href="`/clientes/${c.id}`"
+                                        class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                        title="Ver compras y deuda"
+                                        :aria-label="`Ver la ficha de ${c.nombre}`"
+                                    >
+                                        <Eye class="size-4" />
+                                    </Link>
                                     <button
                                         v-if="puede('clientes.gestionar')"
                                         class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
@@ -256,6 +312,96 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </div>
             </div>
         </div>
+
+        <!-- Modal: programa de puntos -->
+        <Teleport to="body">
+            <div v-if="modalPuntos" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="modalPuntos = false" />
+                <form
+                    class="relative w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="guardarPuntos"
+                >
+                    <div class="mb-1 flex items-center justify-between">
+                        <h3 class="font-semibold tracking-tight">Programa de puntos</h3>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            aria-label="Cerrar"
+                            @click="modalPuntos = false"
+                        >
+                            <X class="size-5" />
+                        </button>
+                    </div>
+                    <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                        Tus clientes ganan puntos al comprar y los usan como descuento en su siguiente compra.
+                    </p>
+
+                    <label class="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 px-4 py-3 dark:border-neutral-800">
+                        <span>
+                            <span class="block text-sm font-medium">{{ formPuntos.activo ? 'Programa activo' : 'Programa apagado' }}</span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ formPuntos.activo ? 'Las ventas a clientes registrados suman puntos.' : 'Nadie gana ni canjea. Los puntos ya ganados se conservan.' }}
+                            </span>
+                        </span>
+                        <input v-model="formPuntos.activo" type="checkbox" class="peer sr-only" />
+                        <span class="relative h-6 w-11 shrink-0 rounded-full bg-stone-300 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-400/50 after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5 dark:bg-neutral-700" aria-hidden="true" />
+                    </label>
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label :class="claseLabel" for="pts_cada">Gana 1 punto por cada</label>
+                            <div class="relative">
+                                <span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-neutral-400">S/</span>
+                                <input id="pts_cada" v-model="formPuntos.soles_por_punto" type="number" step="0.01" min="0.1" inputmode="decimal" :class="[claseInput, 'pl-9']" />
+                            </div>
+                            <p v-if="formPuntos.errors.soles_por_punto" :class="claseError">{{ formPuntos.errors.soles_por_punto }}</p>
+                            <p v-else class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">de compra</p>
+                        </div>
+                        <div>
+                            <label :class="claseLabel" for="pts_valor">Cada punto vale</label>
+                            <div class="relative">
+                                <span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-neutral-400">S/</span>
+                                <input id="pts_valor" v-model="formPuntos.valor" type="number" step="0.01" min="0.01" inputmode="decimal" :class="[claseInput, 'pl-9']" />
+                            </div>
+                            <p v-if="formPuntos.errors.valor" :class="claseError">{{ formPuntos.errors.valor }}</p>
+                            <p v-else class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">de descuento al canjear</p>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label :class="claseLabel" for="pts_minimo">Se puede canjear desde <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <div class="relative">
+                                <input id="pts_minimo" v-model="formPuntos.minimo_canje" type="number" step="1" min="0" inputmode="numeric" :class="[claseInput, 'pr-16']" />
+                                <span class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-neutral-400">puntos</span>
+                            </div>
+                            <p v-if="formPuntos.errors.minimo_canje" :class="claseError">{{ formPuntos.errors.minimo_canje }}</p>
+                            <p v-else class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">Con 0 puede usar sus puntos desde el primero.</p>
+                        </div>
+                    </div>
+
+                    <p v-if="ejemploPuntos" class="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        Con una compra de S/ 100 gana <strong>{{ ejemploPuntos.ganados }} punto{{ ejemploPuntos.ganados === 1 ? '' : 's' }}</strong>,
+                        que valen <strong class="whitespace-nowrap">{{ soles(ejemploPuntos.descuento) }}</strong> de descuento.
+                        Le devuelves el {{ ejemploPuntos.retorno.toFixed(1) }}% de lo que compra.
+                    </p>
+
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                            @click="modalPuntos = false"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            :disabled="formPuntos.processing"
+                            class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {{ formPuntos.processing ? 'Guardando...' : 'Guardar' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Teleport>
 
         <!-- Modal crear/editar -->
         <Teleport to="body">

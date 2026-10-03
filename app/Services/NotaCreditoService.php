@@ -24,6 +24,7 @@ class NotaCreditoService
     public function __construct(
         private readonly InventarioService $inventario,
         private readonly CajaService $caja,
+        private readonly PuntosService $puntos,
     ) {}
 
     /**
@@ -181,6 +182,9 @@ class NotaCreditoService
                     'referencia' => $referencia,
                 ]);
             }
+
+            // lo devuelto ya no da puntos
+            $this->puntos->porNotaCredito($nota, $original, $usuario);
 
             Auditoria::registrar($usuario, 'nota_credito.emitida', 'comprobante', $nota->id, [
                 'nota' => $numeroNota,

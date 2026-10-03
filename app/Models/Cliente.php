@@ -34,6 +34,8 @@ class Cliente extends Model
     {
         return [
             'limite_credito' => 'decimal:2',
+            // saldo del programa de puntos: solo lo mueve PuntosService (no es fillable)
+            'puntos' => 'integer',
         ];
     }
 
@@ -55,5 +57,10 @@ class Cliente extends Model
     public function cuentasPorCobrar(): HasMany
     {
         return $this->hasMany(CuentaPorCobrar::class, 'cliente_id');
+    }
+
+    public function movimientosPuntos(): HasMany
+    {
+        return $this->hasMany(MovimientoPuntos::class, 'cliente_id');
     }
 }

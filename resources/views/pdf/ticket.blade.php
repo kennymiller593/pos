@@ -153,6 +153,18 @@
         @endforeach
     @endif
 
+    {{-- Programa de puntos: lo que movio esta venta y cuanto tiene el cliente --}}
+    @if (!empty($puntos))
+        <div class="separador"></div>
+        @if ($puntos['canjeados'] > 0)
+            <div class="fila"><span class="izq">Puntos canjeados</span><span class="der">-{{ $puntos['canjeados'] }}</span></div>
+        @endif
+        @if ($puntos['ganados'] > 0)
+            <div class="fila"><span class="izq">Puntos ganados</span><span class="der">+{{ $puntos['ganados'] }}</span></div>
+        @endif
+        <div class="fila negrita"><span class="izq">TUS PUNTOS</span><span class="der">{{ $puntos['saldo'] }}</span></div>
+    @endif
+
     {{-- QR y hash del comprobante electronico --}}
     @if (!empty($qr))
         <div class="separador"></div>

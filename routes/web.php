@@ -275,6 +275,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/clientes', [ClienteController::class, 'store'])->middleware('can:clientes.gestionar')->name('clientes.store');
     Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->middleware('can:clientes.gestionar')->name('clientes.update');
     Route::delete('/clientes/{cliente}', [ClienteController::class, 'destroy'])->middleware('can:clientes.eliminar')->name('clientes.destroy');
+    Route::get('/clientes/{cliente}', [ClienteController::class, 'show'])->middleware('can:clientes.ver')->name('clientes.show');
+    Route::put('/programa-puntos', [ClienteController::class, 'guardarProgramaPuntos'])->middleware('can:clientes.puntos')->name('puntos.programa');
+    Route::post('/clientes/{cliente}/puntos', [ClienteController::class, 'ajustarPuntos'])->middleware('can:clientes.puntos')->name('clientes.puntos');
 
     Route::get('/cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index'])->middleware('can:cuentas_cobrar.ver')->name('cuentas.index');
     Route::post('/cuentas-por-cobrar/{cuenta}/cobrar', [CuentaPorCobrarController::class, 'cobrar'])->middleware('can:cuentas_cobrar.cobrar')->name('cuentas.cobrar');

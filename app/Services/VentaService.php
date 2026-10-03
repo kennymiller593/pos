@@ -36,13 +36,15 @@ class VentaService
         private readonly InventarioService $inventario,
         private readonly SunatService $sunat,
         private readonly SuscripcionService $suscripciones,
+        private readonly PuntosService $puntos,
     ) {}
 
     /**
      * Registra una venta completa: comprobante, detalles, FIFO, stock, kardex y pagos.
      *
      * $datos ya validados: tipo_comprobante_codigo, cliente_id?, es_credito,
-     * items[{presentacion_id, cantidad}], pagos[{medio_pago_codigo, monto, referencia?}]
+     * items[{presentacion_id, cantidad}], pagos[{medio_pago_codigo, monto, referencia?}],
+     * puntos_canjeados? (su valor ya viene repartido como descuento en los items)
      *
      * @throws ErrorDeNegocio
      */
@@ -64,6 +66,9 @@ class VentaService
 
         $this->validarClienteParaTipo($datos['tipo_comprobante_codigo'], $cliente, $totalVenta);
 
+        $puntosCanjeados = (int) ($datos['puntos_canjeados'] ?? 0);
+        $this->puntos->validarCanje($usuario->empresa, $cliente, $puntosCanjeados, (float) $totales['descuentos']);
+
         if ($esCredito) {
             $this->validarLineaDeCredito($cliente, $totalVenta);
             $datos['pagos'] = [];
@@ -74,7 +79,7 @@ class VentaService
         $this->validarStock($lineas, $sucursalId);
         $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
-        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito) {
+        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
             // dentro de la transaccion se vuelve a validar con bloqueo: dos cajas vendiendo
             // el mismo producto a la vez se serializan aqui y la segunda ve el stock real
             $this->validarStock($lineas, $sucursalId, bloquear: true);
@@ -82,6 +87,9 @@ class VentaService
             if ($esCredito) {
                 $this->validarLineaDeCredito($cliente, $totalVenta, bloquear: true);
             }
+
+            // con el cliente bloqueado: dos cajas no canjean los mismos puntos a la vez
+            $this->puntos->validarCanje($usuario->empresa, $cliente, $puntosCanjeados, (float) $totales['descuentos'], bloquear: true);
 
             $aperturaViva = AperturaCaja::lockForUpdate()->find($apertura->id);
             if (! $aperturaViva || $aperturaViva->cerrada_en) {
@@ -162,6 +170,8 @@ class VentaService
                     'referencia' => $pago['referencia'] ?? null,
                 ]);
             }
+
+            $this->puntos->porVenta($comprobante, $cliente, $puntosCanjeados, $usuario);
 
             return $comprobante;
         });
@@ -448,6 +458,9 @@ class VentaService
             // los pagos dejan de ser ingresos validos (el arqueo del turno abierto se ajusta solo)
             $comprobante->pagos()->delete();
             $comprobante->cuentaPorCobrar?->delete();
+
+            // se quitan los puntos que dio la venta y se devuelven los que se canjearon en ella
+            $this->puntos->porAnulacion($comprobante, $usuario);
 
             $comprobante->update([
                 'estado' => 'anulado',

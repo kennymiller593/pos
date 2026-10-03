@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Exceptions\ErrorDeNegocio;
 use App\Jobs\EnviarComprobantePorCorreo;
 use App\Jobs\EnviarComprobanteSunat;
+use App\Models\Cliente;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\MedioPago;
+use App\Models\MovimientoPuntos;
 use App\Models\UnidadMedida;
 use App\Models\Usuario;
 use App\Services\ComprobantePdfService;
@@ -208,6 +210,7 @@ class ComprobanteController extends Controller
         $logo = $empresa->logoParaPdf();
         $ancho = (int) ($comprobante->caja?->ancho_ticket ?? 80);
         $qr = $this->pdf->qr($comprobante, $empresa);
+        $puntos = $this->puntosDelTicket($comprobante);
 
         // impresion directa: la misma vista como HTML que se imprime solo desde el
         // navegador (con Chrome en --kiosk-printing sale a la termica sin dialogo)
@@ -220,6 +223,7 @@ class ComprobanteController extends Controller
                 'ancho' => $ancho,
                 'qr' => $qr,
                 'hash' => $comprobante->hash_cpe,
+                'puntos' => $puntos,
                 'imprimirDirecto' => true,
             ]);
         }
@@ -236,6 +240,7 @@ class ComprobanteController extends Controller
             + ($comprobante->comprobanteRef ? 4 : 0)
             + ($logo ? 18 : 0)
             + ($qr ? 30 : 0)
+            + ($puntos ? 6 + ($puntos['ganados'] > 0 ? 3.5 : 0) + ($puntos['canjeados'] > 0 ? 3.5 : 0) : 0)
         );
 
         return SnappyPdf::loadView('pdf.ticket', [
@@ -246,6 +251,7 @@ class ComprobanteController extends Controller
             'ancho' => $ancho,
             'qr' => $qr,
             'hash' => $comprobante->hash_cpe,
+            'puntos' => $puntos,
         ])
             ->setOption('page-width', "{$ancho}mm")
             ->setOption('page-height', "{$alto}mm")
@@ -255,6 +261,31 @@ class ComprobanteController extends Controller
             ->setOption('margin-right', '4')
             ->setOption('encoding', 'utf-8')
             ->inline("ticket-{$numero}.pdf");
+    }
+
+    /**
+     * Puntos que movió la venta y saldo del cliente, para el pie del ticket.
+     * null si la venta no dio ni usó puntos, o si se anuló.
+     */
+    private function puntosDelTicket(Comprobante $comprobante): ?array
+    {
+        if ($comprobante->estado !== 'emitido' || ! $comprobante->cliente_id) {
+            return null;
+        }
+
+        $movimientos = MovimientoPuntos::where('comprobante_id', $comprobante->id)->get(['tipo', 'puntos']);
+        $ganados = (int) $movimientos->whereIn('tipo', ['ganado', 'devolucion'])->sum('puntos');
+        $canjeados = -(int) $movimientos->where('tipo', 'canje')->sum('puntos');
+
+        if ($ganados <= 0 && $canjeados <= 0) {
+            return null;
+        }
+
+        return [
+            'ganados' => max(0, $ganados),
+            'canjeados' => $canjeados,
+            'saldo' => (int) Cliente::withTrashed()->whereKey($comprobante->cliente_id)->value('puntos'),
+        ];
     }
 
     /** Versión A4 del comprobante, para enviar por correo o imprimir en papel normal. */

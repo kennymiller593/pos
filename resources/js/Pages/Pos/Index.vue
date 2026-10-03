@@ -24,6 +24,7 @@ import {
     Tag,
     RotateCcw,
     ScanBarcode,
+    Star,
     Trash2,
     UserRound,
     X,
@@ -45,6 +46,8 @@ const props = defineProps({
     facturacionElectronica: { type: Boolean, default: false },
     // /pos?cotizacion={id}: cotización aceptada por el cliente, lista para cargar en el carrito
     cotizacion: { type: Object, default: null },
+    // programa de puntos: { soles_por_punto, valor, minimo_canje }, o null si la empresa no lo usa
+    puntos: { type: Object, default: null },
 })
 
 const page = usePage()
@@ -309,16 +312,73 @@ function terminarEdicionPrecio(item) {
 }
 
 const brutoItem = (item) => precioUnitario(item) * Number(item.cantidad || 0)
+// descuento que escribe el cajero en la linea (el de puntos se suma aparte, mas abajo)
 const descuentoItem = (item) => Number(item.descuento || 0)
-const subtotalItem = (item) => Math.max(0, brutoItem(item) - descuentoItem(item))
-
 const descuentoInvalido = (item) => descuentoItem(item) > 0 && descuentoItem(item) >= brutoItem(item)
+
+// el cliente se declara aqui porque el canje de sus puntos entra en los totales del carrito
+const clienteSeleccionado = ref(null)
+
+// ================= puntos =================
+// Canjear puntos es dar un descuento: su valor se reparte entre las lineas en proporcion a su
+// importe, y cada linea conserva al menos un centimo (una linea no puede quedar en cero).
+const canjeActivo = ref(false)
+const centimos = (n) => Math.round(Number(n || 0) * 100)
+const puntosCliente = computed(() => (props.puntos ? Math.max(0, Math.floor(Number(clienteSeleccionado.value?.puntos ?? 0))) : 0))
+
+// cuanto descuento mas admite cada linea, en centimos
+const capacidadPuntos = computed(() => carrito.value.map((item) => (
+    descuentoInvalido(item) ? 0 : Math.max(0, centimos(brutoItem(item)) - centimos(descuentoItem(item)) - 1)
+)))
+
+// lo maximo que se puede canjear en esta venta: lo que tiene el cliente o lo que aguanta el carrito
+const puntosCanjeables = computed(() => {
+    const valor = centimos(props.puntos?.valor)
+    if (!puntosCliente.value || valor <= 0) return 0
+    const tope = Math.floor(capacidadPuntos.value.reduce((a, b) => a + b, 0) / valor)
+    const puntos = Math.min(puntosCliente.value, tope)
+    return puntos >= Math.max(1, props.puntos.minimo_canje ?? 0) ? puntos : 0
+})
+const puntosCanjeados = computed(() => (canjeActivo.value ? puntosCanjeables.value : 0))
+const descuentoPuntos = computed(() => (puntosCanjeados.value * centimos(props.puntos?.valor)) / 100)
+
+// centimos de descuento por puntos que le tocan a cada linea
+const repartoPuntos = computed(() => {
+    const capacidad = capacidadPuntos.value
+    const reparto = capacidad.map(() => 0)
+    const aRepartir = centimos(descuentoPuntos.value)
+    const capacidadTotal = capacidad.reduce((a, b) => a + b, 0)
+    if (!aRepartir || !capacidadTotal) return reparto
+
+    let asignado = 0
+    capacidad.forEach((libre, i) => {
+        reparto[i] = Math.floor((aRepartir * libre) / capacidadTotal)
+        asignado += reparto[i]
+    })
+    // los centimos que sobran del redondeo van a las lineas que aun tienen espacio
+    for (let i = 0; asignado < aRepartir && i < capacidad.length; i++) {
+        const extra = Math.min(capacidad[i] - reparto[i], aRepartir - asignado)
+        reparto[i] += extra
+        asignado += extra
+    }
+    return reparto
+})
+const descuentoPuntosItem = (item) => (repartoPuntos.value[carrito.value.indexOf(item)] ?? 0) / 100
+// lo que realmente se descuenta en la linea: lo del cajero mas su parte del canje
+const descuentoTotalItem = (item) => descuentoItem(item) + descuentoPuntosItem(item)
+
+const subtotalItem = (item) => Math.max(0, brutoItem(item) - descuentoTotalItem(item))
 const hayDescuentosInvalidos = computed(() => carrito.value.some(descuentoInvalido))
 
-const totalDescuentos = computed(() => carrito.value.reduce((suma, i) => suma + (descuentoInvalido(i) ? 0 : descuentoItem(i)), 0))
+const totalDescuentos = computed(() => carrito.value.reduce((suma, i) => suma + (descuentoInvalido(i) ? 0 : descuentoTotalItem(i)), 0))
 // redondeado al centimo: sumar decimales en JS deja restos (573.6500000001) que hacian
 // aparecer "Falta: S/ 0.00" en rojo al pagar el monto exacto
 const total = computed(() => Math.round(carrito.value.reduce((suma, i) => suma + subtotalItem(i), 0) * 100) / 100)
+
+// puntos que dara esta venta (se gana sobre lo que paga, ya con descuentos)
+const puntosPorGanar = computed(() => (props.puntos && clienteSeleccionado.value
+    ? Math.floor(total.value / props.puntos.soles_por_punto + 1e-9)
+    : 0))
 
 // unidades base requeridas por producto (para validar stock en cliente)
 function faltaStock(item) {
@@ -391,7 +451,6 @@ watch(carrito, (items) => {
 }, { deep: true })
 
 // ================= cliente =================
-const clienteSeleccionado = ref(null)
 const buscarCliente = ref('')
 const resultadosCliente = ref([])
 
@@ -418,7 +477,11 @@ function elegirCliente(cliente) {
 if (clienteGuardado.value && props.productos.length) {
     clienteSeleccionado.value = clienteGuardado.value
 }
-watch(clienteSeleccionado, (cliente) => (clienteGuardado.value = cliente))
+watch(clienteSeleccionado, (cliente) => {
+    clienteGuardado.value = cliente
+    // el canje es de un cliente: al cambiarlo o quitarlo se deshace
+    canjeActivo.value = false
+})
 
 // ================= venta de una cotización =================
 // El carrito se reemplaza por lo cotizado. Vigente: se respetan sus precios (aunque el cajero no
@@ -797,12 +860,14 @@ function cobrar() {
         tipo_comprobante_codigo: tipoComprobante.value,
         cliente_id: clienteSeleccionado.value?.id ?? null,
         cotizacion_id: cotizacionEnVenta.value?.id ?? null,
+        puntos_canjeados: puntosCanjeados.value,
         es_credito: esCredito,
         items: carrito.value.map((i) => ({
             presentacion_id: i.presentacion.id,
             cantidad: Number(i.cantidad),
             precio_unitario: precioManual(i),
-            descuento: descuentoItem(i) > 0 ? Number(descuentoItem(i).toFixed(2)) : 0,
+            // incluye la parte del canje de puntos que le toca a la linea
+            descuento: descuentoTotalItem(i) > 0 ? Number(descuentoTotalItem(i).toFixed(2)) : 0,
         })),
         pagos: esCredito
             ? []
@@ -1177,7 +1242,45 @@ const claseInput =
                             <X class="size-4" />
                         </button>
                     </div>
-                    <div v-else class="flex gap-2">
+
+                    <!-- Puntos del cliente: cuántos tiene, cuántos gana y el canje como descuento -->
+                    <div
+                        v-if="clienteSeleccionado && puntos"
+                        class="mt-3 flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
+                        :class="puntosCanjeados > 0
+                            ? 'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10'
+                            : 'border-stone-200 bg-stone-50 dark:border-neutral-800 dark:bg-neutral-950'"
+                        data-puntos
+                    >
+                        <div class="min-w-0 text-xs">
+                            <p class="flex items-center gap-1.5 text-sm font-semibold">
+                                <Star class="size-3.5 shrink-0 fill-amber-400 text-amber-400" />
+                                {{ puntosCliente }} punto{{ puntosCliente === 1 ? '' : 's' }}
+                                <span v-if="puntosCliente > 0" class="text-xs font-normal text-neutral-500 dark:text-neutral-400">· valen {{ soles(puntosCliente * puntos.valor) }}</span>
+                            </p>
+                            <p v-if="puntosCanjeados > 0" class="font-medium text-amber-700 dark:text-amber-300">
+                                Usa {{ puntosCanjeados }} punto{{ puntosCanjeados === 1 ? '' : 's' }}: −{{ soles(descuentoPuntos) }}
+                            </p>
+                            <p v-else-if="puntosCliente > 0 && puntosCliente < puntos.minimo_canje" class="text-neutral-500 dark:text-neutral-400">
+                                Canjea desde {{ puntos.minimo_canje }} puntos
+                            </p>
+                            <p v-else-if="carrito.length" class="text-neutral-500 dark:text-neutral-400">
+                                Con esta compra gana {{ puntosPorGanar }} punto{{ puntosPorGanar === 1 ? '' : 's' }}
+                            </p>
+                        </div>
+                        <button
+                            v-if="puntosCanjeables > 0"
+                            type="button"
+                            class="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors"
+                            :class="canjeActivo
+                                ? 'border border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-500/50 dark:text-amber-200 dark:hover:bg-amber-500/10'
+                                : 'bg-amber-500 text-white hover:bg-amber-600'"
+                            @click="canjeActivo = !canjeActivo"
+                        >
+                            {{ canjeActivo ? 'No canjear' : 'Canjear' }}
+                        </button>
+                    </div>
+                    <div v-if="!clienteSeleccionado" class="flex gap-2">
                         <div class="relative flex-1">
                             <UserRound class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" />
                             <input
@@ -1269,8 +1372,8 @@ const claseInput =
                                 <p class="min-w-0 flex-1 text-sm leading-tight font-medium">{{ item.producto.nombre }}</p>
                                 <div class="shrink-0 text-right">
                                     <p class="text-sm font-semibold">{{ soles(subtotalItem(item)) }}</p>
-                                    <p v-if="descuentoItem(item) > 0 && !descuentoInvalido(item)" class="text-[11px] text-amber-600 dark:text-amber-400">
-                                        −{{ soles(descuentoItem(item)) }}
+                                    <p v-if="descuentoTotalItem(item) > 0 && !descuentoInvalido(item)" class="text-[11px] text-amber-600 dark:text-amber-400">
+                                        −{{ soles(descuentoTotalItem(item)) }}
                                     </p>
                                 </div>
                                 <button
@@ -1401,9 +1504,16 @@ const claseInput =
 
                 <!-- Total y cobrar -->
                 <div class="border-t border-stone-200 p-4 dark:border-neutral-800">
-                    <div v-if="totalDescuentos > 0" class="mb-1 flex items-baseline justify-between text-sm">
+                    <div v-if="totalDescuentos - descuentoPuntos > 0.004" class="mb-1 flex items-baseline justify-between text-sm">
                         <span class="text-neutral-500 dark:text-neutral-400">Descuentos</span>
-                        <span class="font-medium text-amber-600 dark:text-amber-400">−{{ soles(totalDescuentos) }}</span>
+                        <span class="font-medium text-amber-600 dark:text-amber-400">−{{ soles(totalDescuentos - descuentoPuntos) }}</span>
+                    </div>
+                    <div v-if="descuentoPuntos > 0" class="mb-1 flex items-baseline justify-between text-sm">
+                        <span class="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+                            <Star class="size-3.5 fill-amber-400 text-amber-400" />
+                            Canje de {{ puntosCanjeados }} punto{{ puntosCanjeados === 1 ? '' : 's' }}
+                        </span>
+                        <span class="font-medium text-amber-600 dark:text-amber-400">−{{ soles(descuentoPuntos) }}</span>
                     </div>
                     <div class="flex items-baseline justify-between">
                         <span class="text-sm text-neutral-500 dark:text-neutral-400">Total</span>
@@ -1521,6 +1631,14 @@ const claseInput =
                                         <template v-else>¡Venta registrada!</template>
                                     </h3>
                                     <p v-if="datosVenta" class="mt-0.5 text-2xl font-bold tracking-tight text-[#10B981] dark:text-emerald-400">{{ soles(datosVenta.total) }}</p>
+                                    <p v-if="datosVenta?.puntos" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-[#64748B] dark:text-neutral-400" data-puntos-venta>
+                                        <Star class="size-3.5 fill-amber-400 text-amber-400" />
+                                        <span v-if="datosVenta.puntos.canjeados > 0">Canjeó {{ datosVenta.puntos.canjeados }}</span>
+                                        <span v-if="datosVenta.puntos.canjeados > 0" aria-hidden="true">·</span>
+                                        <span v-if="datosVenta.puntos.ganados > 0">Ganó {{ datosVenta.puntos.ganados }}</span>
+                                        <span v-if="datosVenta.puntos.ganados > 0" aria-hidden="true">·</span>
+                                        <span class="font-semibold text-[#0F172A] dark:text-neutral-100">Tiene {{ datosVenta.puntos.saldo }} puntos</span>
+                                    </p>
                                     <p v-else class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
                                 </div>
                             </div>

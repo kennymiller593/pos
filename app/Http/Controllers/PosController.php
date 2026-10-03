@@ -7,17 +7,21 @@ use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\CompraDetalle;
+use App\Models\Comprobante;
 use App\Models\CuentaPorCobrar;
 use App\Models\MedioPago;
+use App\Models\MovimientoPuntos;
 use App\Models\Producto;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
 use App\Services\CotizacionService;
+use App\Services\PuntosService;
 use App\Services\VentaService;
 use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,6 +32,7 @@ class PosController extends Controller
         private readonly CajaService $caja,
         private readonly VentaService $ventas,
         private readonly CotizacionService $cotizaciones,
+        private readonly PuntosService $puntos,
     ) {}
 
     public function index(Request $request): Response
@@ -78,6 +83,8 @@ class PosController extends Controller
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             'tiposDocumento' => TipoDocumentoIdentidad::orderBy('codigo')->get(['codigo', 'nombre']),
             'cotizacion' => $this->cotizacionParaCarrito($request),
+            // reglas del programa de puntos, o null si la empresa no lo usa
+            'puntos' => $this->puntos->reglas($request->user()->empresa),
         ]);
     }
 
@@ -107,7 +114,7 @@ class PosController extends Controller
                 'direccion' => $cliente->direccion,
                 'email' => $cliente->email,
                 'limite_credito' => (float) $cliente->limite_credito,
-                'deuda' => (float) CuentaPorCobrar::where('cliente_id', $cliente->id)->where('estado', '!=', 'pagado')->sum(\Illuminate\Support\Facades\DB::raw('monto_total - monto_pagado')),
+                'deuda' => (float) CuentaPorCobrar::where('cliente_id', $cliente->id)->where('estado', '!=', 'pagado')->sum(DB::raw('monto_total - monto_pagado')),
             ] : null,
             'items' => $cotizacion->detalles->map(fn ($d) => [
                 'presentacion_id' => $d->presentacion_id,
@@ -131,7 +138,7 @@ class PosController extends Controller
             Cliente::query()
                 ->where('empresa_id', $request->user()->empresa_id)
                 ->addSelect([
-                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'email', 'limite_credito',
+                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'email', 'limite_credito', 'puntos',
                     'deuda' => CuentaPorCobrar::query()
                         ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0)')
                         ->whereColumn('cliente_id', 'clientes.id')
@@ -183,6 +190,7 @@ class PosController extends Controller
             'direccion' => $cliente->direccion,
             'limite_credito' => (float) $cliente->limite_credito,
             'deuda' => 0,
+            'puntos' => 0,
         ], 201);
     }
 
@@ -228,6 +236,22 @@ class PosController extends Controller
         return response()->json(['compras' => $compras]);
     }
 
+    /** Lo que la venta movio en puntos, para avisarle al cliente: null si no movio nada. */
+    private function puntosDeLaVenta(Comprobante $comprobante): ?array
+    {
+        $movimientos = MovimientoPuntos::where('comprobante_id', $comprobante->id)->get(['tipo', 'puntos', 'cliente_id']);
+
+        if ($movimientos->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'ganados' => (int) $movimientos->where('tipo', 'ganado')->sum('puntos'),
+            'canjeados' => -(int) $movimientos->where('tipo', 'canje')->sum('puntos'),
+            'saldo' => (int) Cliente::whereKey($movimientos->first()->cliente_id)->value('puntos'),
+        ];
+    }
+
     public function vender(Request $request): RedirectResponse
     {
         $apertura = $this->caja->aperturaDe($request->user());
@@ -247,6 +271,7 @@ class PosController extends Controller
             'tipo_comprobante_codigo' => ['required', $tiposPermitidos],
             'cliente_id' => [$esCredito ? 'required' : 'nullable', 'uuid'],
             'cotizacion_id' => ['nullable', 'uuid'],
+            'puntos_canjeados' => ['nullable', 'integer', 'min:0'],
             'es_credito' => ['required', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.presentacion_id' => ['required', 'uuid'],
@@ -311,6 +336,7 @@ class PosController extends Controller
                 'cliente_email' => $comprobante->cliente?->email,
                 'cliente_telefono' => $comprobante->cliente?->telefono,
                 'enlace_publico' => ComprobanteController::enlacePublico($comprobante),
+                'puntos' => $this->puntosDeLaVenta($comprobante),
             ])
             ->with('success', $esCredito
                 ? "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\"."
