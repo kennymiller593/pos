@@ -9,6 +9,7 @@ use App\Models\Categoria;
 use App\Models\Empresa;
 use App\Models\Marca;
 use App\Models\Producto;
+use App\Models\ProductoPresentacion;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
 use App\Services\ImagenProductoService;
@@ -27,6 +28,10 @@ class ProductoController extends Controller
         $empresaId = $request->user()->empresa_id;
         $filtros = $request->only(['buscar', 'categoria_id', 'estado']);
 
+        // orden por columna (?orden=precio&dir=desc); por defecto, por nombre
+        $orden = in_array($request->query('orden'), self::ORDENES, true) ? $request->query('orden') : 'producto';
+        $dir = $request->query('dir') === 'desc' ? 'desc' : 'asc';
+
         $productos = Producto::query()
             ->where('empresa_id', $empresaId)
             ->with([
@@ -41,13 +46,14 @@ class ProductoController extends Controller
                 ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
             ->when($filtros['categoria_id'] ?? null, fn ($q, $categoria) => $q->where('categoria_id', $categoria))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('activo', $estado === 'activo'))
-            ->orderBy('nombre')
+            ->tap(fn ($q) => $this->ordenar($q, $orden, $dir))
             ->paginate(10)
             ->withQueryString();
 
         return Inertia::render('Productos/Index', [
             'productos' => $productos,
             'filtros' => $filtros,
+            'orden' => ['columna' => $orden, 'dir' => $dir],
             'catalogos' => [
                 'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
                 'marcas' => Marca::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
@@ -57,6 +63,31 @@ class ProductoController extends Controller
                 'tiposAfectacion' => TipoAfectacionIgv::orderBy('codigo')->get(['codigo', 'nombre']),
             ],
         ]);
+    }
+
+    /** Columnas por las que se puede ordenar la lista. */
+    private const ORDENES = ['codigo', 'producto', 'categoria', 'unidad', 'precio', 'stock', 'estado'];
+
+    private function ordenar($query, string $orden, string $dir): void
+    {
+        match ($orden) {
+            'codigo' => $query->orderBy('codigo_interno', $dir),
+            // sin categoria al final
+            'categoria' => $query->orderByRaw('categoria_id IS NULL')
+                ->orderBy(Categoria::select('nombre')->whereColumn('id', 'productos.categoria_id'), $dir),
+            'unidad' => $query->orderBy(UnidadMedida::select('nombre')->whereColumn('codigo', 'productos.unidad_base_codigo'), $dir),
+            // el precio que se muestra: el de la presentacion principal
+            'precio' => $query->orderBy(
+                ProductoPresentacion::select('precio_venta')->whereColumn('producto_id', 'productos.id')->orderByDesc('es_default')->orderBy('nombre')->limit(1),
+                $dir,
+            ),
+            // los que no controlan stock (muestran "—") al final
+            'stock' => $query->orderByRaw('controla_stock IS FALSE')->orderBy('stock_total', $dir),
+            'estado' => $query->orderBy('activo', $dir === 'asc' ? 'desc' : 'asc'), // "Activo" primero en ascendente
+            default => $query->orderBy('nombre', $dir),
+        };
+
+        $query->orderBy('nombre'); // desempate estable
     }
 
     public function store(ProductoRequest $request): RedirectResponse

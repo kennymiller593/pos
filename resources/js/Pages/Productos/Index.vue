@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Barcode, FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
+import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
@@ -13,7 +13,29 @@ const props = defineProps({
     productos: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
     catalogos: { type: Object, required: true },
+    orden: { type: Object, default: () => ({ columna: 'producto', dir: 'asc' }) },
 })
+
+// ---- orden por columna ----
+const COLUMNAS = [
+    { id: 'codigo', titulo: 'Código' },
+    { id: 'producto', titulo: 'Producto' },
+    { id: 'categoria', titulo: 'Categoría' },
+    { id: 'unidad', titulo: 'Unidad' },
+    { id: 'precio', titulo: 'Precio', clase: 'text-right' },
+    { id: 'stock', titulo: 'Stock', clase: 'text-right' },
+    { id: 'estado', titulo: 'Estado', clase: 'text-center' },
+]
+const orden = ref({ ...props.orden })
+
+function ordenarPor(columna) {
+    // la primera vez, montos de mayor a menor; textos de la A a la Z
+    const dir = orden.value.columna === columna
+        ? (orden.value.dir === 'asc' ? 'desc' : 'asc')
+        : (['precio', 'stock'].includes(columna) ? 'desc' : 'asc')
+    orden.value = { columna, dir }
+    aplicarFiltros()
+}
 
 const buscar = ref(props.filtros.buscar ?? '')
 const categoriaId = ref(props.filtros.categoria_id ?? '')
@@ -26,6 +48,8 @@ function aplicarFiltros() {
             buscar: buscar.value || undefined,
             categoria_id: categoriaId.value || undefined,
             estado: estado.value || undefined,
+            orden: orden.value.columna !== 'producto' || orden.value.dir !== 'asc' ? orden.value.columna : undefined,
+            dir: orden.value.columna !== 'producto' || orden.value.dir !== 'asc' ? orden.value.dir : undefined,
         },
         { preserveState: true, preserveScroll: true, replace: true },
     )
@@ -146,13 +170,20 @@ function claseStock(producto) {
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
-                            <th class="px-4 py-3.5 font-semibold tracking-wider">Código</th>
-                            <th class="px-4 py-3.5 font-semibold tracking-wider">Producto</th>
-                            <th class="px-4 py-3.5 font-semibold tracking-wider">Categoría</th>
-                            <th class="px-4 py-3.5 font-semibold tracking-wider">Unidad</th>
-                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Precio</th>
-                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Stock</th>
-                            <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
+                            <th v-for="col in COLUMNAS" :key="col.id" class="px-4 py-3.5" :class="col.clase">
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 font-semibold tracking-wider uppercase transition-colors hover:text-neutral-800 dark:hover:text-neutral-100"
+                                    :class="orden.columna === col.id ? 'text-neutral-800 dark:text-neutral-100' : ''"
+                                    :aria-label="`Ordenar por ${col.titulo}`"
+                                    @click="ordenarPor(col.id)"
+                                >
+                                    {{ col.titulo }}
+                                    <ChevronUp v-if="orden.columna === col.id && orden.dir === 'asc'" class="size-3.5" />
+                                    <ChevronDown v-else-if="orden.columna === col.id" class="size-3.5" />
+                                    <ChevronsUpDown v-else class="size-3.5 opacity-60" />
+                                </button>
+                            </th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
                         </tr>
                     </thead>
