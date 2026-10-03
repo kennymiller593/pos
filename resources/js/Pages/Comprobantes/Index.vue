@@ -115,6 +115,8 @@ function ordenarPor(columna) {
 
 // ---- filtros ----
 const buscar = ref(props.filtros.buscar ?? '')
+const desde = ref(props.filtros.desde ?? '')
+const hasta = ref(props.filtros.hasta ?? '')
 const tipo = ref(props.filtros.tipo ?? '')
 const estado = ref(props.filtros.estado ?? '')
 const sunat = ref(props.filtros.sunat ?? '')
@@ -125,13 +127,17 @@ function aplicarFiltros() {
         tipo: tipo.value || undefined,
         estado: estado.value || undefined,
         sunat: sunat.value || undefined,
+        desde: desde.value || undefined,
+        hasta: hasta.value || undefined,
         orden: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.columna : undefined,
         dir: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.dir : undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
-const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value))
+const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || desde.value || hasta.value))
 function limpiarFiltros() {
+    desde.value = ''
+    hasta.value = ''
     buscar.value = ''
     tipo.value = ''
     estado.value = ''
@@ -139,7 +145,7 @@ function limpiarFiltros() {
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([tipo, estado, sunat], aplicarFiltros)
+watch([tipo, estado, sunat, desde, hasta], aplicarFiltros)
 
 // ---- detalle expandible ----
 const expandido = ref(null)
@@ -375,7 +381,14 @@ const claseInput =
                 <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                 <input v-model="buscar" type="text" placeholder="Buscar por número, cliente o documento..." :class="[claseInput, 'w-full pl-10']" />
             </div>
-            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:items-center">
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center">
+                <!-- rango de fechas de emision -->
+                <div class="col-span-2 flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
+                    <input v-model="desde" type="date" :max="hasta || undefined" aria-label="Desde" title="Desde" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                    <span class="text-xs text-[#94A3B8]">a</span>
+                    <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                </div>
                 <select v-model="tipo" :class="claseInput" aria-label="Tipo">
                     <option value="">Todos los tipos</option>
                     <option value="00">Notas de venta</option>
