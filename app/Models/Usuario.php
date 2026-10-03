@@ -41,6 +41,8 @@ class Usuario extends Authenticatable
             'activo' => 'boolean',
             'password_hash' => 'hashed',
             'email_verificado_en' => 'datetime',
+            // null = aun no ve el recorrido guiado de bienvenida
+            'recorrido_visto_en' => 'datetime',
             'creado_en' => 'datetime',
             // no es fillable a proposito: solo se asigna con superadmin:asignar
             'es_superadmin' => 'boolean',

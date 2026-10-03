@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Models\AperturaCaja;
 use App\Models\Sucursal;
+use App\Services\ImpersonacionService;
 use App\Services\SuscripcionService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -43,7 +44,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'appName' => config('app.name'),
             // sesion "entrar como" del superadmin (franja superior con el boton para volver)
-            'impersonacion' => fn () => app(\App\Services\ImpersonacionService::class)->activa($request),
+            'impersonacion' => fn () => app(ImpersonacionService::class)->activa($request),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
@@ -116,6 +117,8 @@ class HandleInertiaRequests extends Middleware
                         // estado del plan para el aviso de vencimiento en el layout
                         'suscripcion' => app(SuscripcionService::class)->resumen($usuario->empresa),
                         // aviso de "confirma tu correo" mientras dura la gracia
+                        // recorrido guiado de bienvenida: se abre solo la primera vez que entra
+                        'recorrido_pendiente' => ! $usuario->es_superadmin && $usuario->recorrido_visto_en === null,
                         'correo_verificado' => (bool) $usuario->email_verificado_en,
                         'dias_para_verificar' => $usuario->email_verificado_en || ! $usuario->creado_en
                             ? null

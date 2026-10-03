@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Head, Link, router, usePage } from '@inertiajs/vue3'
 import { onClickOutside, useDark, useStorage, useToggle } from '@vueuse/core'
 import DialogoConfirmacion from '@/Components/DialogoConfirmacion.vue'
+import RecorridoGuiado from '@/Components/RecorridoGuiado.vue'
 import { usePermisos } from '@/composables/permisos'
 import {
     ArrowLeftRight,
@@ -16,6 +17,7 @@ import {
     ChevronDown,
     CreditCard,
     CirclePlay,
+    Compass,
     FileText,
     HandCoins,
     LayoutDashboard,
@@ -223,6 +225,92 @@ onMounted(() => {
     if (usuario.value && !esPlataforma.value) cargarNotificaciones()
 })
 
+// ---- recorrido guiado de bienvenida (globos que señalan cada parte de la pantalla) ----
+// Se abre solo la primera vez que el usuario entra; después se repite desde el menú de usuario.
+// Los pasos apuntan a elementos del layout: si el usuario no tiene ese módulo, el paso se salta.
+const primerNombre = computed(() => (usuario.value?.nombre_completo ?? '').trim().split(/\s+/)[0] ?? '')
+const pasosRecorrido = computed(() => [
+    {
+        titulo: primerNombre.value ? `¡Bienvenido, ${primerNombre.value}!` : '¡Bienvenido!',
+        texto: 'En menos de un minuto te mostramos dónde está lo principal para que empieces a vender hoy.',
+    },
+    {
+        objetivo: '[data-recorrido="/productos"]', zona: 'menu',
+        titulo: 'Empieza por tus productos',
+        texto: 'Registra lo que vendes con su precio y su stock. Puedes crearlos uno por uno o cargarlos todos desde un Excel.',
+    },
+    {
+        objetivo: '[data-recorrido="/caja"]', zona: 'menu',
+        titulo: 'Abre tu caja',
+        texto: 'Antes de vender, abre la caja con el efectivo con el que empiezas el día. Al cerrarla verás cuánto debería haber.',
+    },
+    {
+        objetivo: '[data-recorrido="/pos"]', zona: 'menu',
+        titulo: 'Aquí vendes',
+        texto: 'Busca o escanea el producto, elige cómo te pagan y cobra. El comprobante sale al instante.',
+    },
+    {
+        objetivo: '[data-recorrido="/comprobantes"]', zona: 'menu',
+        titulo: 'Tus ventas',
+        texto: 'Todo lo que vendes queda aquí: puedes volver a imprimir un comprobante, descargarlo o anularlo.',
+    },
+    {
+        objetivo: '[data-recorrido="/reportes"]', zona: 'menu',
+        titulo: 'Cómo va tu negocio',
+        texto: 'Cuánto vendiste, cuánto ganaste y qué productos se mueven más, por día o por mes.',
+    },
+    {
+        objetivo: '[data-recorrido="/empresa"]', zona: 'menu',
+        titulo: 'Los datos de tu negocio',
+        texto: 'Sube tu logo y activa las boletas y facturas electrónicas. Mientras tanto puedes vender con notas de venta.',
+    },
+    {
+        objetivo: '[data-recorrido="notificaciones"]', zona: 'barra',
+        titulo: 'Avisos',
+        texto: 'La campanita te avisa cuando un producto se está acabando, está por vencer o tienes cuentas pendientes.',
+    },
+    {
+        objetivo: '[data-recorrido="tutorial"]', zona: 'menu',
+        titulo: '¿Prefieres verlo en video?',
+        texto: 'Aquí tienes el tutorial completo. Y puedes repetir este recorrido cuando quieras desde el menú con tu nombre, arriba a la derecha.',
+    },
+])
+
+const recorridoAbierto = ref(false)
+// true = se abrió solo (primera vez): al cerrarlo se guarda que ya lo vio
+let recorridoAutomatico = false
+
+function abrirRecorrido(automatico = false) {
+    menuUsuarioAbierto.value = false
+    recorridoAutomatico = automatico
+    recorridoAbierto.value = true
+}
+
+// en el celular el menú lateral está escondido: se abre para los pasos que lo señalan y se cierra para el resto
+async function prepararPasoRecorrido(paso) {
+    if (window.matchMedia('(min-width: 1024px)').matches) return
+    const abrir = paso?.zona === 'menu'
+    if (abiertoMovil.value === abrir) return
+    abiertoMovil.value = abrir
+    await new Promise((listo) => setTimeout(listo, 240)) // lo que dura la animación del menú
+}
+
+function cerrarRecorrido() {
+    recorridoAbierto.value = false
+    abiertoMovil.value = false
+    if (recorridoAutomatico) {
+        router.post('/recorrido-visto', {}, { preserveScroll: true, preserveState: true })
+    }
+    recorridoAutomatico = false
+}
+
+onMounted(() => {
+    // en una sesión de soporte ("entrar como") no se le gasta el recorrido al cliente
+    if (usuario.value?.recorrido_pendiente && !esPlataforma.value && !impersonacion.value) {
+        setTimeout(() => abrirRecorrido(true), 500)
+    }
+})
+
 function esActivo(item) {
     const url = page.url
     return item.exact ? url === item.href : url.startsWith(item.href)
@@ -365,7 +453,7 @@ watch(
                     </p>
                     <ul class="space-y-0.5">
                         <li v-for="item in grupo.items" :key="item.href">
-                            <Link :href="item.href"
+                            <Link :href="item.href" :data-recorrido="item.href"
                                 class="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
                                 :class="esActivo(item)
                                         ? 'bg-[#EEF2FF] font-semibold text-[#4338CA] dark:bg-emerald-500 dark:text-white'
@@ -384,7 +472,7 @@ watch(
             <!-- Tutorial en video (Google Drive) -->
             <div v-if="!esPlataforma" class="shrink-0 border-t border-[#E2E8F0] px-3 py-2 dark:border-neutral-800">
                 <a href="https://drive.google.com/file/d/1hYoMYGBuDAQrONiq-qCskFmwnAArj1G8/view?usp=sharing"
-                    target="_blank" rel="noopener noreferrer"
+                    target="_blank" rel="noopener noreferrer" data-recorrido="tutorial"
                     class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                     :title="colapsado && !abiertoMovil ? 'Tutorial' : undefined">
                     <CirclePlay class="size-4.5 shrink-0" />
@@ -495,7 +583,7 @@ watch(
                     <div v-if="!esPlataforma" ref="notiRef" class="relative">
                         <button
                             class="relative grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-                            title="Notificaciones" @click="alternarNotificaciones">
+                            title="Notificaciones" data-recorrido="notificaciones" @click="alternarNotificaciones">
                             <Bell class="size-5" />
                             <span v-if="notificaciones.total > 0"
                                 class="absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
@@ -554,6 +642,12 @@ watch(
                                     '' }}
                                 </p>
                             </div>
+                            <button v-if="!esPlataforma" type="button"
+                                class="flex w-full items-center gap-2 px-4 py-2 text-sm text-[#475569] hover:bg-[#F1F5F9] dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                @click="abrirRecorrido()">
+                                <Compass class="size-4" />
+                                Ver recorrido guiado
+                            </button>
                             <Link href="/logout" method="post" as="button"
                                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
                                 <LogOut class="size-4" />
@@ -597,6 +691,10 @@ watch(
 
         <!-- Diálogo de confirmación global -->
         <DialogoConfirmacion />
+
+        <!-- Recorrido guiado de bienvenida -->
+        <RecorridoGuiado v-if="!esPlataforma" :abierto="recorridoAbierto" :pasos="pasosRecorrido"
+            :preparar="prepararPasoRecorrido" texto-final="¡A vender!" @cerrar="cerrarRecorrido" />
 
         <!-- Toast de éxito -->
         <Transition enter-active-class="transition duration-200" enter-from-class="translate-y-2 opacity-0"
