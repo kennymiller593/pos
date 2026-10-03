@@ -8,6 +8,7 @@ use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\MedioPago;
+use App\Models\UnidadMedida;
 use App\Models\Usuario;
 use App\Services\ComprobantePdfService;
 use App\Services\NotaCreditoService;
@@ -52,7 +53,7 @@ class ComprobanteController extends Controller
             ->with([
                 'usuario:id,nombre_completo',
                 'cliente:id,email',
-                'detalles:id,comprobante_id,descripcion,cantidad,precio_unitario,total',
+                'detalles:id,comprobante_id,descripcion,unidad_codigo,cantidad,precio_unitario,total',
                 'pagos:id,comprobante_id,medio_pago_codigo,monto,referencia',
                 'pagos.medioPago:codigo,nombre',
                 'sunat:comprobante_id,estado,mensaje_sunat,intentos,enviado_en,xml_url,cdr_url,ticket',
@@ -90,6 +91,8 @@ class ComprobanteController extends Controller
             'filtros' => $filtros,
             'orden' => ['columna' => $orden, 'dir' => $dir],
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            // nombre de cada unidad para el detalle (KGM -> Kilogramo)
+            'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
         ]);
     }
 
