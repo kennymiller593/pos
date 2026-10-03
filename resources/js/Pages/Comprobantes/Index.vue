@@ -115,6 +115,8 @@ function ordenarPor(columna) {
 
 // ---- filtros ----
 const buscar = ref(props.filtros.buscar ?? '')
+const desde = ref(props.filtros.desde ?? '')
+const hasta = ref(props.filtros.hasta ?? '')
 const tipo = ref(props.filtros.tipo ?? '')
 const estado = ref(props.filtros.estado ?? '')
 const sunat = ref(props.filtros.sunat ?? '')
@@ -125,13 +127,17 @@ function aplicarFiltros() {
         tipo: tipo.value || undefined,
         estado: estado.value || undefined,
         sunat: sunat.value || undefined,
+        desde: desde.value || undefined,
+        hasta: hasta.value || undefined,
         orden: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.columna : undefined,
         dir: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.dir : undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
-const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value))
+const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || desde.value || hasta.value))
 function limpiarFiltros() {
+    desde.value = ''
+    hasta.value = ''
     buscar.value = ''
     tipo.value = ''
     estado.value = ''
@@ -139,11 +145,48 @@ function limpiarFiltros() {
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([tipo, estado, sunat], aplicarFiltros)
+watch([tipo, estado, sunat, desde, hasta], aplicarFiltros)
+
+// fecha local (no UTC) en formato AAAA-MM-DD
+function fechaIso(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// atajos de rango: hoy, últimos 7 días, este mes, mes pasado
+const RANGOS = [
+    { id: 'hoy', texto: 'Hoy' },
+    { id: '7d', texto: '7 días' },
+    { id: 'mes', texto: 'Este mes' },
+    { id: 'mes_pasado', texto: 'Mes pasado' },
+]
+function rango(id) {
+    const hoy = new Date()
+    const r = {
+        hoy: [hoy, hoy],
+        '7d': [new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 6), hoy],
+        mes: [new Date(hoy.getFullYear(), hoy.getMonth(), 1), hoy],
+        mes_pasado: [new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1), new Date(hoy.getFullYear(), hoy.getMonth(), 0)],
+    }[id]
+    return r.map(fechaIso)
+}
+const rangoActivo = computed(() => RANGOS.find((r) => {
+    const [d, h] = rango(r.id)
+    return desde.value === d && hasta.value === h
+})?.id ?? null)
+function elegirRango(id) {
+    if (rangoActivo.value === id) {
+        desde.value = ''
+        hasta.value = ''
+        return
+    }
+    ;[desde.value, hasta.value] = rango(id)
+}
 
 // ---- detalle expandible ----
-const expandido = ref(null)
-const alternarDetalle = (c) => (expandido.value = expandido.value === c.id ? null : c.id)
+// ---- detalle en modal (se toma la versión fresca: el estado SUNAT puede cambiar con el modal abierto) ----
+const verId = ref(null)
+const ver = computed(() => props.comprobantes.data.find((c) => c.id === verId.value) ?? null)
+const verDetalle = (c) => (verId.value = c.id)
 
 const puedeGuia = (c) => puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)
 const puedeAnular = (c) => puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)
@@ -175,7 +218,12 @@ onClickOutside(panelMenu, () => (menu.value = null))
 let abiertoEn = 0
 useEventListener(window, 'scroll', () => Date.now() - abiertoEn > 400 && (menu.value = null), { capture: true, passive: true })
 useEventListener(window, 'resize', () => (menu.value = null))
-useEventListener(document, 'keydown', (e) => e.key === 'Escape' && (menu.value = null))
+// Esc cierra primero el menú y, si no hay menú, el detalle
+useEventListener(document, 'keydown', (e) => {
+    if (e.key !== 'Escape') return
+    if (menu.value) menu.value = null
+    else verId.value = null
+})
 
 // ---- envio a SUNAT ----
 
@@ -361,6 +409,8 @@ function anular() {
     })
 }
 
+const claseBotonModal =
+    'inline-flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3.5 text-sm font-medium text-[#475569] transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400'
 const claseItemMenu =
     'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left font-medium transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800'
 const claseInput =
@@ -370,12 +420,19 @@ const claseInput =
 <template>
     <AppLayout titulo="Comprobantes">
         <!-- Filtros -->
-        <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div class="relative w-full lg:max-w-sm">
+        <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+            <div class="relative w-full lg:w-72 xl:w-80">
                 <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                 <input v-model="buscar" type="text" placeholder="Buscar por número, cliente o documento..." :class="[claseInput, 'w-full pl-10']" />
             </div>
-            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:items-center">
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:contents">
+                <!-- rango de fechas -->
+                <div class="col-span-2 flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
+                    <input v-model="desde" type="date" :max="hasta || undefined" aria-label="Desde" title="Desde" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                    <span class="text-xs text-[#94A3B8]">a</span>
+                    <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                </div>
                 <select v-model="tipo" :class="claseInput" aria-label="Tipo">
                     <option value="">Todos los tipos</option>
                     <option value="00">Notas de venta</option>
@@ -387,7 +444,7 @@ const claseInput =
                     <option value="emitido">Emitidos</option>
                     <option value="anulado">Anulados</option>
                 </select>
-                <select v-model="sunat" :class="[claseInput, 'col-span-2 sm:col-span-1']" aria-label="Estado en SUNAT">
+                <select v-model="sunat" :class="[claseInput, 'col-span-2 sm:col-span-1 lg:max-w-60']" aria-label="Estado en SUNAT">
                     <option value="">SUNAT: todos</option>
                     <option value="pendiente">Sin aceptar (pendientes y rechazados)</option>
                     <option value="aceptado">Aceptados</option>
@@ -396,16 +453,30 @@ const claseInput =
                     <option value="baja_pendiente">Baja en proceso</option>
                     <option value="baja">Dados de baja</option>
                 </select>
-                <button
-                    v-if="hayFiltros"
-                    type="button"
-                    class="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 sm:col-span-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                    @click="limpiarFiltros"
-                >
-                    <X class="size-4" />
-                    Limpiar
-                </button>
             </div>
+        </div>
+        <div class="-mt-2 mb-4 flex flex-wrap gap-1.5">
+            <button
+                v-for="r in RANGOS"
+                :key="r.id"
+                type="button"
+                class="h-8 rounded-lg border px-3 text-xs font-medium transition-colors"
+                :class="rangoActivo === r.id
+                    ? 'border-emerald-600 bg-emerald-600 text-white'
+                    : 'border-[#E2E8F0] bg-white text-[#475569] hover:bg-slate-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                @click="elegirRango(r.id)"
+            >
+                {{ r.texto }}
+            </button>
+            <button
+                v-if="hayFiltros"
+                type="button"
+                class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-[#64748B] hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                @click="limpiarFiltros"
+            >
+                <X class="size-3.5" />
+                Limpiar filtros
+            </button>
         </div>
 
         <!-- Aviso tras convertir una nota de venta -->
@@ -442,8 +513,7 @@ const claseInput =
                 <table class="w-full min-w-[68rem] text-left text-sm">
                     <thead class="border-b border-[#E2E8F0] bg-slate-50/70 text-[11px] text-[#64748B] uppercase dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
                         <tr>
-                            <th class="w-10 py-3 pl-4" />
-                            <th v-for="col in COLUMNAS" :key="col.id" class="px-3 py-3" :class="col.clase">
+                            <th v-for="(col, i) in COLUMNAS" :key="col.id" class="py-3" :class="[col.clase, i === 0 ? 'pr-3 pl-5' : 'px-3']">
                                 <button
                                     type="button"
                                     class="inline-flex items-center gap-1 font-semibold tracking-wider uppercase transition-colors hover:text-[#0F172A] dark:hover:text-neutral-100"
@@ -472,13 +542,11 @@ const claseInput =
                         <template v-for="c in comprobantes.data" :key="c.id">
                             <tr
                                 class="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-neutral-800/40"
-                                :class="[expandido === c.id ? 'bg-slate-50/80 dark:bg-neutral-800/40' : '', c.estado === 'anulado' ? 'opacity-70' : '']"
-                                @click="alternarDetalle(c)"
+                                :class="c.estado === 'anulado' ? 'opacity-70' : ''"
+                                title="Ver detalle"
+                                @click="verDetalle(c)"
                             >
-                                <td class="py-4 pl-4">
-                                    <ChevronDown class="size-4 text-[#64748B] transition-transform" :class="expandido === c.id ? 'rotate-180' : ''" />
-                                </td>
-                                <td class="px-3 py-4">
+                                <td class="py-4 pr-3 pl-5">
                                     <p class="font-semibold whitespace-nowrap text-[#0F172A] dark:text-neutral-100">{{ numero(c) }}</p>
                                     <p v-if="c.notas?.length" class="text-xs whitespace-nowrap text-amber-600 dark:text-amber-400">
                                         {{ c.notas.length }} nota{{ c.notas.length > 1 ? 's' : '' }} de crédito
@@ -581,13 +649,6 @@ const claseInput =
                                     </div>
                                 </td>
                             </tr>
-
-                            <!-- Detalle expandido -->
-                            <tr v-if="expandido === c.id">
-                                <td colspan="10" class="bg-slate-50/80 px-6 pt-1 pb-5 dark:bg-neutral-950/40">
-                                    <DetalleComprobante :c="c" :enviando-sunat="enviandoSunat" @enviar-sunat="enviarSunat" @reemitir="reemitir" @correo="abrirCorreo" />
-                                </td>
-                            </tr>
                         </template>
                     </tbody>
                 </table>
@@ -600,7 +661,7 @@ const claseInput =
                     No hay comprobantes que mostrar.
                 </p>
                 <div v-for="c in comprobantes.data" :key="c.id" class="p-4" :class="c.estado === 'anulado' ? 'opacity-70' : ''">
-                    <div class="flex items-start justify-between gap-3" @click="alternarDetalle(c)">
+                    <div class="flex items-start justify-between gap-3" @click="verDetalle(c)">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ numero(c) }}</span>
@@ -628,18 +689,14 @@ const claseInput =
                         <button
                             type="button"
                             class="ml-auto inline-flex h-10 items-center gap-1 rounded-xl px-3 text-sm font-medium text-[#475569] hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                            @click="alternarDetalle(c)"
+                            @click="verDetalle(c)"
                         >
                             Detalle
-                            <ChevronDown class="size-4 transition-transform" :class="expandido === c.id ? 'rotate-180' : ''" />
                         </button>
                         <button type="button" class="relative grid size-10 place-items-center rounded-xl text-[#475569] hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800" aria-label="Más acciones" @click.stop="abrirMenu(c, $event)">
                             <EllipsisVertical class="size-5" />
                             <span v-if="requiereAtencion(c)" class="absolute top-2 right-2 size-2 rounded-full bg-amber-500" />
                         </button>
-                    </div>
-                    <div v-if="expandido === c.id" class="mt-3 rounded-xl bg-slate-50 p-3 dark:bg-neutral-950/50">
-                        <DetalleComprobante :c="c" :enviando-sunat="enviandoSunat" @enviar-sunat="enviarSunat" @reemitir="reemitir" @correo="abrirCorreo" />
                     </div>
                 </div>
             </div>
@@ -673,19 +730,99 @@ const claseInput =
             </div>
         </div>
 
+        <!-- Modal de detalle -->
+        <Teleport to="body">
+            <div v-if="ver" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-3 sm:p-4">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="verId = null" />
+                <div class="relative w-full max-w-3xl rounded-2xl border border-[#E2E8F0] bg-white text-[#0F172A] shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100" role="dialog" aria-modal="true">
+                    <!-- Encabezado -->
+                    <div class="flex items-start justify-between gap-3 border-b border-[#E2E8F0] px-5 py-4 sm:px-6 dark:border-neutral-800">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h3 class="text-lg font-bold tracking-tight">{{ numero(ver) }}</h3>
+                                <span class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold" :class="estiloTipo(ver).clase">
+                                    <FileText class="size-3.5" />{{ estiloTipo(ver).texto }}
+                                </span>
+                                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="ver.estado === 'emitido' ? ESTILO_OK : ESTILO_ERROR">
+                                    <span class="size-1.5 rounded-full bg-current" />{{ ver.estado === 'emitido' ? 'Emitido' : 'Anulado' }}
+                                </span>
+                                <span v-if="esElectronico(ver)" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="badgeSunat(ver)[1]">
+                                    <span class="size-1.5 rounded-full bg-current" />SUNAT: {{ badgeSunat(ver)[0] }}
+                                </span>
+                            </div>
+                            <p class="mt-1 text-sm text-[#64748B] dark:text-neutral-400">
+                                {{ fecha(ver) }} · {{ hora(ver) }} · Vendió {{ primerNombre(ver.usuario?.nombre_completo) }}
+                            </p>
+                        </div>
+                        <button type="button" class="rounded-lg p-1.5 text-neutral-400 hover:bg-slate-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200" aria-label="Cerrar" @click="verId = null">
+                            <X class="size-5" />
+                        </button>
+                    </div>
+
+                    <!-- Cliente y total -->
+                    <div class="grid gap-3 border-b border-[#E2E8F0] px-5 py-4 sm:grid-cols-[1fr_auto] sm:items-center sm:px-6 dark:border-neutral-800">
+                        <div class="flex items-center gap-3">
+                            <span class="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold" :class="ver.cliente_nombre ? colorAvatar(ver.cliente_nombre) : 'bg-slate-100 text-[#64748B] dark:bg-neutral-800 dark:text-neutral-400'">
+                                <template v-if="ver.cliente_nombre">{{ inicial(ver.cliente_nombre) }}</template>
+                                <Users v-else class="size-4" />
+                            </span>
+                            <div class="min-w-0">
+                                <p class="truncate font-semibold">{{ ver.cliente_nombre ?? 'Público general' }}</p>
+                                <p class="text-xs text-[#94A3B8]">
+                                    {{ ver.cliente_numero_doc || 'Sin documento' }}<template v-if="ver.cliente_direccion"> · {{ ver.cliente_direccion }}</template>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="sm:text-right">
+                            <p class="text-xs text-[#64748B] dark:text-neutral-400">{{ ver.es_credito ? 'Total al crédito' : 'Total' }}</p>
+                            <p class="text-2xl font-bold tracking-tight tabular-nums">{{ soles(ver.total) }}</p>
+                        </div>
+                    </div>
+
+                    <div class="max-h-[60vh] overflow-y-auto px-5 py-4 sm:px-6">
+                        <DetalleComprobante :c="ver" :enviando-sunat="enviandoSunat" @enviar-sunat="enviarSunat" @reemitir="reemitir" @correo="abrirCorreo" />
+                    </div>
+
+                    <!-- Acciones -->
+                    <div class="flex flex-wrap items-center gap-2 border-t border-[#E2E8F0] px-5 py-4 sm:px-6 dark:border-neutral-800">
+                        <button type="button" :class="claseBotonModal" @click="imprimirTicket(`/comprobantes/${ver.id}/ticket`)">
+                            <Printer class="size-4" />Ticket
+                        </button>
+                        <a :href="`/comprobantes/${ver.id}/a4`" target="_blank" rel="noopener" :class="claseBotonModal">
+                            <FileText class="size-4" />PDF A4
+                        </a>
+                        <button type="button" :class="claseBotonModal" @click="abrirCorreo(ver)">
+                            <Mail class="size-4" />Correo
+                        </button>
+                        <Link v-if="puedeGuia(ver)" :href="`/guias/crear?comprobante=${ver.id}`" :class="claseBotonModal">
+                            <Navigation class="size-4" />Guía
+                        </Link>
+                        <button
+                            type="button"
+                            class="ml-auto inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+                            @click="abrirMenu(ver, $event)"
+                        >
+                            Más acciones
+                            <EllipsisVertical class="size-4" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
+
         <!-- Menú de más acciones -->
         <Teleport to="body">
             <div
                 v-if="menu"
                 ref="panelMenu"
-                class="fixed z-40 w-64 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white p-1.5 text-sm text-[#0F172A] shadow-xl shadow-slate-900/10 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                class="fixed z-[60] w-64 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white p-1.5 text-sm text-[#0F172A] shadow-xl shadow-slate-900/10 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                 :style="{ left: `${menu.left}px`, top: `${menu.top}px`, transform: menu.arriba ? 'translateY(-100%)' : undefined }"
                 role="menu"
             >
                 <p class="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-[#94A3B8] uppercase">{{ numero(menu.c) }}</p>
-                <button type="button" :class="claseItemMenu" role="menuitem" @click="accion(alternarDetalle)">
+                <button v-if="ver?.id !== menu.c.id" type="button" :class="claseItemMenu" role="menuitem" @click="accion(verDetalle)">
                     <Eye class="size-4 text-[#64748B]" />
-                    {{ expandido === menu.c.id ? 'Ocultar detalle' : 'Ver detalle' }}
+                    Ver detalle
                 </button>
                 <button v-if="puedeConvertir(menu.c)" type="button" :class="claseItemMenu" role="menuitem" @click="accion(abrirConversion)">
                     <ReceiptText class="size-4 text-emerald-600" />
