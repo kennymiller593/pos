@@ -6,6 +6,7 @@ use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
 use App\Models\MovimientoInventario;
 use App\Models\Producto;
+use App\Services\ReportesNegocioService;
 use App\Support\ExportadorExcel;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Carbon\Carbon;
@@ -27,13 +28,50 @@ class ReporteController extends Controller
         'transferencia_salida' => 'Transferencia salida',
     ];
 
+    /**
+     * Los reportes disponibles, agrupados como se muestran en pantalla.
+     * sin_fechas = foto de hoy (no usa el rango) · producto = pide elegir un producto · agrupar = por día, semana o mes.
+     */
+    public const CATALOGO = [
+        ['grupo' => 'Ventas', 'reportes' => [
+            ['valor' => 'ventas', 'label' => 'Detalle de ventas', 'descripcion' => 'Cada comprobante emitido, con su cliente, condición y vendedor.'],
+            ['valor' => 'productos', 'label' => 'Por producto', 'descripcion' => 'Qué productos se venden más y cuánto pesa cada uno en tu venta.'],
+            ['valor' => 'categorias', 'label' => 'Por categoría', 'descripcion' => 'Venta, costo y utilidad de cada categoría de productos.'],
+            ['valor' => 'vendedores', 'label' => 'Por vendedor', 'descripcion' => 'Cuánto vendió cada persona, su ticket promedio y la utilidad que dejó.'],
+            ['valor' => 'horas', 'label' => 'Por hora', 'descripcion' => 'A qué horas del día vendes más, para organizar a tu personal.'],
+            ['valor' => 'dias', 'label' => 'Por día de la semana', 'descripcion' => 'Qué días de la semana son los más fuertes.'],
+        ]],
+        ['grupo' => 'Ganancias', 'reportes' => [
+            ['valor' => 'utilidad', 'label' => 'Utilidad por período', 'descripcion' => 'Cuánto vendiste, cuánto te costó y cuánto ganaste por día, semana o mes.', 'agrupar' => true],
+            ['valor' => 'margen', 'label' => 'Margen por producto', 'descripcion' => 'Qué productos te dejan más ganancia.'],
+        ]],
+        ['grupo' => 'Clientes', 'reportes' => [
+            ['valor' => 'clientes', 'label' => 'Los que más compran', 'descripcion' => 'Tus mejores clientes: cuántas veces compraron, cuánto y cuándo fue la última vez.'],
+            ['valor' => 'cobranza', 'label' => 'Cuentas por cobrar', 'descripcion' => 'Quién te debe hoy y cuánto tiempo lleva cada deuda.', 'sin_fechas' => true],
+        ]],
+        ['grupo' => 'Caja', 'reportes' => [
+            ['valor' => 'caja', 'label' => 'Por medio de pago', 'descripcion' => 'Cuánto entró y salió en efectivo, Yape, tarjeta y los demás medios.'],
+        ]],
+        ['grupo' => 'Inventario', 'reportes' => [
+            ['valor' => 'kardex', 'label' => 'Kardex', 'descripcion' => 'Entradas, salidas y saldo de un producto, movimiento por movimiento.', 'producto' => true],
+        ]],
+        ['grupo' => 'Contabilidad', 'reportes' => [
+            ['valor' => 'libro', 'label' => 'Registro de ventas', 'descripcion' => 'Boletas, facturas y notas de crédito con el detalle que pide tu contador.'],
+        ]],
+    ];
+
+    public function __construct(private readonly ReportesNegocioService $negocio) {}
+
     public function index(Request $request): Response
     {
-        [$tipo, $desde, $hasta, $productoId] = $this->filtros($request);
+        [$tipo, $desde, $hasta, $productoId, $agrupar] = $this->filtros($request);
+        $datos = $this->construir($request, $tipo, $desde, $hasta, $productoId, $agrupar);
 
         return Inertia::render('Reportes/Index', [
-            'filtros' => ['tipo' => $tipo, 'desde' => $desde, 'hasta' => $hasta, 'producto_id' => $productoId],
-            'datos' => $this->construir($request, $tipo, $desde, $hasta, $productoId),
+            // agrupar: lo que se aplicó de verdad (si no se eligió, sale del largo del rango)
+            'filtros' => ['tipo' => $tipo, 'desde' => $desde, 'hasta' => $hasta, 'producto_id' => $productoId, 'agrupar' => $datos['agrupar'] ?? null],
+            'catalogo' => self::CATALOGO,
+            'datos' => $datos,
             'productos' => Producto::query()
                 ->where('empresa_id', $request->user()->empresa_id)
                 ->where('controla_stock', true)
@@ -44,22 +82,25 @@ class ReporteController extends Controller
 
     public function exportar(Request $request)
     {
-        [$tipo, $desde, $hasta, $productoId] = $this->filtros($request);
+        [$tipo, $desde, $hasta, $productoId, $agrupar] = $this->filtros($request);
         $formato = $request->query('formato') === 'pdf' ? 'pdf' : 'xlsx';
 
-        $datos = $this->construir($request, $tipo, $desde, $hasta, $productoId);
-        $nombre = "reporte-{$tipo}-{$desde}-a-{$hasta}";
+        $datos = $this->construir($request, $tipo, $desde, $hasta, $productoId, $agrupar);
+        // los reportes que son una foto de hoy traen su propio periodo ("Al 03/10/2026")
+        $porFechas = ! isset($datos['periodo']);
+        $nombre = $porFechas ? "reporte-{$tipo}-{$desde}-a-{$hasta}" : "reporte-{$tipo}-".now()->toDateString();
+        $subtitulo = ($datos['periodo'] ?? "Del {$desde} al {$hasta}").($datos['contexto'] ?? null ? " · {$datos['contexto']}" : '');
 
         if ($formato === 'xlsx') {
             return (new ExportadorExcel)
-                ->hoja($datos['titulo'], $datos['titulo'], "Del {$desde} al {$hasta}".($datos['contexto'] ?? null ? " · {$datos['contexto']}" : ''), $datos['columnas'], $datos['filas'], $datos['resumen'])
+                ->hoja($datos['titulo'], $datos['titulo'], $subtitulo, $datos['columnas'], $datos['filas'], $datos['resumen'])
                 ->descargar($nombre);
         }
 
         return SnappyPdf::loadView('pdf.reporte', [
             'empresa' => $request->user()->empresa,
             'titulo' => $datos['titulo'],
-            'subtitulo' => "Del {$desde} al {$hasta}".($datos['contexto'] ?? null ? " · {$datos['contexto']}" : ''),
+            'subtitulo' => $subtitulo,
             'columnas' => $datos['columnas'],
             'filas' => $datos['filas'],
             'resumen' => $datos['resumen'],
@@ -90,22 +131,35 @@ class ReporteController extends Controller
             'hasta.after_or_equal' => 'La fecha final debe ser igual o posterior a la inicial.',
         ]);
 
-        $tipo = in_array($request->query('tipo'), ['ventas', 'libro', 'margen', 'kardex'], true)
-            ? $request->query('tipo')
-            : 'ventas';
+        $tipos = collect(self::CATALOGO)->flatMap(fn ($grupo) => array_column($grupo['reportes'], 'valor'));
+        $tipo = $tipos->contains($request->query('tipo')) ? $request->query('tipo') : 'ventas';
 
         $desde = $request->query('desde') ?: now()->startOfMonth()->toDateString();
         $hasta = $request->query('hasta') ?: now()->toDateString();
 
-        return [$tipo, $desde, $hasta, $request->query('producto_id')];
+        $agrupar = in_array($request->query('agrupar'), ['dia', 'semana', 'mes'], true) ? $request->query('agrupar') : null;
+
+        return [$tipo, $desde, $hasta, $request->query('producto_id'), $agrupar];
     }
 
-    private function construir(Request $request, string $tipo, string $desde, string $hasta, ?string $productoId): array
+    private function construir(Request $request, string $tipo, string $desde, string $hasta, ?string $productoId, ?string $agrupar = null): array
     {
+        $empresaId = $request->user()->empresa_id;
+        $sucursalId = $this->sucursalConsultaId($request); // null = todas
+
         return match ($tipo) {
             'libro' => $this->reporteLibroVentas($request, $desde, $hasta),
             'margen' => $this->reporteMargen($request, $desde, $hasta),
             'kardex' => $this->reporteKardex($request, $desde, $hasta, $productoId),
+            'productos' => $this->negocio->porProducto($empresaId, $sucursalId, $desde, $hasta),
+            'categorias' => $this->negocio->porCategoria($empresaId, $sucursalId, $desde, $hasta),
+            'vendedores' => $this->negocio->porVendedor($empresaId, $sucursalId, $desde, $hasta),
+            'horas' => $this->negocio->porHora($empresaId, $sucursalId, $desde, $hasta),
+            'dias' => $this->negocio->porDiaSemana($empresaId, $sucursalId, $desde, $hasta),
+            'utilidad' => $this->negocio->utilidadPorPeriodo($empresaId, $sucursalId, $desde, $hasta, $agrupar),
+            'clientes' => $this->negocio->clientesQueMasCompran($empresaId, $sucursalId, $desde, $hasta),
+            'cobranza' => $this->negocio->cobranzaPorAntiguedad($empresaId, $sucursalId),
+            'caja' => $this->negocio->cajaPorMedioDePago($empresaId, $sucursalId, $desde, $hasta),
             default => $this->reporteVentas($request, $desde, $hasta),
         };
     }

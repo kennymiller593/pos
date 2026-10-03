@@ -40,6 +40,8 @@ const props = defineProps({
     ventasSucursales: { type: Array, default: () => [] },
     ultimasVentas: { type: Array, default: () => [] },
     pendientes: { type: Object, required: true },
+    // este mes contra el mismo tramo del mes anterior (solo quien ve finanzas)
+    comparacion: { type: Object, default: null },
 })
 
 const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -218,6 +220,13 @@ const PENDIENTES = computed(() => [
 ].filter(Boolean))
 
 const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
+
+// ---- este mes contra el mes anterior ----
+const fechaLocal = (iso) => new Date(`${iso}T00:00:00`)
+const nombreMes = (iso) => fechaLocal(iso).toLocaleDateString('es-PE', { month: 'long' }).toLowerCase()
+// "del 1 al 3 de octubre"
+const tramo = (rango) => `del ${fechaLocal(rango.desde).getDate()} al ${fechaLocal(rango.hasta).getDate()} de ${nombreMes(rango.hasta)}`
+const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor) : Number(valor).toLocaleString('es-PE'))
 </script>
 
 <template>
@@ -310,6 +319,49 @@ const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
                 </div>
             </div>
         </div>
+
+        <!-- Este mes contra el mes anterior -->
+        <section
+            v-if="comparacion"
+            class="mt-4 rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
+            aria-label="Este mes contra el mes anterior"
+        >
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <div>
+                    <h2 class="font-semibold tracking-tight">Este mes contra el mes anterior</h2>
+                    <p class="text-xs text-[#64748B] dark:text-neutral-500">
+                        Lo que va {{ tramo(comparacion.actual) }}, comparado con lo vendido {{ tramo(comparacion.anterior) }}.
+                    </p>
+                </div>
+                <p class="text-xs text-[#64748B] dark:text-neutral-400">
+                    <span class="capitalize">{{ nombreMes(comparacion.anterior.desde) }}</span> completo:
+                    <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(comparacion.mes_anterior_completo) }}</span>
+                </p>
+            </div>
+
+            <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 lg:grid-cols-4 lg:divide-x lg:divide-[#E2E8F0] dark:lg:divide-neutral-800">
+                <div v-for="(fila, i) in comparacion.filas" :key="fila.clave" class="min-w-0" :class="i > 0 ? 'lg:pl-5' : ''">
+                    <dt class="text-sm font-medium text-[#64748B] dark:text-neutral-400">{{ fila.label }}</dt>
+                    <dd class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span class="text-xl font-bold tracking-tight sm:text-2xl">{{ valorComparado(fila, fila.actual) }}</span>
+                        <span
+                            v-if="fila.variacion !== null"
+                            class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
+                            :class="fila.variacion >= 0
+                                ? 'bg-[#10B981]/15 text-[#047857] dark:bg-emerald-500/15 dark:text-emerald-400'
+                                : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'"
+                        >
+                            <ArrowUpRight v-if="fila.variacion >= 0" class="size-3" />
+                            <ArrowDownRight v-else class="size-3" />
+                            {{ Math.abs(fila.variacion) }}%
+                        </span>
+                    </dd>
+                    <dd class="mt-0.5 text-xs text-[#94A3B8] dark:text-neutral-500">
+                        {{ fila.variacion === null && !fila.anterior ? 'Sin datos el mes anterior' : `Antes: ${valorComparado(fila, fila.anterior)}` }}
+                    </dd>
+                </div>
+            </dl>
+        </section>
 
         <!-- Gráficas -->
         <div class="mt-4 grid items-start gap-4 xl:grid-cols-3">

@@ -140,7 +140,11 @@ class ExportadorExcel
 
         $texto = trim((string) $valor);
 
-        if (preg_match('/^(S\/\s*)?(-?[\d,]+(\.\d+)?)$/', $texto, $m) && is_numeric(str_replace(',', '', $m[2]))) {
+        // un DNI, RUC, telefono o correlativo es texto aunque solo tenga digitos: como numero
+        // perderia el cero inicial o se veria en notacion cientifica
+        $esIdentificador = preg_match('/^0\d/', $texto) || preg_match('/^\d{8,}$/', $texto);
+
+        if (! $esIdentificador && preg_match('/^(S\/\s*)?(-?[\d,]+(\.\d+)?)$/', $texto, $m) && is_numeric(str_replace(',', '', $m[2]))) {
             $numero = (float) str_replace(',', '', $m[2]);
             $hoja->setCellValue($celda, $numero);
             $decimales = isset($m[3]) && $m[3] !== '' ? strlen($m[3]) - 1 : 0;

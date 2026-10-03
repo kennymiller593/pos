@@ -73,6 +73,20 @@ class InicioController extends Controller
         $margenHoy = $margenEnRango($hoy, $hoy);
         $margenMes = $margenEnRango(now()->startOfMonth()->toDateString(), $hoy);
 
+        // ---- este mes contra el mismo tramo del mes anterior (del 1 al dia de hoy) ----
+        $ventasEnRango = fn (string $desde, string $hasta) => (int) Comprobante::query()
+            ->where('empresa_id', $empresaId)
+            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->where('estado', 'emitido')
+            ->where('tipo_comprobante_codigo', '!=', '07')
+            ->whereBetween('fecha_emision', [$desde, $hasta])
+            ->count();
+
+        $inicioMes = now()->startOfMonth()->toDateString();
+        $inicioMesAnterior = now()->subMonthNoOverflow()->startOfMonth()->toDateString();
+        $mismoDiaMesAnterior = now()->subMonthNoOverflow()->toDateString();
+        $finMesAnterior = now()->subMonthNoOverflow()->endOfMonth()->toDateString();
+
         // ---- serie de ventas de los ultimos 14 dias ----
         $desde = now()->subDays(13)->toDateString();
 
@@ -270,6 +284,14 @@ class InicioController extends Controller
             'mediosPago' => $mediosPago,
             'ventasSucursales' => $ventasSucursales,
             'ultimasVentas' => $ultimasVentas,
+            'comparacion' => $veFinanzas ? $this->comparacion(
+                actual: ['desde' => $inicioMes, 'hasta' => $hoy, 'ventas' => $totalMes, 'utilidad' => $margenMes, 'tickets' => $ventasEnRango($inicioMes, $hoy)],
+                anterior: [
+                    'desde' => $inicioMesAnterior, 'hasta' => $mismoDiaMesAnterior, 'ventas' => $totalMesAnterior,
+                    'utilidad' => $margenEnRango($inicioMesAnterior, $mismoDiaMesAnterior), 'tickets' => $ventasEnRango($inicioMesAnterior, $mismoDiaMesAnterior),
+                ],
+                mesAnteriorCompleto: $totalEnRango($inicioMesAnterior, $finMesAnterior),
+            ) : null,
             'pendientes' => [
                 'por_cobrar' => $porCobrar,
                 'por_pagar' => $veFinanzas ? $porPagar : null,
@@ -277,5 +299,39 @@ class InicioController extends Controller
                 'lotes_por_vencer' => $lotesPorVencer,
             ],
         ]);
+    }
+
+    /**
+     * Este mes contra el mes anterior, tramo contra tramo (del 1 al mismo dia), para comparar parejo.
+     * variacion = null cuando el mes anterior no tuvo nada con que comparar.
+     *
+     * @param  array{desde: string, hasta: string, ventas: float, utilidad: float, tickets: int}  $actual
+     * @param  array{desde: string, hasta: string, ventas: float, utilidad: float, tickets: int}  $anterior
+     */
+    private function comparacion(array $actual, array $anterior, float $mesAnteriorCompleto): array
+    {
+        $variacion = fn (float $ahora, float $antes) => $antes > 0 ? round(($ahora - $antes) / $antes * 100, 1) : null;
+        $ticket = fn (array $p) => $p['tickets'] > 0 ? round($p['ventas'] / $p['tickets'], 2) : 0.0;
+
+        $fila = fn (string $clave, string $label, string $formato, float $ahora, float $antes) => [
+            'clave' => $clave,
+            'label' => $label,
+            'formato' => $formato,
+            'actual' => round($ahora, 2),
+            'anterior' => round($antes, 2),
+            'variacion' => $variacion($ahora, $antes),
+        ];
+
+        return [
+            'actual' => ['desde' => $actual['desde'], 'hasta' => $actual['hasta']],
+            'anterior' => ['desde' => $anterior['desde'], 'hasta' => $anterior['hasta']],
+            'mes_anterior_completo' => round($mesAnteriorCompleto, 2),
+            'filas' => [
+                $fila('ventas', 'Ventas', 'soles', $actual['ventas'], $anterior['ventas']),
+                $fila('utilidad', 'Utilidad', 'soles', $actual['utilidad'], $anterior['utilidad']),
+                $fila('tickets', 'Nº de ventas', 'entero', $actual['tickets'], $anterior['tickets']),
+                $fila('ticket', 'Ticket promedio', 'soles', $ticket($actual), $ticket($anterior)),
+            ],
+        ];
     }
 }
