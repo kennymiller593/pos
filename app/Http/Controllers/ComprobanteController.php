@@ -33,13 +33,6 @@ class ComprobanteController extends Controller
     public function index(Request $request): Response
     {
         $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
-        // rango de fechas de emision (AAAA-MM-DD); una fecha mal escrita se ignora
-        foreach (['desde', 'hasta'] as $campo) {
-            $valor = (string) $request->query($campo);
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor) && strtotime($valor)) {
-                $filtros[$campo] = $valor;
-            }
-        }
 
         // orden por columna (?orden=total&dir=asc); por defecto, lo mas reciente primero
         $orden = in_array($request->query('orden'), array_keys(self::ORDENES), true) ? $request->query('orden') : 'fecha';
@@ -72,8 +65,6 @@ class ComprobanteController extends Controller
                     }
                 });
             })
-            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('fecha_emision', '>=', $desde))
-            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('fecha_emision', '<=', $hasta))
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('tipo_comprobante_codigo', $tipo))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('estado', $estado))
             // "pendiente" agrupa lo que SUNAT aun no acepto: sin envio, pendiente o rechazado
