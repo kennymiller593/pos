@@ -200,7 +200,7 @@ class GuiaRemisionService
                 'producto_id' => $producto->id,
                 'presentacion_id' => $presentacion->id,
                 'codigo' => $producto->codigo_interno,
-                'descripcion' => $producto->nombre.($presentacion->nombre !== 'Unidad' ? " ({$presentacion->nombre})" : ''),
+                'descripcion' => $presentacion->descripcionConProducto($producto->nombre),
                 'unidad_codigo' => trim((string) $presentacion->unidad_codigo) ?: $producto->unidad_base_codigo,
                 'cantidad' => $cantidad,
             ];

@@ -720,7 +720,7 @@ class VentaService
             'producto_id' => $producto->id,
             'presentacion_id' => $linea['presentacion']->id,
             'lote_id' => $consumo['consumos'][0]['lote_id'] ?? null,
-            'descripcion' => $producto->nombre.($linea['presentacion']->nombre !== 'Unidad' ? " ({$linea['presentacion']->nombre})" : ''),
+            'descripcion' => $linea['presentacion']->descripcionConProducto($producto->nombre),
             // la unidad que va a SUNAT es la de la presentacion vendida (1 saco = SA, no 1 KGM)
             'unidad_codigo' => trim((string) $linea['presentacion']->unidad_codigo) ?: $producto->unidad_base_codigo,
             'tipo_afectacion_codigo' => $linea['afectacion'],

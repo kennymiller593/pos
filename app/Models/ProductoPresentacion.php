@@ -29,6 +29,23 @@ class ProductoPresentacion extends Model
         'activo',
     ];
 
+    /**
+     * Descripción que va al comprobante: "Producto (Presentación)". La presentación se omite
+     * cuando no aporta nada: la unidad suelta, o cuando se llama igual que el producto
+     * (pasa con nombres puestos a mano), que dejaba "Foliar 20-20-20 (Foliar 20-20-20)".
+     */
+    public function descripcionConProducto(string $nombreProducto): string
+    {
+        $presentacion = trim((string) $this->nombre);
+        $producto = trim($nombreProducto);
+
+        if ($presentacion === '' || $presentacion === 'Unidad' || mb_strtolower($presentacion) === mb_strtolower($producto)) {
+            return $producto;
+        }
+
+        return "{$producto} ({$presentacion})";
+    }
+
     protected function casts(): array
     {
         return [
