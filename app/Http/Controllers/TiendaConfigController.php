@@ -17,8 +17,16 @@ class TiendaConfigController extends Controller
 {
     public function __construct(private readonly CatalogoTiendaService $catalogo) {}
 
+    /** La tienda es un adicional: sin él, la pantalla no existe para la empresa. */
+    private function exigirAdicional(Request $request): void
+    {
+        abort_unless($request->user()->empresa->tienda_habilitada, 403);
+    }
+
     public function edit(Request $request): Response
     {
+        $this->exigirAdicional($request);
+
         $empresa = $request->user()->empresa;
         $filtros = ['buscar' => trim((string) $request->query('buscar')), 'ver' => in_array($request->query('ver'), ['destacados', 'ocultos'], true) ? $request->query('ver') : 'todos'];
 
@@ -66,6 +74,8 @@ class TiendaConfigController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
+        $this->exigirAdicional($request);
+
         $empresa = $request->user()->empresa;
         $request->merge(['slug' => mb_strtolower(trim((string) $request->input('slug')))]);
 
@@ -135,6 +145,7 @@ class TiendaConfigController extends Controller
     /** Cambia cómo aparece un producto en la tienda: si se muestra, si va destacado y su descripción. */
     public function producto(Request $request, Producto $producto): RedirectResponse
     {
+        $this->exigirAdicional($request);
         abort_unless($producto->empresa_id === $request->user()->empresa_id, 403);
 
         $datos = $request->validate([

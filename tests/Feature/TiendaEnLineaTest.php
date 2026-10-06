@@ -28,6 +28,8 @@ class TiendaEnLineaTest extends TestCase
     {
         parent::setUp();
         $this->crearEscenarioBase();
+        // la tienda es un adicional que activa la plataforma: aqui ya esta contratado
+        $this->empresa->forceFill(['tienda_habilitada' => true])->save();
 
         $fertilizantes = Categoria::create(['empresa_id' => $this->empresa->id, 'nombre' => 'Fertilizantes']);
         $farmex = Marca::create(['empresa_id' => $this->empresa->id, 'nombre' => 'Farmex']);
@@ -119,6 +121,7 @@ class TiendaEnLineaTest extends TestCase
         // otra empresa no puede tomar la misma direccion
         $primera = $this->empresa;
         $this->crearEscenarioBase();
+        $this->empresa->forceFill(['tienda_habilitada' => true])->save();
         $guardar(['slug' => 'agro-campo'])->assertSessionHasErrors(['slug' => 'Esa dirección ya la usa otro negocio. Prueba con otra.']);
         $this->assertSame('agro-campo', $primera->fresh()->tienda_slug);
     }
@@ -392,6 +395,53 @@ class TiendaEnLineaTest extends TestCase
         $respuesta->assertSee('<loc>http://agro.tienda.test/</loc>', false)
             ->assertSee('<loc>http://agro.tienda.test/producto/P0006/urea-46-x-50-kg</loc>', false)
             ->assertDontSee('P0001');
+    }
+
+    public function test_sin_el_adicional_el_dueno_no_tiene_tienda_y_solo_la_plataforma_lo_activa(): void
+    {
+        $this->publicar();
+        $this->tienda('/')->assertOk();
+
+        $superadmin = $this->crearUsuario('admin', 'plataforma'.random_int(10000, 99999).'@test.local');
+        $superadmin->forceFill(['es_superadmin' => true])->save();
+        $alternar = fn ($usuario) => $this->actingAs($usuario)->post("/admin/empresas/{$this->empresa->id}/tienda");
+
+        // el dueño no puede darse el adicional a si mismo
+        $alternar($this->admin)->assertForbidden();
+        $this->assertTrue($this->empresa->fresh()->tienda_habilitada);
+
+        // la plataforma lo quita: la tienda deja de verse y el dueño pierde la pantalla y el menu
+        $alternar($superadmin)->assertSessionHas('success');
+        $this->assertFalse($this->empresa->fresh()->tienda_habilitada);
+        $this->assertDatabaseHas('auditoria', ['accion' => 'plataforma.tienda_desactivada']);
+        $this->tienda('/')->assertNotFound();
+
+        $dueno = $this->admin->fresh();
+        $this->actingAs($dueno)->get('/tienda-en-linea')->assertForbidden();
+        $this->actingAs($dueno)->put('/tienda-en-linea', $this->datosDeTienda())->assertForbidden();
+        $this->actingAs($dueno)->patch("/tienda-en-linea/productos/{$this->urea->id}", ['en_tienda' => false])->assertForbidden();
+        $this->actingAs($dueno)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina->where('auth.user.empresa.tienda_habilitada', false));
+        // conserva lo que habia configurado
+        $this->assertSame('agro', $this->empresa->fresh()->tienda_slug);
+        $this->assertTrue($this->empresa->fresh()->tienda_publicada);
+
+        // la plataforma lo vuelve a activar: todo regresa como estaba
+        $alternar($superadmin)->assertSessionHas('success');
+        $this->tienda('/')->assertOk();
+        $dueno = $this->admin->fresh();
+        $this->actingAs($dueno)->get('/tienda-en-linea')->assertOk();
+        $this->actingAs($dueno)->get('/dashboard')->assertInertia(fn (Assert $pagina) => $pagina->where('auth.user.empresa.tienda_habilitada', true));
+    }
+
+    public function test_una_empresa_nueva_nace_sin_el_adicional(): void
+    {
+        $this->crearEscenarioBase();
+
+        $this->assertFalse((bool) $this->empresa->fresh()->tienda_habilitada);
+        $this->actingAs($this->admin)->get('/tienda-en-linea')->assertForbidden();
+        // y no se puede activar mandando el campo en un formulario del dueño
+        $this->empresa->update(['tienda_habilitada' => true]);
+        $this->assertFalse((bool) $this->empresa->fresh()->tienda_habilitada);
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void

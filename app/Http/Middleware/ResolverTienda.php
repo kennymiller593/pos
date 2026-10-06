@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * {slug}.inkanet.pro -> la empresa dueña de esa dirección. La tienda solo se muestra si la empresa
- * la publicó, sigue activa y tiene su suscripción vigente (o en los días de gracia).
+ * tiene el adicional activo, la publicó, sigue activa y tiene su suscripción vigente (o en gracia).
  */
 class ResolverTienda
 {
@@ -24,6 +24,7 @@ class ResolverTienda
         $empresa = Empresa::query()
             ->where('tienda_slug', $slug)
             ->where('tienda_publicada', true)
+            ->where('tienda_habilitada', true) // el adicional lo activa la plataforma
             ->where('activo', true)
             ->first();
 

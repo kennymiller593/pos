@@ -99,6 +99,8 @@ class HandleInertiaRequests extends Middleware
                             'facturacion_electronica' => (bool) $usuario->empresa->facturacion_electronica,
                             'regimen_tributario' => $usuario->empresa->regimen_tributario,
                             'entorno_sunat' => $usuario->empresa->entorno_sunat,
+                            // adicional de pago: decide si el menu muestra "Tienda en linea"
+                            'tienda_habilitada' => (bool) $usuario->empresa->tienda_habilitada,
                         ],
                         'sucursal' => $usuario->sucursal ? [
                             'id' => $usuario->sucursal->id,

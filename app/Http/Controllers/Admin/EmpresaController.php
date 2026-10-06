@@ -9,6 +9,7 @@ use App\Models\Empresa;
 use App\Models\Plan;
 use App\Models\Suscripcion;
 use App\Services\SuscripcionService;
+use App\Support\Tienda;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -96,6 +97,11 @@ class EmpresaController extends Controller
                 'rubro' => $empresa->rubro?->nombre,
                 'regimen_tributario' => $empresa->regimen_tributario,
                 'activo' => (bool) $empresa->activo,
+                'tienda' => [
+                    'habilitada' => (bool) $empresa->tienda_habilitada,
+                    'publicada' => (bool) $empresa->tienda_publicada,
+                    'url' => Tienda::url($empresa->tienda_slug),
+                ],
                 'facturacion_electronica' => (bool) $empresa->facturacion_electronica,
                 'entorno_sunat' => $empresa->entorno_sunat,
                 'certificado_vence_en' => $empresa->certificado_vence_en?->toDateString(),
@@ -169,6 +175,20 @@ class EmpresaController extends Controller
     }
 
     /** Suspende o reactiva el acceso de toda la empresa. */
+    /** Activa o quita el adicional "Tienda en línea" de una empresa. */
+    public function alternarTienda(Request $request, Empresa $empresa): RedirectResponse
+    {
+        $empresa->forceFill(['tienda_habilitada' => ! $empresa->tienda_habilitada])->save();
+
+        Auditoria::registrar($request->user(), $empresa->tienda_habilitada ? 'plataforma.tienda_activada' : 'plataforma.tienda_desactivada', 'empresa', $empresa->id, [
+            'empresa' => $empresa->razon_social,
+        ]);
+
+        return back()->with('success', $empresa->tienda_habilitada
+            ? "Tienda en línea activada para {$empresa->razon_social}: ya la ve en su menú."
+            : "Tienda en línea desactivada para {$empresa->razon_social}: su tienda dejó de mostrarse.");
+    }
+
     public function alternarActivo(Request $request, Empresa $empresa): RedirectResponse
     {
         if ($empresa->id === $request->user()->empresa_id) {

@@ -137,6 +137,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/plan', [AdminEmpresaController::class, 'activarPlan'])->name('empresas.plan');
         Route::post('/empresas/{empresa}/extender', [AdminEmpresaController::class, 'extender'])->name('empresas.extender');
         Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
+        Route::post('/empresas/{empresa}/tienda', [AdminEmpresaController::class, 'alternarTienda'])->name('empresas.tienda');
         Route::post('/empresas/{empresa}/entrar', [ImpersonacionController::class, 'entrar'])->name('empresas.entrar');
         Route::get('/empresas/{empresa}/auditoria', [AuditoriaController::class, 'deEmpresa'])->name('empresas.auditoria');
         Route::get('/auditoria/{empresa}', [AuditoriaController::class, 'deEmpresa'])->name('auditoria');

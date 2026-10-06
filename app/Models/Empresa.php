@@ -65,6 +65,8 @@ class Empresa extends Model
             'puntos_valor' => 'decimal:2',
             'puntos_minimo_canje' => 'integer',
             'tienda_publicada' => 'boolean',
+            // adicional de pago: solo lo cambia la plataforma (no es fillable a proposito)
+            'tienda_habilitada' => 'boolean',
             'tienda_config' => 'array',
             'clave_sol' => 'encrypted',
             'gre_client_secret' => 'encrypted',

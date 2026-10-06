@@ -129,7 +129,8 @@ const menuBase = [
         seccion: 'Configuración',
         items: [
             { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
-            { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar' },
+            // adicional de pago: solo aparece si la plataforma lo activó para la empresa
+            { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
             { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
             { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
             { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
@@ -156,7 +157,7 @@ const { puede } = usePermisos()
 const menu = computed(() => (esPlataforma.value ? menuPlataforma : menuBase)
     .map((grupo) => ({
         ...grupo,
-        items: grupo.items.filter((item) => !item.permiso || puede(item.permiso)),
+        items: grupo.items.filter((item) => (!item.permiso || puede(item.permiso)) && (!item.si || item.si())),
     }))
     .filter((grupo) => grupo.items.length))
 

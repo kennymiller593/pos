@@ -7,6 +7,7 @@ import {
     CalendarClock,
     CalendarPlus,
     CreditCard,
+    Globe,
     LogIn,
     Package,
     Power,
@@ -122,6 +123,22 @@ const planInicial = (() => {
 const formPlan = useForm({ plan: planInicial, meses: 1, nota: '' })
 const formExtender = useForm({ dias: 7 })
 const formActivo = useForm({})
+const formTienda = useForm({})
+
+// adicional "Tienda en línea": al quitarlo, la tienda publicada deja de verse
+async function alternarTienda() {
+    const quitar = props.empresa.tienda.habilitada
+    if (quitar && props.empresa.tienda.publicada) {
+        const ok = await confirmar({
+            titulo: 'Quitar la tienda en línea',
+            mensaje: `La tienda de ${props.empresa.razon_social} dejará de mostrarse a sus clientes. Su configuración se conserva por si la reactivas.`,
+            textoConfirmar: 'Quitar',
+            peligro: true,
+        })
+        if (!ok) return
+    }
+    formTienda.post(`/admin/empresas/${props.empresa.id}/tienda`, { preserveScroll: true })
+}
 
 const planElegido = computed(() => props.planes.find((p) => p.codigo === formPlan.plan) ?? null)
 const totalPlan = computed(() => Number(planElegido.value?.precio_mensual ?? 0) * Number(formPlan.meses || 0))
@@ -329,6 +346,36 @@ const claseBoton =
                             </button>
                         </div>
                     </form>
+
+                    <!-- Adicional: tienda en línea -->
+                    <section :class="claseTarjeta" data-adicional-tienda>
+                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
+                            <Globe class="size-4" :class="empresa.tienda.habilitada ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-400'" />
+                            Tienda en línea
+                            <span class="ml-auto inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" :class="empresa.tienda.habilitada ? VERDE : GRIS">
+                                {{ empresa.tienda.habilitada ? 'Activa' : 'No contratada' }}
+                            </span>
+                        </h3>
+                        <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                            <template v-if="!empresa.tienda.habilitada">Adicional de pago. Al activarlo, el dueño ve "Tienda en línea" en su menú y puede publicar su catálogo.</template>
+                            <template v-else-if="empresa.tienda.publicada">
+                                Publicada en
+                                <a :href="empresa.tienda.url" target="_blank" rel="noopener" class="font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400">{{ empresa.tienda.url }}</a>
+                            </template>
+                            <template v-else>El dueño ya la ve en su menú, pero aún no la publica.</template>
+                        </p>
+                        <button
+                            type="button"
+                            :disabled="formTienda.processing"
+                            class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            :class="empresa.tienda.habilitada
+                                ? 'border border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                            @click="alternarTienda"
+                        >
+                            {{ formTienda.processing ? 'Procesando...' : (empresa.tienda.habilitada ? 'Quitar el adicional' : 'Activar tienda en línea') }}
+                        </button>
+                    </section>
 
                     <!-- Activar / desactivar -->
                     <section :class="claseTarjeta">
