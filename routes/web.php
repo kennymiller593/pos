@@ -37,10 +37,31 @@ use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\SuscripcionController;
+use App\Http\Controllers\TiendaConfigController;
+use App\Http\Controllers\TiendaController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Middleware\CabecerasTienda;
+use App\Http\Middleware\ResolverTienda;
 use App\Http\Middleware\Superadmin;
+use App\Support\Tienda;
 use Illuminate\Support\Facades\Route;
+
+// ---- tienda en linea: {slug}.inkanet.pro ----
+// Va primero porque comparte "/" con la app, y fuera del grupo web: es publica, sin sesion ni cookies
+// (un buscador o un pico de visitas no abre sesiones ni toca nada del sistema).
+if (Tienda::dominio()) {
+    Route::domain('{tienda}.'.Tienda::dominio())
+        ->where(['tienda' => Tienda::patronDeRuta()])
+        ->withoutMiddleware('web')
+        ->middleware([CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class])
+        ->name('tienda.')
+        ->group(function () {
+            Route::get('/', [TiendaController::class, 'inicio'])->name('inicio');
+            Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
+            Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
+        });
+}
 
 // PDF de un comprobante para el cliente final (enlace firmado que se envia por WhatsApp)
 Route::get('/c/{comprobante}', [ComprobanteController::class, 'publico'])
@@ -134,6 +155,9 @@ Route::middleware('auth')->group(function () {
 
     // ---- configuracion (solo admin) ----
     Route::middleware('can:empresa.gestionar')->group(function () {
+        Route::get('/tienda-en-linea', [TiendaConfigController::class, 'edit'])->name('tienda-config.edit');
+        Route::put('/tienda-en-linea', [TiendaConfigController::class, 'update'])->name('tienda-config.update');
+        Route::patch('/tienda-en-linea/productos/{producto}', [TiendaConfigController::class, 'producto'])->name('tienda-config.producto');
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
         Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');

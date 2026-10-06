@@ -36,6 +36,7 @@
         <env name="IMAGENES_ACCESS_KEY_ID" value="" force="true"/>
         <env name="IMAGENES_SECRET_ACCESS_KEY" value="" force="true"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="TIENDA_DOMINIO" value="tienda.test"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

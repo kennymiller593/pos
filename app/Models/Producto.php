@@ -52,6 +52,10 @@ class Producto extends Model
         'atributos',
         'imagen_url',
         'activo',
+        // tienda en linea
+        'en_tienda',
+        'destacado',
+        'descripcion',
     ];
 
     protected function casts(): array
@@ -63,6 +67,8 @@ class Producto extends Model
             'stock_minimo' => 'decimal:3',
             'atributos' => 'array',
             'activo' => 'boolean',
+            'en_tienda' => 'boolean',
+            'destacado' => 'boolean',
         ];
     }
 

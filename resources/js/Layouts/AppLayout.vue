@@ -19,6 +19,7 @@ import {
     CirclePlay,
     Compass,
     FileText,
+    Globe,
     HandCoins,
     LayoutDashboard,
     LogOut,
@@ -128,6 +129,7 @@ const menuBase = [
         seccion: 'Configuración',
         items: [
             { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
+            { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar' },
             { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
             { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
             { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },

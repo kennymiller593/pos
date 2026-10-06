@@ -4,9 +4,11 @@ use App\Http\Middleware\CabecerasSeguridad;
 use App\Http\Middleware\CorreoVerificado;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ImpersonacionVigente;
+use App\Http\Middleware\SoloDominioPrincipal;
 use App\Http\Middleware\SoloPlataforma;
 use App\Http\Middleware\SuscripcionVigente;
 use App\Http\Middleware\UsuarioActivo;
+use App\Support\Tienda;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,9 +27,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Solo el dominio de la app genera URLs absolutas (enlaces de correo, redirecciones): sin esto un
         // Host falso en la peticion envenena el enlace de recuperacion de contrasena. La lista se lee al
         // atender cada peticion (config() aun no existe aqui). No aplica en local ni en tests.
-        $middleware->trustHosts(at: fn () => config('app.trusted_hosts'));
+        // Las tiendas en linea viven en {slug}.dominio: esos nombres tambien son de confianza.
+        $middleware->trustHosts(at: fn () => [...config('app.trusted_hosts'), ...Tienda::hostsDeConfianza()]);
 
         // los proxies de confianza se configuran en AppServiceProvider por la misma razon
+        // el sistema no se atiende en la direccion de una tienda (alli solo esta el catalogo publico)
+        $middleware->web(prepend: [SoloDominioPrincipal::class]);
+
         $middleware->web(append: [
             CabecerasSeguridad::class,
             UsuarioActivo::class,
@@ -47,6 +53,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // del servidor no deben mostrar el HTML crudo de Laravel dentro de un modal.
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $estado = $response->getStatusCode();
+
+            // en la direccion de una tienda los errores salen con su propia pagina, sin nada del sistema
+            if (Tienda::esHost($request->getHost()) && ($estado === 404 || (! app()->environment(['local', 'testing']) && in_array($estado, [403, 429, 500, 503], true)))) {
+                return response()->view('tienda.error', ['estado' => $estado], $estado);
+            }
 
             if ($estado === 419) {
                 return back()->with('error', 'Tu sesión expiró. Vuelve a intentarlo.');
