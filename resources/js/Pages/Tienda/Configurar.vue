@@ -10,10 +10,13 @@ import {
     EyeOff,
     Globe,
     ImageOff,
+    ImagePlus,
+    LoaderCircle,
     Package,
     Pencil,
     Search,
     Star,
+    Trash2,
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -45,7 +48,100 @@ const form = useForm({
     facebook: props.tienda.config.facebook ?? '',
     instagram: props.tienda.config.instagram ?? '',
     tiktok: props.tienda.config.tiktok ?? '',
+    // apariencia de la portada
+    portada_estilo: props.tienda.config.portada_estilo ?? 'vitrina',
+    portada_titulo: props.tienda.config.portada_titulo ?? '',
+    portada_boton: props.tienda.config.portada_boton ?? '',
+    anuncio: props.tienda.config.anuncio ?? '',
+    portada_imagen: null, // archivo nuevo, si se elige uno
+    portada_imagen_quitar: false,
 })
+
+// ---- apariencia de la portada ----
+const ESTILOS = [
+    { valor: 'vitrina', nombre: 'Vitrina', detalle: 'Tus productos destacados al lado del título.' },
+    { valor: 'foto', nombre: 'Foto grande', detalle: 'Una foto tuya de fondo, a todo el ancho.' },
+    { valor: 'texto', nombre: 'Sencilla', detalle: 'Solo el título y los botones, al centro.' },
+]
+
+const inputPortada = ref(null)
+const fotoNueva = ref(null) // vista previa local del archivo elegido
+// la foto que se vería: la recién elegida, o la guardada si no se pidió quitarla
+const fotoPortada = computed(() => fotoNueva.value ?? (form.portada_imagen_quitar ? null : props.tienda.config.portada_imagen))
+
+function elegirFoto(evento) {
+    const archivo = evento.target.files?.[0]
+    if (!archivo) return
+    form.clearErrors('portada_imagen')
+    if (archivo.size > 6 * 1024 * 1024) {
+        form.setError('portada_imagen', 'La foto de portada no debe pesar más de 6 MB.')
+        evento.target.value = ''
+        return
+    }
+    if (fotoNueva.value) URL.revokeObjectURL(fotoNueva.value)
+    fotoNueva.value = URL.createObjectURL(archivo)
+    form.portada_imagen = archivo
+    form.portada_imagen_quitar = false
+    // subir una foto es querer usarla
+    form.portada_estilo = 'foto'
+}
+
+function quitarFoto() {
+    if (fotoNueva.value) URL.revokeObjectURL(fotoNueva.value)
+    fotoNueva.value = null
+    form.portada_imagen = null
+    form.portada_imagen_quitar = true
+    if (inputPortada.value) inputPortada.value.value = ''
+    if (form.portada_estilo === 'foto') form.portada_estilo = 'vitrina'
+}
+
+function limpiarFotoElegida() {
+    if (fotoNueva.value) URL.revokeObjectURL(fotoNueva.value)
+    fotoNueva.value = null
+    form.portada_imagen = null
+    form.portada_imagen_quitar = false
+    if (inputPortada.value) inputPortada.value.value = ''
+}
+
+// ---- vista previa: la tienda con lo que hay en el formulario, sin guardarlo ----
+const previsualizando = ref(false)
+
+async function vistaPrevia() {
+    if (previsualizando.value) return
+    // la pestaña se abre ya, dentro del clic: si se abriera al llegar la respuesta, el navegador la bloquearía
+    const pestana = window.open('', '_blank')
+    if (pestana) pestana.document.write('<p style="font:16px system-ui;padding:32px;color:#475569">Preparando la vista previa...</p>')
+
+    previsualizando.value = true
+    form.clearErrors()
+    try {
+        const cuerpo = new FormData()
+        for (const [clave, valor] of Object.entries(form.data())) {
+            if (valor === null || valor === undefined) continue
+            cuerpo.append(clave, typeof valor === 'boolean' ? (valor ? '1' : '0') : valor)
+        }
+        const r = await fetch('/tienda-en-linea/vista-previa', {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '') },
+            body: cuerpo,
+        })
+        const datos = await r.json().catch(() => ({}))
+        if (r.ok && datos.url) {
+            if (pestana) pestana.location = datos.url
+            else window.location.assign(datos.url)
+            return
+        }
+        pestana?.close()
+        // los mismos avisos que al guardar, cada uno en su campo
+        for (const [campo, mensajes] of Object.entries(datos.errors ?? {})) form.setError(campo, mensajes[0])
+        if (!datos.errors) form.setError('vista_previa', datos.message ?? 'No se pudo preparar la vista previa. Inténtalo de nuevo.')
+    } catch {
+        pestana?.close()
+        form.setError('vista_previa', 'No se pudo preparar la vista previa. Revisa tu conexión.')
+    } finally {
+        previsualizando.value = false
+    }
+}
 
 // la dirección solo admite minúsculas, números y guiones: se corrige mientras se escribe
 function limpiarSlug() {
@@ -63,10 +159,15 @@ const direccionCompleta = computed(() => `${form.slug || 'tu-negocio'}.${props.t
 const cambiaDireccion = computed(() => props.tienda.publicada && props.tienda.slug && form.slug !== props.tienda.slug)
 
 function guardar() {
-    form.put('/tienda-en-linea', {
+    // lleva un archivo (la foto de portada): viaja como formulario con el método PUT indicado dentro
+    form.transform((datos) => ({ ...datos, _method: 'put' })).post('/tienda-en-linea', {
         preserveScroll: true,
+        forceFormData: true,
         // lo guardado pasa a ser el punto de partida ("cambios sin guardar" se apaga)
-        onSuccess: () => form.defaults(),
+        onSuccess: () => {
+            limpiarFotoElegida()
+            form.defaults()
+        },
         // si no se pudo publicar (falta un contacto, dirección ocupada...), el estado vuelve al real
         onError: () => (form.publicada = props.tienda.publicada),
     })
@@ -290,9 +391,11 @@ const claseInterruptor =
                     </label>
                     <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
                         <span>
-                            <span class="block text-sm font-medium">Mostrar disponibilidad</span>
+                            <span class="block text-sm font-medium">Marcar lo agotado</span>
                             <span class="block text-xs text-neutral-500 dark:text-neutral-400">
-                                Marca como "Agotado" lo que no tiene stock. Nunca muestra cuántas unidades hay.
+                                {{ form.mostrar_stock
+                                    ? 'Lo que no tiene stock sale como "Agotado" y al final del catálogo. Nunca se muestra cuántas unidades hay.'
+                                    : 'La tienda no mira tu stock: todos los productos se muestran igual, haya o no existencias.' }}
                             </span>
                         </span>
                         <input v-model="form.mostrar_stock" type="checkbox" class="peer sr-only" />
@@ -345,17 +448,137 @@ const claseInterruptor =
                     </div>
                 </div>
 
-                <div class="mt-5 flex items-center justify-end gap-3 border-t border-stone-200 pt-4 dark:border-neutral-800">
-                    <span v-if="form.isDirty" class="text-xs text-neutral-500 dark:text-neutral-400">Tienes cambios sin guardar</span>
-                    <button
-                        type="submit"
-                        :disabled="form.processing"
-                        class="inline-flex h-10 items-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
-                    </button>
+            </section>
+
+            <!-- Apariencia de la portada -->
+            <section :class="[claseTarjeta, 'p-5 xl:col-span-2']" aria-labelledby="titulo-apariencia">
+                <h2 id="titulo-apariencia" class="font-semibold tracking-tight">Apariencia de la portada</h2>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">Lo primero que ve tu cliente al entrar. Usa "Vista previa" para probar sin que nadie más lo vea.</p>
+
+                <fieldset class="mt-4">
+                    <legend :class="claseLabel">Estilo</legend>
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <label
+                            v-for="estilo in ESTILOS"
+                            :key="estilo.valor"
+                            class="cursor-pointer rounded-2xl border p-3 transition-colors"
+                            :class="form.portada_estilo === estilo.valor
+                                ? 'border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600 dark:border-emerald-500 dark:bg-emerald-500/10 dark:ring-emerald-500'
+                                : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
+                        >
+                            <input v-model="form.portada_estilo" type="radio" name="portada_estilo" :value="estilo.valor" class="sr-only" />
+                            <!-- miniatura del estilo -->
+                            <span class="relative block aspect-[16/8] overflow-hidden rounded-xl border border-stone-200 bg-emerald-50 dark:border-neutral-700 dark:bg-neutral-800" aria-hidden="true">
+                                <template v-if="estilo.valor === 'vitrina'">
+                                    <span class="absolute top-1/2 left-[9%] h-2 w-[32%] -translate-y-[170%] rounded bg-neutral-800 dark:bg-neutral-200" />
+                                    <span class="absolute top-1/2 left-[9%] h-1.5 w-[24%] rounded bg-neutral-400" />
+                                    <span class="absolute top-1/2 left-[9%] h-2.5 w-[14%] translate-y-[150%] rounded bg-emerald-600" />
+                                    <span class="absolute top-[14%] right-[30%] bottom-[14%] w-[19%] rounded-lg bg-white shadow-sm" />
+                                    <span class="absolute top-[14%] right-[8%] h-[33%] w-[19%] rounded-lg bg-white shadow-sm" />
+                                    <span class="absolute right-[8%] bottom-[14%] h-[33%] w-[19%] rounded-lg bg-white shadow-sm" />
+                                </template>
+                                <template v-else-if="estilo.valor === 'foto'">
+                                    <span class="absolute inset-0 bg-gradient-to-br from-emerald-700 via-teal-700 to-sky-800" />
+                                    <span class="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent" />
+                                    <span class="absolute top-1/2 left-[9%] h-2 w-[36%] -translate-y-[170%] rounded bg-white" />
+                                    <span class="absolute top-1/2 left-[9%] h-1.5 w-[26%] rounded bg-white/60" />
+                                    <span class="absolute top-1/2 left-[9%] h-2.5 w-[14%] translate-y-[150%] rounded bg-emerald-400" />
+                                </template>
+                                <template v-else>
+                                    <span class="absolute top-1/2 left-1/2 h-2 w-[40%] -translate-x-1/2 -translate-y-[170%] rounded bg-neutral-800 dark:bg-neutral-200" />
+                                    <span class="absolute top-1/2 left-1/2 h-1.5 w-[28%] -translate-x-1/2 rounded bg-neutral-400" />
+                                    <span class="absolute top-1/2 left-1/2 h-2.5 w-[16%] -translate-x-1/2 translate-y-[150%] rounded bg-emerald-600" />
+                                </template>
+                            </span>
+                            <span class="mt-2.5 flex items-center justify-between gap-2 text-sm font-semibold">
+                                {{ estilo.nombre }}
+                                <Check v-if="form.portada_estilo === estilo.valor" class="size-4 text-emerald-600 dark:text-emerald-400" />
+                            </span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">{{ estilo.detalle }}</span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div class="mt-5 grid gap-5 lg:grid-cols-2">
+                    <!-- Foto de portada -->
+                    <div>
+                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")' }}</span></p>
+                        <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-neutral-800">
+                            <img :src="fotoPortada" alt="Foto de portada" class="aspect-[16/7] w-full object-cover" />
+                            <!-- el mismo velo que lleva en la tienda, para ver cómo se leerá el título -->
+                            <div class="pointer-events-none absolute inset-0 flex items-center bg-gradient-to-r from-neutral-950/85 via-neutral-950/55 to-neutral-950/15 px-5">
+                                <p class="max-w-[60%] text-lg leading-tight font-semibold text-white">{{ form.portada_titulo || 'El título de tu tienda' }}</p>
+                            </div>
+                            <div class="absolute top-2 right-2 flex gap-1.5">
+                                <button type="button" class="inline-flex h-8 items-center gap-1.5 rounded-lg bg-white/95 px-2.5 text-xs font-semibold text-neutral-800 shadow hover:bg-white" @click="inputPortada?.click()">
+                                    <ImagePlus class="size-3.5" />
+                                    Cambiar
+                                </button>
+                                <button type="button" class="grid size-8 place-items-center rounded-lg bg-white/95 text-red-600 shadow hover:bg-white" aria-label="Quitar la foto de portada" title="Quitar la foto" @click="quitarFoto">
+                                    <Trash2 class="size-4" />
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            v-else
+                            type="button"
+                            class="flex aspect-[16/7] w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-stone-300 text-sm text-neutral-500 transition-colors hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-emerald-500 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
+                            @click="inputPortada?.click()"
+                        >
+                            <ImagePlus class="size-7" />
+                            <span class="font-semibold">Subir una foto</span>
+                            <span class="text-xs">Tu local, tus productos o tu equipo</span>
+                        </button>
+                        <input ref="inputPortada" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Foto de portada" @change="elegirFoto" />
+                        <p v-if="form.errors.portada_imagen" :class="claseError">{{ form.errors.portada_imagen }}</p>
+                        <p v-else :class="claseAyuda">Horizontal y de al menos 1600 px de ancho. JPG, PNG o WEBP, hasta 6 MB. Se oscurece un poco para que el título se lea.</p>
+                    </div>
+
+                    <!-- Textos -->
+                    <div class="space-y-4">
+                        <div>
+                            <label :class="claseLabel" for="tienda_titulo">Título de la portada <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <input id="tienda_titulo" v-model="form.portada_titulo" type="text" maxlength="80" :class="claseInput" placeholder="Todo para tu campo, en un solo lugar" />
+                            <p v-if="form.errors.portada_titulo" :class="claseError">{{ form.errors.portada_titulo }}</p>
+                            <p v-else :class="claseAyuda">Si lo dejas vacío sale el nombre de tu negocio. Debajo va tu presentación.</p>
+                        </div>
+                        <div>
+                            <label :class="claseLabel" for="tienda_boton">Texto del botón <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <input id="tienda_boton" v-model="form.portada_boton" type="text" maxlength="30" :class="claseInput" placeholder="Ver catálogo" />
+                            <p v-if="form.errors.portada_boton" :class="claseError">{{ form.errors.portada_boton }}</p>
+                        </div>
+                        <div>
+                            <label :class="claseLabel" for="tienda_anuncio">Anuncio <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <input id="tienda_anuncio" v-model="form.anuncio" type="text" maxlength="120" :class="claseInput" placeholder="Envíos a todo Huánuco · Delivery gratis desde S/ 100" />
+                            <p v-if="form.errors.anuncio" :class="claseError">{{ form.errors.anuncio }}</p>
+                            <p v-else :class="claseAyuda">Una franja con el color de tu tienda, arriba de todas las páginas.</p>
+                        </div>
+                    </div>
                 </div>
             </section>
+
+            <!-- Guardar y vista previa -->
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end xl:col-span-2">
+                <p v-if="form.errors.vista_previa" class="text-sm text-red-600 sm:mr-auto dark:text-red-400">{{ form.errors.vista_previa }}</p>
+                <span v-else-if="form.isDirty" class="text-xs text-neutral-500 sm:mr-auto dark:text-neutral-400">Tienes cambios sin guardar</span>
+                <button
+                    type="button"
+                    :disabled="previsualizando || form.processing"
+                    class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-5 text-sm font-semibold transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    @click="vistaPrevia"
+                >
+                    <LoaderCircle v-if="previsualizando" class="size-4 animate-spin" />
+                    <Eye v-else class="size-4" />
+                    Vista previa
+                </button>
+                <button
+                    type="submit"
+                    :disabled="form.processing"
+                    class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
+                </button>
+            </div>
         </form>
 
         <!-- Productos de la tienda -->

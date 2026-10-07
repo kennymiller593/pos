@@ -17,7 +17,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $titulo }}</title>
     <meta name="description" content="{{ \Illuminate\Support\Str::limit($resumen, 160) }}">
-    <meta name="robots" content="@yield('robots', 'index,follow')">
+    <meta name="robots" content="{{ $previa ? 'noindex,nofollow' : (trim($__env->yieldContent('robots')) ?: 'index,follow') }}">
     <link rel="canonical" href="{{ $canonica }}">
     <meta property="og:type" content="@yield('og_tipo', 'website')">
     <meta property="og:locale" content="es_PE">
@@ -39,6 +39,21 @@
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">
     <a href="#contenido" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-lg">Ir al contenido</a>
+
+    {{-- Vista previa: solo la ve el dueño con su enlace --}}
+    @if ($previa)
+        <div class="sticky top-0 z-50 bg-amber-400 text-amber-950">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm sm:px-6 lg:px-8">
+                <p><span class="font-semibold">Vista previa.</span> Así se verá tu tienda. Tus clientes no ven estos cambios hasta que los guardes.</p>
+                <a href="/?previa=salir" class="font-semibold underline underline-offset-2 hover:no-underline">Salir de la vista previa</a>
+            </div>
+        </div>
+    @endif
+
+    {{-- Anuncio de la tienda --}}
+    @if ($tienda['anuncio'])
+        <p class="bg-(--marca) px-4 py-2 text-center text-sm font-medium text-white">{{ $tienda['anuncio'] }}</p>
+    @endif
 
     {{-- Franja superior: datos de atención --}}
     @if ($contactos['horario'] || $contactos['direccion'] || $contactos['telefono'] || $whatsapp)
@@ -71,7 +86,7 @@
     @endif
 
     {{-- fija solo en pantallas grandes: en el celular ocuparía un cuarto de la pantalla --}}
-    <header class="z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:sticky lg:top-0">
+    <header class="z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:sticky {{ $previa ? 'lg:top-9' : 'lg:top-0' }}">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-6 lg:flex-nowrap lg:px-8">
             <a href="/" class="flex min-w-0 items-center gap-3" aria-label="{{ $tienda['nombre'] }}: inicio">
                 @if ($tienda['logo'])

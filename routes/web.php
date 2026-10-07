@@ -160,6 +160,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:empresa.gestionar')->group(function () {
         Route::get('/tienda-en-linea', [TiendaConfigController::class, 'edit'])->name('tienda-config.edit');
         Route::put('/tienda-en-linea', [TiendaConfigController::class, 'update'])->name('tienda-config.update');
+        Route::post('/tienda-en-linea/vista-previa', [TiendaConfigController::class, 'vistaPrevia'])->middleware('throttle:20,1')->name('tienda-config.vista-previa');
         Route::patch('/tienda-en-linea/productos/{producto}', [TiendaConfigController::class, 'producto'])->name('tienda-config.producto');
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');

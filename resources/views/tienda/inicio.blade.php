@@ -51,70 +51,53 @@
 
 @section('contenido')
     @if ($portada)
-        {{-- Portada --}}
-        <section class="relative overflow-hidden border-b border-slate-100 bg-(--marca-suave)">
-            <div class="pointer-events-none absolute -top-40 -right-24 size-[34rem] rounded-full bg-(--marca)/10 blur-3xl" aria-hidden="true"></div>
-            <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-2 lg:px-8 lg:py-20">
-                <div class="{{ $vitrina->isEmpty() ? 'lg:col-span-2 lg:max-w-3xl' : '' }}">
-                    <p class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-(--marca) ring-1 ring-(--marca)/20">
-                        <span class="size-1.5 rounded-full bg-(--marca)"></span>Catálogo en línea
-                    </p>
-                    <h1 class="mt-4 text-4xl leading-[1.08] font-semibold tracking-tight text-balance sm:text-5xl">{{ $tienda['nombre'] }}</h1>
-                    <p class="mt-4 max-w-xl text-lg leading-relaxed text-slate-600">
-                        {{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}
-                    </p>
-                    <div class="mt-7 flex flex-wrap gap-3">
-                        <a href="#catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-(--marca) px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
-                            Ver catálogo @include('tienda.icono', ['n' => 'flecha'])
-                        </a>
-                        @if ($whatsapp)
-                            <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-slate-900 ring-1 ring-slate-200 transition-colors hover:ring-slate-300">
-                                @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5 text-(--marca)'])Pedir por WhatsApp
-                            </a>
-                        @endif
-                    </div>
-
-                    <dl class="mt-9 flex flex-wrap gap-x-10 gap-y-4">
-                        <div>
-                            <dt class="text-sm text-slate-500">Productos</dt>
-                            <dd class="text-2xl font-semibold tracking-tight">{{ number_format($tienda['productos']) }}</dd>
-                        </div>
-                        @if ($categorias->count() > 1)
-                            <div>
-                                <dt class="text-sm text-slate-500">Categorías</dt>
-                                <dd class="text-2xl font-semibold tracking-tight">{{ $categorias->count() }}</dd>
-                            </div>
-                        @endif
-                        @if ($contactos['horario'])
-                            <div class="min-w-0">
-                                <dt class="text-sm text-slate-500">Atención</dt>
-                                <dd class="text-base leading-8 font-semibold tracking-tight">{{ $contactos['horario'] }}</dd>
-                            </div>
-                        @endif
-                    </dl>
+        {{-- Portada: el dueño elige entre vitrina de productos, foto grande o solo texto --}}
+        @if ($tienda['portada']['estilo'] === 'foto')
+            <section class="relative isolate overflow-hidden bg-slate-900" data-portada="foto">
+                <img src="{{ $tienda['portada']['imagen'] }}" alt="" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover">
+                {{-- velo oscuro: el texto se lee sobre cualquier foto, clara u oscura --}}
+                <div class="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/25" aria-hidden="true"></div>
+                <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
+                    @include('tienda.portada-texto', ['sobreFoto' => true])
                 </div>
-
-                {{-- vitrina con productos reales de la tienda --}}
-                @if ($vitrina->isNotEmpty())
-                    <div class="grid grid-cols-2 gap-4 {{ $vitrina->count() === 1 ? 'mx-auto max-w-sm grid-cols-1' : '' }}">
-                        @foreach ($vitrina as $i => $p)
-                            <a href="{{ $p['url'] }}" class="group relative overflow-hidden rounded-3xl bg-white shadow-xl ring-1 shadow-slate-900/5 ring-slate-200/70 transition duration-300 hover:-translate-y-1 hover:shadow-2xl {{ $i === 0 && $vitrina->count() === 3 ? 'row-span-2' : '' }}">
-                                <div class="{{ $i === 0 && $vitrina->count() === 3 ? 'h-full min-h-72' : 'aspect-[4/3]' }}">
-                                    <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" width="800" height="600" @if ($i > 0) loading="lazy" @else fetchpriority="high" @endif
-                                        class="size-full object-contain p-5 transition-transform duration-500 group-hover:scale-105">
-                                </div>
-                                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pt-8 pb-3.5">
-                                    <p class="line-clamp-1 text-sm font-medium">{{ $p['nombre'] }}</p>
-                                    @if ($p['precio'] !== null)
-                                        <p class="text-sm font-semibold text-(--marca)">S/ {{ number_format($p['precio'], 2) }}</p>
-                                    @endif
-                                </div>
-                            </a>
-                        @endforeach
+            </section>
+        @elseif ($tienda['portada']['estilo'] === 'texto')
+            <section class="relative overflow-hidden border-b border-slate-100 bg-(--marca-suave)" data-portada="texto">
+                <div class="pointer-events-none absolute -top-40 left-1/2 size-[40rem] -translate-x-1/2 rounded-full bg-(--marca)/10 blur-3xl" aria-hidden="true"></div>
+                <div class="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
+                    @include('tienda.portada-texto', ['centrado' => true])
+                </div>
+            </section>
+        @else
+            <section class="relative overflow-hidden border-b border-slate-100 bg-(--marca-suave)" data-portada="vitrina">
+                <div class="pointer-events-none absolute -top-40 -right-24 size-[34rem] rounded-full bg-(--marca)/10 blur-3xl" aria-hidden="true"></div>
+                <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-2 lg:px-8 lg:py-20">
+                    <div class="{{ $vitrina->isEmpty() ? 'lg:col-span-2 lg:max-w-3xl' : '' }}">
+                        @include('tienda.portada-texto')
                     </div>
-                @endif
-            </div>
-        </section>
+
+                    {{-- vitrina con productos reales de la tienda --}}
+                    @if ($vitrina->isNotEmpty())
+                        <div class="grid grid-cols-2 gap-4 {{ $vitrina->count() === 1 ? 'mx-auto max-w-sm grid-cols-1' : '' }}">
+                            @foreach ($vitrina as $i => $p)
+                                <a href="{{ $p['url'] }}" class="group relative overflow-hidden rounded-3xl bg-white shadow-xl ring-1 shadow-slate-900/5 ring-slate-200/70 transition duration-300 hover:-translate-y-1 hover:shadow-2xl {{ $i === 0 && $vitrina->count() === 3 ? 'row-span-2' : '' }}">
+                                    <div class="{{ $i === 0 && $vitrina->count() === 3 ? 'h-full min-h-72' : 'aspect-[4/3]' }}">
+                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" width="800" height="600" @if ($i > 0) loading="lazy" @else fetchpriority="high" @endif
+                                            class="size-full object-contain p-5 transition-transform duration-500 group-hover:scale-105">
+                                    </div>
+                                    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pt-8 pb-3.5">
+                                        <p class="line-clamp-1 text-sm font-medium">{{ $p['nombre'] }}</p>
+                                        @if ($p['precio'] !== null)
+                                            <p class="text-sm font-semibold text-(--marca)">S/ {{ number_format($p['precio'], 2) }}</p>
+                                        @endif
+                                    </div>
+                                </a>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+            </section>
+        @endif
 
         {{-- Por qué comprar aquí: solo lo que la tienda realmente ofrece --}}
         @php
@@ -132,7 +115,7 @@
                         <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-(--marca-suave) text-(--marca)">@include('tienda.icono', ['n' => $icono, 'clase' => 'size-5'])</span>
                         <span class="min-w-0">
                             <span class="block text-sm font-semibold">{{ $tituloVentaja }}</span>
-                            <span class="block truncate text-sm text-slate-500">{{ $detalle }}</span>
+                            <span class="line-clamp-2 text-sm text-slate-500">{{ $detalle }}</span>
                         </span>
                     </li>
                 @endforeach

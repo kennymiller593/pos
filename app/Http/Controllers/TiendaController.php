@@ -23,7 +23,7 @@ class TiendaController extends Controller
     {
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
-        $contexto = $this->contexto($empresa, $config);
+        $contexto = $this->contexto($request, $empresa, $config);
 
         // enlaces de antes (/?categoria={id}): van a la dirección nueva de esa categoría
         if ($antigua = $contexto['categorias']->firstWhere('id', (string) $request->query('categoria'))) {
@@ -40,7 +40,7 @@ class TiendaController extends Controller
     {
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
-        $contexto = $this->contexto($empresa, $config);
+        $contexto = $this->contexto($request, $empresa, $config);
 
         $elegida = $contexto['categorias']->firstWhere('slug', $categoria);
         abort_unless($elegida, 404);
@@ -106,7 +106,7 @@ class TiendaController extends Controller
         }
 
         $tarjeta = $this->catalogo->tarjeta($producto, $config);
-        $contexto = $this->contexto($empresa, $config);
+        $contexto = $this->contexto($request, $empresa, $config);
         $enlace = rtrim($contexto['tienda']['url'], '/').$tarjeta['url'];
 
         return view('tienda.producto', [
@@ -142,7 +142,7 @@ class TiendaController extends Controller
     }
 
     /** Lo que usan todas las páginas de la tienda: quién es, sus colores y cómo contactarla. */
-    private function contexto(Empresa $empresa, array $config): array
+    private function contexto(Request $request, Empresa $empresa, array $config): array
     {
         $nombre = $empresa->nombre_comercial ?: $empresa->razon_social;
 
@@ -156,7 +156,16 @@ class TiendaController extends Controller
                 'colores' => config('tienda.colores')[$config['color']],
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
+                'anuncio' => $config['anuncio'],
+                'portada' => [
+                    'estilo' => $config['portada_estilo'],
+                    'imagen' => $config['portada_imagen'],
+                    'titulo' => $config['portada_titulo'] ?: $nombre,
+                    'boton' => $config['portada_boton'] ?: 'Ver catálogo',
+                ],
             ],
+            // true cuando el dueño está mirando un borrador con su enlace de vista previa
+            'previa' => (bool) $request->attributes->get('tienda_previa', false),
             'contactos' => $this->catalogo->contactos($empresa, $config),
             // la barra de categorías y el pie van en todas las páginas
             'categorias' => $this->catalogo->categorias($empresa),

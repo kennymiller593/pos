@@ -91,6 +91,8 @@ class CatalogoTiendaService
                 ->where('producto_presentaciones.activo', true))
             ->groupBy('categorias.id', 'categorias.nombre')
             ->orderBy('categorias.nombre')
+            // dos categorías con el mismo nombre: siempre en el mismo orden, para que su dirección no se alterne
+            ->orderBy('categorias.id')
             // la foto es la de cualquiera de sus productos que tenga una
             ->selectRaw('categorias.id, categorias.nombre, COUNT(*) as productos, MAX(productos.imagen_url) as imagen')
             ->toBase()

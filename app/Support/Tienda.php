@@ -16,7 +16,8 @@ class Tienda
         'descripcion' => null,
         'color' => 'esmeralda',
         'mostrar_precios' => false,
-        'mostrar_stock' => true,
+        // apagado: la tienda es un catálogo y no mira el stock (nada sale como "Agotado") salvo que el dueño lo pida
+        'mostrar_stock' => false,
         'whatsapp' => null,
         'telefono' => null,
         'email' => null,
@@ -25,7 +26,16 @@ class Tienda
         'facebook' => null,
         'instagram' => null,
         'tiktok' => null,
+        // apariencia de la portada
+        'portada_estilo' => 'vitrina',
+        'portada_imagen' => null,
+        'portada_titulo' => null,
+        'portada_boton' => null,
+        'anuncio' => null,
     ];
+
+    /** Estilos de portada que puede elegir la tienda. */
+    public const ESTILOS = ['vitrina', 'foto', 'texto'];
 
     public static function dominio(): ?string
     {
@@ -134,6 +144,11 @@ class Tienda
 
         if (! isset(config('tienda.colores')[$config['color']])) {
             $config['color'] = self::CONFIG['color'];
+        }
+
+        // el estilo "foto" sin foto no tiene qué mostrar: vuelve a la vitrina
+        if (! in_array($config['portada_estilo'], self::ESTILOS, true) || ($config['portada_estilo'] === 'foto' && blank($config['portada_imagen']))) {
+            $config['portada_estilo'] = self::CONFIG['portada_estilo'];
         }
 
         return $config;

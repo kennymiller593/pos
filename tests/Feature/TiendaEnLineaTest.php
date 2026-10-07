@@ -9,7 +9,9 @@ use App\Models\Producto;
 use App\Models\Suscripcion;
 use App\Support\Tienda;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -83,6 +85,7 @@ class TiendaEnLineaTest extends TestCase
             ->where('tienda.slug', null)
             ->where('tienda.dominio', 'tienda.test')
             ->where('tienda.config.mostrar_precios', false) // los precios no se publican sin que el dueño lo decida
+            ->where('tienda.config.mostrar_stock', false) // y la tienda no mira el stock salvo que él lo pida
             ->where('tienda.config.color', 'esmeralda')
             ->where('resumen.visibles', 2)
             ->has('productos.data', 2));
@@ -523,6 +526,155 @@ class TiendaEnLineaTest extends TestCase
         // y no se puede activar mandando el campo en un formulario del dueño
         $this->empresa->update(['tienda_habilitada' => true]);
         $this->assertFalse((bool) $this->empresa->fresh()->tienda_habilitada);
+    }
+
+    // ---------------- apariencia de la portada ----------------
+
+    public function test_el_dueno_personaliza_el_estilo_los_textos_y_el_anuncio(): void
+    {
+        $this->publicar();
+        // por defecto: vitrina, con el nombre del negocio como título
+        $this->tienda('/')->assertSee('data-portada="vitrina"', false)->assertSee('Ver catálogo');
+
+        $this->actingAs($this->admin)->put('/tienda-en-linea', $this->datosDeTienda([
+            'slug' => 'agro', 'portada_estilo' => 'texto', 'portada_titulo' => 'Todo para tu campo',
+            'portada_boton' => 'Mira lo que tenemos', 'anuncio' => 'Envíos a todo Huánuco',
+        ]))->assertSessionHasNoErrors();
+
+        $this->tienda('/')->assertOk()
+            ->assertSee('data-portada="texto"', false)
+            ->assertSee('Todo para tu campo')
+            ->assertSee('Mira lo que tenemos')
+            ->assertSee('Envíos a todo Huánuco');
+        // el anuncio va en todas las páginas
+        $this->tienda('/producto/urea-46-x-50-kg')->assertSee('Envíos a todo Huánuco');
+
+        // guardar sin mandar la apariencia (un formulario viejo) no la borra
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', collect($this->datosDeTienda(['slug' => 'agro']))->all())->assertSessionHasNoErrors();
+        $this->assertSame('texto', $this->empresa->fresh()->tienda_config['portada_estilo']);
+        $this->assertSame('Envíos a todo Huánuco', $this->empresa->fresh()->tienda_config['anuncio']);
+
+        // valores fuera de lo permitido
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'portada_estilo' => 'carrusel']))->assertSessionHasErrors('portada_estilo');
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'anuncio' => str_repeat('a', 121)]))->assertSessionHasErrors('anuncio');
+    }
+
+    public function test_la_foto_de_portada_se_optimiza_se_reemplaza_y_se_quita(): void
+    {
+        Storage::fake('public');
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        // "Foto grande" sin foto no se puede
+        $guardar(['portada_estilo' => 'foto'])->assertSessionHasErrors('portada_imagen');
+        // y lo que se sube tiene que ser una imagen
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen' => UploadedFile::fake()->create('portada.pdf', 100, 'application/pdf')])->assertSessionHasErrors('portada_imagen');
+
+        // una foto de celular, grande: se guarda reducida
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen' => UploadedFile::fake()->image('local.jpg', 4000, 3000)])->assertSessionHasNoErrors();
+        $primera = $this->empresa->fresh()->tienda_config['portada_imagen'];
+        $this->assertStringStartsWith('/storage/tienda/', $primera);
+        $ruta = substr($primera, strlen('/storage/'));
+        Storage::disk('public')->assertExists($ruta);
+        [$ancho, $alto] = getimagesizefromstring(Storage::disk('public')->get($ruta));
+        $this->assertSame([1600, 1200], [$ancho, $alto]); // cabe en 1920x1200 sin deformarse
+
+        $this->tienda('/')->assertSee('data-portada="foto"', false)->assertSee($primera, false);
+
+        // guardar otra cosa conserva la foto
+        $guardar(['portada_estilo' => 'foto', 'anuncio' => 'Hola'])->assertSessionHasNoErrors();
+        $this->assertSame($primera, $this->empresa->fresh()->tienda_config['portada_imagen']);
+
+        // al reemplazarla, la anterior se borra
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen' => UploadedFile::fake()->image('otra.png', 1200, 500)])->assertSessionHasNoErrors();
+        $segunda = $this->empresa->fresh()->tienda_config['portada_imagen'];
+        $this->assertNotSame($primera, $segunda);
+        Storage::disk('public')->assertMissing($ruta);
+        $this->assertCount(1, Storage::disk('public')->allFiles('tienda'));
+
+        // quitarla la borra, y la portada vuelve a la vitrina
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen_quitar' => true])->assertSessionHasErrors('portada_imagen');
+        $guardar(['portada_estilo' => 'vitrina', 'portada_imagen_quitar' => true])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['portada_imagen']);
+        $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
+        $this->tienda('/')->assertSee('data-portada="vitrina"', false);
+    }
+
+    public function test_la_vista_previa_muestra_el_borrador_solo_a_quien_tiene_el_enlace(): void
+    {
+        Storage::fake('public');
+        $this->publicar(['anuncio' => 'Anuncio guardado']);
+        $guardado = $this->empresa->fresh()->tienda_config;
+
+        $respuesta = $this->actingAs($this->admin)->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda([
+            'slug' => 'agro', 'portada_estilo' => 'texto', 'portada_titulo' => 'Título en borrador', 'anuncio' => 'Anuncio en borrador',
+        ]))->assertOk();
+        $enlace = $respuesta->json('url');
+        $this->assertStringStartsWith('http://agro.tienda.test/?previa=', $enlace);
+        $clave = substr($enlace, strpos($enlace, '=') + 1);
+
+        // nada se guardó: los visitantes siguen viendo lo de antes
+        $this->assertSame($guardado, $this->empresa->fresh()->tienda_config);
+        $this->tienda('/')->assertSee('Anuncio guardado')->assertDontSee('Anuncio en borrador')->assertDontSee('Vista previa');
+
+        // con el enlace se ve el borrador, marcado como vista previa y sin que lo indexen ni lo guarden cachés
+        $previa = $this->get($enlace)->assertOk()
+            ->assertSee('Vista previa')
+            ->assertSee('Título en borrador')
+            ->assertSee('Anuncio en borrador')
+            ->assertDontSee('Anuncio guardado')
+            ->assertSee('data-portada="texto"', false)
+            ->assertSee('noindex,nofollow', false)
+            ->assertCookie('tienda_previa', $clave, false);
+        $this->assertStringContainsString('no-store', (string) $previa->headers->get('Cache-Control'));
+
+        // la clave viaja en una cookie: se puede seguir navegando por el borrador
+        $this->withUnencryptedCookie('tienda_previa', $clave)->get('http://agro.tienda.test/producto/urea-46-x-50-kg')->assertOk()->assertSee('Vista previa')->assertSee('Anuncio en borrador');
+        // "Salir" borra la cookie y vuelve a la tienda real
+        $this->withUnencryptedCookie('tienda_previa', $clave)->get('http://agro.tienda.test/?previa=salir')->assertRedirect('http://agro.tienda.test')->assertCookieExpired('tienda_previa');
+
+        // una clave inventada, o la de otra tienda, no sirve
+        $this->get('http://agro.tienda.test/?previa='.str_repeat('x', 40))->assertOk()->assertDontSee('Anuncio en borrador');
+        $this->get("http://otra.tienda.test/?previa={$clave}")->assertNotFound();
+        URL::setRequest(Request::create(config('app.url')));
+    }
+
+    public function test_la_vista_previa_sirve_antes_de_publicar_y_con_una_foto_sin_guardarla(): void
+    {
+        Storage::fake('public');
+        // tienda con el adicional, pero todavía sin dirección ni publicar
+        $this->tienda('/', 'mi-tienda')->assertNotFound();
+
+        $enlace = $this->actingAs($this->admin)->post('/tienda-en-linea/vista-previa', $this->datosDeTienda([
+            'slug' => 'mi-tienda', 'publicada' => false, 'whatsapp' => null,
+            'portada_estilo' => 'foto', 'portada_imagen' => UploadedFile::fake()->image('local.jpg', 2400, 1000),
+        ]), ['Accept' => 'application/json'])->assertOk()->json('url');
+
+        $this->get($enlace)->assertOk()
+            ->assertSee('Vista previa')
+            ->assertSee('data-portada="foto"', false)
+            ->assertSee('src="data:image/', false) // la foto va dentro de la página: no se guardó en ningún lado
+            ->assertSee('Urea 46% x 50 kg');
+        URL::setRequest(Request::create(config('app.url')));
+
+        $this->assertSame([], Storage::disk('public')->allFiles());
+        $this->assertNull($this->empresa->fresh()->tienda_slug);
+        $this->assertFalse((bool) $this->empresa->fresh()->tienda_publicada);
+        // sin el enlace sigue sin existir
+        $this->tienda('/', 'mi-tienda')->assertNotFound();
+
+        // los mismos avisos que al guardar
+        $this->actingAs($this->admin)->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda(['slug' => 'pos']))->assertStatus(422)->assertJsonValidationErrors('slug');
+        $this->actingAs($this->admin)->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda(['portada_estilo' => 'foto']))->assertStatus(422)->assertJsonValidationErrors('portada_imagen');
+
+        // solo quien puede configurar la tienda, y solo con el adicional
+        $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(10000, 99999).'@test.local');
+        $this->actingAs($cajero)->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda())->assertForbidden();
+        $this->empresa->forceFill(['tienda_habilitada' => false])->save();
+        $this->actingAs($this->admin->fresh())->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda())->assertForbidden();
+        // y un borrador ya creado deja de verse si la plataforma quita el adicional
+        $this->get($enlace)->assertNotFound();
+        URL::setRequest(Request::create(config('app.url')));
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void

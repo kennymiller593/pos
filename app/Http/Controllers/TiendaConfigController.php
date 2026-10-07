@@ -5,10 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Auditoria;
 use App\Models\Producto;
 use App\Services\CatalogoTiendaService;
+use App\Services\PortadaTiendaService;
 use App\Support\Tienda;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -72,10 +75,65 @@ class TiendaConfigController extends Controller
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, PortadaTiendaService $portada): RedirectResponse
     {
         $this->exigirAdicional($request);
 
+        $empresa = $request->user()->empresa;
+        $datos = $this->validar($request);
+
+        // una tienda sin forma de contacto no le sirve al cliente que quiere comprar
+        if ($datos['publicada'] && blank($datos['whatsapp'] ?? null) && blank($datos['telefono'] ?? null)) {
+            return back()->withErrors(['whatsapp' => 'Para publicar la tienda pon un WhatsApp o un teléfono de contacto.'])->withInput();
+        }
+
+        $antes = ['slug' => $empresa->tienda_slug, 'publicada' => (bool) $empresa->tienda_publicada];
+        $fotoAnterior = Tienda::config($empresa)['portada_imagen'];
+
+        $config = $this->armarConfig($request, $datos, fn ($archivo) => $portada->guardar($archivo, $empresa));
+
+        $empresa->update([
+            'tienda_slug' => $datos['slug'],
+            'tienda_publicada' => $datos['publicada'],
+            'tienda_config' => $config,
+        ]);
+
+        // la foto que se reemplazó o se quitó ya no se usa
+        if ($fotoAnterior && $fotoAnterior !== $config['portada_imagen']) {
+            $portada->eliminar($fotoAnterior);
+        }
+
+        $ahora = ['slug' => $datos['slug'], 'publicada' => (bool) $datos['publicada']];
+        if ($antes !== $ahora) {
+            Auditoria::registrar($request->user(), 'tienda.publicacion', 'empresa', $empresa->id, ['antes' => $antes, 'ahora' => $ahora]);
+        }
+
+        return back()->with('success', match (true) {
+            $ahora['publicada'] && ! $antes['publicada'] => 'Tu tienda ya está publicada.',
+            ! $ahora['publicada'] && $antes['publicada'] => 'Tu tienda dejó de estar visible.',
+            default => 'Tienda actualizada.',
+        });
+    }
+
+    /**
+     * Enlace para ver la tienda con lo que hay en el formulario, sin guardarlo: los visitantes
+     * siguen viendo la versión guardada. Sirve también para mirarla antes de publicarla.
+     */
+    public function vistaPrevia(Request $request, PortadaTiendaService $portada): JsonResponse
+    {
+        $this->exigirAdicional($request);
+
+        $datos = $this->validar($request);
+        $config = $this->armarConfig($request, $datos, fn ($archivo) => $portada->incrustada($archivo));
+
+        return response()->json([
+            'url' => $portada->crearVistaPrevia($request->user()->empresa, $datos['slug'], $config),
+            'minutos' => PortadaTiendaService::MINUTOS_PREVIA,
+        ]);
+    }
+
+    private function validar(Request $request): array
+    {
         $empresa = $request->user()->empresa;
         $request->merge(['slug' => mb_strtolower(trim((string) $request->input('slug')))]);
 
@@ -104,6 +162,13 @@ class TiendaConfigController extends Controller
             'facebook' => ['nullable', 'string', 'max:150'],
             'instagram' => ['nullable', 'string', 'max:150'],
             'tiktok' => ['nullable', 'string', 'max:150'],
+            // apariencia de la portada (opcionales: quien no los manda conserva lo que tenía)
+            'portada_estilo' => ['sometimes', Rule::in(Tienda::ESTILOS)],
+            'portada_titulo' => ['nullable', 'string', 'max:80'],
+            'portada_boton' => ['nullable', 'string', 'max:30'],
+            'anuncio' => ['nullable', 'string', 'max:120'],
+            'portada_imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
+            'portada_imagen_quitar' => ['nullable', 'boolean'],
         ], [
             'slug.required' => 'Elige la dirección de tu tienda.',
             'slug.min' => 'La dirección debe tener al menos 3 caracteres.',
@@ -111,35 +176,47 @@ class TiendaConfigController extends Controller
             'slug.unique' => 'Esa dirección ya la usa otro negocio. Prueba con otra.',
             'whatsapp.regex' => 'El WhatsApp no es válido. Ejemplo: 987 654 321.',
             'email.email' => 'El correo no es válido.',
+            'portada_imagen.image' => 'La foto de portada debe ser una imagen.',
+            'portada_imagen.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
+            'portada_imagen.max' => 'La foto de portada no debe pesar más de 6 MB.',
+            'portada_titulo.max' => 'El título no puede pasar de 80 caracteres.',
+            'portada_boton.max' => 'El texto del botón no puede pasar de 30 caracteres.',
+            'anuncio.max' => 'El anuncio no puede pasar de 120 caracteres.',
         ]);
 
-        // una tienda sin forma de contacto no le sirve al cliente que quiere comprar
-        if ($datos['publicada'] && blank($datos['whatsapp'] ?? null) && blank($datos['telefono'] ?? null)) {
-            return back()->withErrors(['whatsapp' => 'Para publicar la tienda pon un WhatsApp o un teléfono de contacto.'])->withInput();
+        // el estilo "foto grande" necesita una foto: la que ya tiene o la que está subiendo
+        $tendraFoto = $request->hasFile('portada_imagen')
+            || (filled(Tienda::config($empresa)['portada_imagen']) && ! $request->boolean('portada_imagen_quitar'));
+
+        if (($datos['portada_estilo'] ?? null) === 'foto' && ! $tendraFoto) {
+            throw ValidationException::withMessages(['portada_imagen' => 'Para el estilo "Foto grande" sube una foto de portada.']);
         }
 
-        $antes = ['slug' => $empresa->tienda_slug, 'publicada' => (bool) $empresa->tienda_publicada];
+        return $datos;
+    }
+
+    /**
+     * La configuración completa a partir del formulario. $fotoNueva recibe el archivo subido y
+     * devuelve lo que se guarda como foto (su dirección al guardar; la imagen incrustada en la vista previa).
+     */
+    private function armarConfig(Request $request, array $datos, \Closure $fotoNueva): array
+    {
+        $actual = Tienda::config($request->user()->empresa);
+
         $config = collect(Tienda::CONFIG)->map(fn ($porDefecto, $clave) => match (true) {
+            ! array_key_exists($clave, $datos) => $actual[$clave],
             is_bool($porDefecto) => (bool) $datos[$clave],
-            default => filled($datos[$clave] ?? null) ? trim((string) $datos[$clave]) : null,
+            default => filled($datos[$clave]) ? trim((string) $datos[$clave]) : null,
         })->all();
 
-        $empresa->update([
-            'tienda_slug' => $datos['slug'],
-            'tienda_publicada' => $datos['publicada'],
-            'tienda_config' => $config,
-        ]);
+        $config['portada_estilo'] = $datos['portada_estilo'] ?? $actual['portada_estilo'];
+        $config['portada_imagen'] = match (true) {
+            $request->hasFile('portada_imagen') => $fotoNueva($request->file('portada_imagen')),
+            $request->boolean('portada_imagen_quitar') => null,
+            default => $actual['portada_imagen'],
+        };
 
-        $ahora = ['slug' => $datos['slug'], 'publicada' => (bool) $datos['publicada']];
-        if ($antes !== $ahora) {
-            Auditoria::registrar($request->user(), 'tienda.publicacion', 'empresa', $empresa->id, ['antes' => $antes, 'ahora' => $ahora]);
-        }
-
-        return back()->with('success', match (true) {
-            $ahora['publicada'] && ! $antes['publicada'] => 'Tu tienda ya está publicada.',
-            ! $ahora['publicada'] && $antes['publicada'] => 'Tu tienda dejó de estar visible.',
-            default => 'Tienda actualizada.',
-        });
+        return $config;
     }
 
     /** Cambia cómo aparece un producto en la tienda: si se muestra, si va destacado y su descripción. */
