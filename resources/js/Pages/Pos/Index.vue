@@ -618,6 +618,7 @@ const modalCobro = ref(false)
 const tipoComprobante = ref('00')
 const condicion = ref('contado') // contado | credito
 const recibido = ref('')
+const inputRecibido = ref(null)
 const procesando = ref(false)
 
 // lineas de pago: permite mixtos ("20 en efectivo y 15 por Yape")
@@ -649,7 +650,7 @@ function quitarPago(indice) {
     pagos.value.splice(indice, 1)
     if (esEfectivoSimple.value) {
         pagos.value[0].monto = Number(total.value.toFixed(2))
-        recibido.value = ''
+        recibido.value = total.value.toFixed(2)
     }
 }
 
@@ -687,10 +688,19 @@ const puedeCobrar = computed(() => {
 
 function abrirCobro() {
     if (!carrito.value.length || hayFaltantes.value || hayDescuentosInvalidos.value) return
-    recibido.value = ''
+    // lo normal es que paguen exacto: el recibido ya viene con el total y basta confirmar.
+    // Queda seleccionado, asi que si pagan con mas se escribe encima sin borrar nada.
+    recibido.value = total.value.toFixed(2)
     condicion.value = 'contado'
     pagos.value = [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: '' }]
     modalCobro.value = true
+    // en el celular no se enfoca: abriria el teclado y taparia el boton de confirmar
+    if (window.matchMedia('(pointer: fine)').matches) {
+        nextTick(() => {
+            inputRecibido.value?.focus()
+            inputRecibido.value?.select()
+        })
+    }
 }
 
 const ventaExitosa = ref(null) // { mensaje, ticket, venta }
@@ -2168,13 +2178,14 @@ const claseInput =
                         <label class="mb-1 block text-sm font-medium" for="recibido">Monto recibido</label>
                         <input
                             id="recibido"
+                            ref="inputRecibido"
                             v-model="recibido"
                             type="number"
                             step="0.01"
                             min="0"
                             :class="claseInput"
                             :placeholder="total.toFixed(2)"
-                            autofocus
+                            @focus="$event.target.select()"
                         />
                         <div class="mt-2 flex flex-wrap gap-1.5">
                             <button
