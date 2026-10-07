@@ -115,7 +115,7 @@
                         @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
                     </a>
                     @foreach ($categorias as $cat)
-                        <a href="/?categoria={{ $cat->id }}#catalogo" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
+                        <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
                             class="shrink-0 border-b-2 px-3 py-2.5 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
                             {{ $cat->nombre }}
                         </a>
@@ -188,7 +188,7 @@
                     <h2 class="text-sm font-semibold text-white">Categorías</h2>
                     <ul class="mt-4 space-y-2.5 text-sm">
                         @foreach ($categorias->take(6) as $cat)
-                            <li><a href="/?categoria={{ $cat->id }}#catalogo" class="transition-colors hover:text-white">{{ $cat->nombre }}</a></li>
+                            <li><a href="{{ $cat->url }}" class="transition-colors hover:text-white">{{ $cat->nombre }}</a></li>
                         @endforeach
                         <li><a href="/#catalogo" class="font-medium text-slate-300 transition-colors hover:text-white">Ver todo el catálogo</a></li>
                     </ul>

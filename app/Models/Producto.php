@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Support\Tienda;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class Producto extends Model
 {
@@ -27,6 +29,39 @@ class Producto extends Model
             ->max(DB::raw('CAST(SUBSTRING(codigo_interno FROM 2) AS BIGINT)'));
 
         return 'P'.str_pad((string) ($mayor + 1), 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * El nombre de enlace (slug) acompaña al nombre: se genera al crear el producto y se
+     * vuelve a generar si le cambian el nombre. Es único dentro de la empresa.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Producto $producto) {
+            if (blank($producto->slug) || $producto->isDirty('nombre')) {
+                $producto->slug = static::slugLibre((string) $producto->empresa_id, (string) $producto->nombre, $producto->id);
+            }
+        });
+    }
+
+    /** "Úrea 46% x 50 kg" -> "urea-46-x-50-kg"; si otro producto de la empresa ya lo usa, "-2", "-3"... */
+    public static function slugLibre(string $empresaId, string $nombre, ?string $propio = null): string
+    {
+        $base = trim(Str::limit(Tienda::slug($nombre), 200, ''), '-') ?: 'producto';
+
+        $usados = static::withTrashed()
+            ->where('empresa_id', $empresaId)
+            ->where(fn ($q) => $q->where('slug', $base)->orWhere('slug', 'like', $base.'-%'))
+            ->when($propio, fn ($q) => $q->whereKeyNot($propio))
+            ->pluck('slug')
+            ->all();
+
+        $slug = $base;
+        for ($i = 2; in_array($slug, $usados, true); $i++) {
+            $slug = "{$base}-{$i}";
+        }
+
+        return $slug;
     }
 
     protected $table = 'productos';

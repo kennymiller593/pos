@@ -94,7 +94,29 @@ class CatalogoTiendaService
             // la foto es la de cualquiera de sus productos que tenga una
             ->selectRaw('categorias.id, categorias.nombre, COUNT(*) as productos, MAX(productos.imagen_url) as imagen')
             ->toBase()
-            ->get();
+            ->get()
+            ->pipe(fn (Collection $categorias) => $this->conEnlace($categorias));
+    }
+
+    /**
+     * Le pone a cada categoría su dirección amigable: /categoria/fertilizantes.
+     * Si dos categorías dan el mismo nombre de enlace, la segunda lleva "-2".
+     */
+    private function conEnlace(Collection $categorias): Collection
+    {
+        $usados = [];
+
+        return $categorias->each(function ($categoria) use (&$usados) {
+            $base = Tienda::slug($categoria->nombre) ?: 'categoria';
+            $slug = $base;
+            for ($i = 2; isset($usados[$slug]); $i++) {
+                $slug = "{$base}-{$i}";
+            }
+            $usados[$slug] = true;
+
+            $categoria->slug = $slug;
+            $categoria->url = "/categoria/{$slug}";
+        });
     }
 
     /**
@@ -141,8 +163,17 @@ class CatalogoTiendaService
         ];
     }
 
-    /** Un producto visible, por su código (o su id cuando el código no sirve para un enlace). */
-    public function encontrar(Empresa $empresa, string $referencia): ?Producto
+    /** Un producto visible, por su nombre de enlace: /producto/urea-46-x-50-kg */
+    public function encontrar(Empresa $empresa, string $slug): ?Producto
+    {
+        return $this->productos($empresa)->where('productos.slug', $slug)->orderBy('productos.id')->first();
+    }
+
+    /**
+     * Un producto visible por su código o su id: así eran los enlaces antes
+     * (/producto/P0006/urea-46-x-50-kg) y hay que seguir encontrándolos.
+     */
+    public function encontrarPorCodigo(Empresa $empresa, string $referencia): ?Producto
     {
         return $this->productos($empresa)
             ->where(fn ($q) => $q
@@ -201,13 +232,11 @@ class CatalogoTiendaService
         ];
     }
 
-    /** Ruta de la página del producto: /producto/P0006/urea-46-x-50-kg */
+    /** Ruta de la página del producto: /producto/urea-46-x-50-kg */
     public function url(Producto $producto): string
     {
-        // un código con espacios o barras no sirve dentro de un enlace: ahí se usa el id
-        $referencia = preg_match('/^[A-Za-z0-9_-]+$/', (string) $producto->codigo_interno) ? $producto->codigo_interno : $producto->id;
-
-        return '/producto/'.$referencia.'/'.(Str::slug($producto->nombre) ?: 'producto');
+        // un producto que aún no tiene nombre de enlace se sigue abriendo por su id
+        return '/producto/'.($producto->slug ?: $producto->id);
     }
 
     /** Cuántos productos se ven en la tienda y cuántos están destacados (para la pantalla de configuración). */

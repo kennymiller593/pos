@@ -70,6 +70,15 @@ class Tienda
         return $dominio ? ['^[a-z0-9-]+\.'.preg_quote($dominio).'$'] : [];
     }
 
+    /**
+     * Texto para una dirección: "ÑANDÚ Fósforo 1/2 litro" -> "nandu-fosforo-1-2-litro".
+     * Todo lo que no es letra ni número separa palabras (una barra no pega "1/2" en "12").
+     */
+    public static function slug(string $texto): string
+    {
+        return Str::slug((string) preg_replace('/[^\pL\pN]+/u', ' ', $texto));
+    }
+
     public static function slugValido(string $slug): bool
     {
         return (bool) preg_match('/^'.self::PATRON_SLUG.'$/', $slug) && ! str_contains($slug, '--');

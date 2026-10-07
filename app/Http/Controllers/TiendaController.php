@@ -6,6 +6,7 @@ use App\Models\Empresa;
 use App\Services\CatalogoTiendaService;
 use App\Support\Tienda;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
@@ -17,16 +18,40 @@ class TiendaController extends Controller
 
     public function __construct(private readonly CatalogoTiendaService $catalogo) {}
 
-    /** Portada: destacados y catálogo; con ?q= o ?categoria= pasa a ser el resultado de la búsqueda. */
-    public function inicio(Request $request): View
+    /** Portada: destacados y catálogo; con ?q= pasa a ser el resultado de la búsqueda. */
+    public function inicio(Request $request): View|RedirectResponse
     {
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
-
         $contexto = $this->contexto($empresa, $config);
+
+        // enlaces de antes (/?categoria={id}): van a la dirección nueva de esa categoría
+        if ($antigua = $contexto['categorias']->firstWhere('id', (string) $request->query('categoria'))) {
+            $resto = http_build_query($request->except('categoria'));
+
+            return redirect($antigua->url.($resto !== '' ? "?{$resto}" : ''), 301);
+        }
+
+        return $this->listado($request, $config, $contexto, null);
+    }
+
+    /** /categoria/fertilizantes: el catálogo de una sola categoría. */
+    public function categoria(Request $request, string $categoria): View
+    {
+        $empresa = $this->empresa($request);
+        $config = Tienda::config($empresa);
+        $contexto = $this->contexto($empresa, $config);
+
+        $elegida = $contexto['categorias']->firstWhere('slug', $categoria);
+        abort_unless($elegida, 404);
+
+        return $this->listado($request, $config, $contexto, $elegida);
+    }
+
+    private function listado(Request $request, array $config, array $contexto, ?object $categoria): View
+    {
+        $empresa = $this->empresa($request);
         $buscar = trim(mb_substr((string) $request->query('q'), 0, 80));
-        $categorias = $contexto['categorias'];
-        $categoria = $categorias->firstWhere('id', (string) $request->query('categoria'));
         $orden = $config['mostrar_precios'] && in_array($request->query('orden'), ['menor', 'mayor'], true) ? $request->query('orden') : 'nombre';
 
         $productos = $this->catalogo->productos($empresa)
@@ -60,13 +85,25 @@ class TiendaController extends Controller
         ]);
     }
 
-    public function producto(Request $request, string $ref): View
+    /**
+     * /producto/urea-46-x-50-kg. Los enlaces de antes llevaban el código
+     * (/producto/P0006/urea-46-x-50-kg): se redirigen a la dirección nueva.
+     */
+    public function producto(Request $request, string $ref, ?string $nombre = null): View|RedirectResponse
     {
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
 
-        $producto = $this->catalogo->encontrar($empresa, $ref);
-        abort_unless($producto, 404);
+        $producto = $nombre === null ? $this->catalogo->encontrar($empresa, $ref) : null;
+
+        if (! $producto) {
+            $producto = $this->catalogo->encontrarPorCodigo($empresa, $ref);
+            abort_unless($producto, 404);
+
+            if ($producto->slug) {
+                return redirect($this->catalogo->url($producto), 301);
+            }
+        }
 
         $tarjeta = $this->catalogo->tarjeta($producto, $config);
         $contexto = $this->contexto($empresa, $config);
@@ -75,6 +112,7 @@ class TiendaController extends Controller
         return view('tienda.producto', [
             ...$contexto,
             'producto' => $tarjeta,
+            'categoriaUrl' => $contexto['categorias']->firstWhere('id', $producto->categoria_id)?->url,
             'enlace' => $enlace,
             'pedido' => Tienda::enlaceWhatsapp(
                 $config['whatsapp'],
@@ -90,9 +128,10 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $base = rtrim((string) Tienda::url($empresa->tienda_slug), '/');
 
-        $urls = $this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get()
-            ->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()])
-            ->prepend(['loc' => $base.'/', 'lastmod' => null]);
+        $urls = collect([['loc' => $base.'/', 'lastmod' => null]])
+            ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => null]))
+            ->concat($this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get()
+                ->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));
 
         return response()->view('tienda.sitemap', ['urls' => $urls])->header('Content-Type', 'application/xml; charset=utf-8');
     }

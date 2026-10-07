@@ -3,13 +3,12 @@
 @php
     $pagina = $productos->currentPage();
     $portada = ! $filtrando && $pagina === 1;
-    // enlace del catálogo conservando lo que ya se eligió (búsqueda, categoría, orden)
-    $enlace = fn (array $cambios) => '/?'.http_build_query(array_filter([
-        'q' => $buscar ?: null,
-        'categoria' => $categoria?->id,
-        'orden' => $orden !== 'nombre' ? $orden : null,
-        ...$cambios,
-    ], fn ($v) => $v !== null && $v !== '')).'#catalogo';
+    // enlace a una categoría (o a todo el catálogo) conservando la búsqueda y el orden ya elegidos
+    $enlace = function (?object $cat) use ($buscar, $orden) {
+        $parametros = http_build_query(array_filter(['q' => $buscar ?: null, 'orden' => $orden !== 'nombre' ? $orden : null]));
+
+        return ($cat ? $cat->url : '/').($parametros !== '' ? "?{$parametros}" : '').($cat ? '' : '#catalogo');
+    };
     $subtitulos = [
         'elegidos' => 'Lo que más recomendamos de nuestra tienda.',
         'vendidos' => 'Lo que más se llevan nuestros clientes.',
@@ -22,7 +21,7 @@
     $categoriasConFoto = $categorias->filter(fn ($c) => $c->imagen);
 
     // cada página del catálogo es su propia dirección (la 2 no es una copia de la portada)
-    $canonica = rtrim($tienda['url'], '/').'/'.(($parametros = array_filter(['categoria' => $categoria?->id, 'page' => $pagina > 1 ? $pagina : null])) ? '?'.http_build_query($parametros) : '');
+    $canonica = rtrim($tienda['url'], '/').($categoria ? $categoria->url : '/').($pagina > 1 ? "?page={$pagina}" : '');
 
     // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección y horario
     $negocio = array_filter([
@@ -146,7 +145,7 @@
                 <h2 id="titulo-categorias" class="text-2xl font-semibold tracking-tight">Compra por categoría</h2>
                 <div class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
                     @foreach ($categoriasConFoto->take(6) as $cat)
-                        <a href="/?categoria={{ $cat->id }}#catalogo" class="group rounded-2xl bg-slate-50 p-4 text-center ring-1 ring-slate-100 transition hover:bg-white hover:shadow-lg hover:shadow-slate-900/5 hover:ring-slate-200">
+                        <a href="{{ $cat->url }}" class="group rounded-2xl bg-slate-50 p-4 text-center ring-1 ring-slate-100 transition hover:bg-white hover:shadow-lg hover:shadow-slate-900/5 hover:ring-slate-200">
                             <div class="mx-auto aspect-square w-full max-w-28">
                                 <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="800" height="600" class="size-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-110">
                             </div>
@@ -209,9 +208,8 @@
             </div>
 
             @if ($tienda['mostrar_precios'] && $productos->total() > 1)
-                <form action="/#catalogo" method="get" class="flex items-center gap-2">
+                <form action="{{ $categoria ? $categoria->url : '/#catalogo' }}" method="get" class="flex items-center gap-2">
                     @if ($buscar !== '') <input type="hidden" name="q" value="{{ $buscar }}"> @endif
-                    @if ($categoria) <input type="hidden" name="categoria" value="{{ $categoria->id }}"> @endif
                     <label for="orden" class="text-sm text-slate-500">Ordenar por</label>
                     <select id="orden" name="orden" onchange="this.form.submit()" class="h-10 rounded-xl border border-slate-200 bg-white pr-8 pl-3 text-sm font-medium focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
                         <option value="nombre" @selected($orden === 'nombre')>Nombre</option>
@@ -231,14 +229,14 @@
                         <p class="border-b border-slate-100 px-4 py-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">Categorías</p>
                         <ul class="max-h-[60vh] overflow-y-auto p-2 text-sm">
                             <li>
-                                <a href="{{ $enlace(['categoria' => null]) }}" @if (! $categoria) aria-current="true" @endif
+                                <a href="{{ $enlace(null) }}" @if (! $categoria) aria-current="true" @endif
                                     class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 transition-colors {{ $categoria ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' : 'bg-(--marca-suave) font-semibold text-(--marca)' }}">
                                     Todas <span class="text-xs {{ $categoria ? 'text-slate-400' : '' }}">{{ number_format($tienda['productos']) }}</span>
                                 </a>
                             </li>
                             @foreach ($categorias as $cat)
                                 <li>
-                                    <a href="{{ $enlace(['categoria' => $cat->id]) }}" @if ($categoria?->id === $cat->id) aria-current="true" @endif
+                                    <a href="{{ $enlace($cat) }}" @if ($categoria?->id === $cat->id) aria-current="true" @endif
                                         class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 transition-colors {{ $categoria?->id === $cat->id ? 'bg-(--marca-suave) font-semibold text-(--marca)' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' }}">
                                         <span class="truncate">{{ $cat->nombre }}</span>
                                         <span class="text-xs {{ $categoria?->id === $cat->id ? '' : 'text-slate-400' }}">{{ $cat->productos }}</span>
