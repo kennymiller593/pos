@@ -85,7 +85,7 @@
     @endif
 
     {{-- fija solo en pantallas grandes: en el celular ocuparía un cuarto de la pantalla --}}
-    <header class="z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:sticky {{ $previa ? 'lg:top-9' : 'lg:top-0' }}">
+    <header class="z-30 border-b border-slate-200 bg-white lg:sticky {{ $previa ? 'lg:top-9' : 'lg:top-0' }}">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-6 lg:flex-nowrap lg:px-8">
             <a href="/" class="flex min-w-0 items-center gap-3" aria-label="{{ $tienda['nombre'] }}: inicio">
                 @if ($tienda['logo'])
@@ -123,17 +123,52 @@
 
         {{-- categorías: siempre a la mano --}}
         @if ($categorias->isNotEmpty())
+            @php
+                // con muchas categorías, la fila solo lleva las que entran (primero las de más productos)
+                // y el resto queda en el menú "Categorías", que las lista todas
+                $muchas = $categorias->count() > 6;
+                $enFila = $muchas
+                    ? $categorias->sortByDesc('productos')->sortByDesc(fn ($c) => $c->id === $categoriaActiva)->values()
+                    : $categorias;
+            @endphp
             <nav class="border-t border-slate-100" aria-label="Categorías">
-                <div class="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 text-sm sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <a href="/#catalogo" class="flex shrink-0 items-center gap-2 border-b-2 py-2.5 pr-3 font-semibold whitespace-nowrap {{ $categoriaActiva ? 'border-transparent text-slate-900 hover:text-(--marca)' : 'border-(--marca) text-(--marca)' }}">
-                        @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
-                    </a>
-                    @foreach ($categorias as $cat)
-                        <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
-                            class="shrink-0 border-b-2 px-3 py-2.5 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
-                            {{ $cat->nombre }}
-                        </a>
-                    @endforeach
+                <div class="relative mx-auto flex max-w-7xl items-stretch px-4 text-sm sm:px-6 lg:px-8">
+                    @if ($muchas)
+                        <details class="group shrink-0">
+                            <summary class="flex h-11 cursor-pointer list-none items-center gap-2 pr-4 font-semibold text-slate-900 transition-colors select-none hover:text-(--marca) group-open:text-(--marca) group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden">
+                                @include('tienda.icono', ['n' => 'cuadricula'])Categorías
+                                @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5 rotate-90 text-slate-400 transition-transform group-open:-rotate-90'])
+                            </summary>
+                            <div class="absolute inset-x-4 top-full z-40 max-h-[70vh] overflow-y-auto overscroll-contain rounded-b-2xl border border-t-0 border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/10 sm:inset-x-6 sm:p-4 lg:inset-x-8">
+                                <a href="/#catalogo" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 font-semibold text-slate-900 hover:bg-(--marca-suave) hover:text-(--marca)">
+                                    <span>Todo el catálogo</span><span class="text-xs font-normal text-slate-400 tabular-nums">{{ number_format($tienda['productos']) }}</span>
+                                </a>
+                                <ul class="mt-1 grid gap-x-4 border-t border-slate-100 pt-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                                    @foreach ($categorias as $cat)
+                                        <li>
+                                            <a href="{{ $cat->url }}" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 hover:bg-(--marca-suave) hover:text-(--marca) {{ $categoriaActiva === $cat->id ? 'font-semibold text-(--marca)' : 'text-slate-700' }}">
+                                                <span class="min-w-0 truncate">{{ $cat->nombre }}</span><span class="shrink-0 text-xs font-normal text-slate-400 tabular-nums">{{ $cat->productos }}</span>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        </details>
+                    @endif
+                    {{-- en celular la fila se desliza; en pantalla grande solo se ven las que entran completas --}}
+                    <div class="flex h-11 min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden {{ $muchas ? 'border-l border-slate-100 pl-1 lg:flex-wrap lg:overflow-hidden' : '' }}">
+                        @unless ($muchas)
+                            <a href="/#catalogo" class="flex shrink-0 items-center gap-2 border-b-2 pr-3 font-semibold whitespace-nowrap {{ $categoriaActiva ? 'border-transparent text-slate-900 hover:text-(--marca)' : 'border-(--marca) text-(--marca)' }}">
+                                @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
+                            </a>
+                        @endunless
+                        @foreach ($enFila as $cat)
+                            <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
+                                class="flex h-11 shrink-0 items-center border-b-2 px-3 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
+                                {{ $cat->nombre }}
+                            </a>
+                        @endforeach
+                    </div>
                 </div>
             </nav>
         @endif
