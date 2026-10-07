@@ -23,14 +23,19 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
 
+        $contexto = $this->contexto($empresa, $config);
         $buscar = trim(mb_substr((string) $request->query('q'), 0, 80));
-        $categorias = $this->catalogo->categorias($empresa);
+        $categorias = $contexto['categorias'];
         $categoria = $categorias->firstWhere('id', (string) $request->query('categoria'));
         $orden = $config['mostrar_precios'] && in_array($request->query('orden'), ['menor', 'mayor'], true) ? $request->query('orden') : 'nombre';
 
         $productos = $this->catalogo->productos($empresa)
             ->when($buscar !== '', fn ($q) => $this->catalogo->buscar($q, $buscar))
             ->when($categoria, fn ($q) => $q->where('productos.categoria_id', $categoria->id))
+            // por defecto, primero lo que hay para vender: una primera página llena de "Agotado" espanta
+            ->when($orden === 'nombre' && $config['mostrar_stock'], fn ($q) => $q->orderByRaw(
+                '(CASE WHEN NOT productos.controla_stock OR COALESCE((SELECT SUM(s.cantidad) FROM stock s WHERE s.producto_id = productos.id), 0) > 0 THEN 0 ELSE 1 END)'
+            ))
             ->when($orden === 'menor', fn ($q) => $q->orderBy('precio'))
             ->when($orden === 'mayor', fn ($q) => $q->orderByDesc('precio'))
             ->orderBy('productos.nombre')
@@ -42,9 +47,8 @@ class TiendaController extends Controller
         $destacados = $filtrando || $productos->currentPage() > 1 ? null : $this->catalogo->destacados($empresa);
 
         return view('tienda.inicio', [
-            ...$this->contexto($empresa, $config),
+            ...$contexto,
             'buscar' => $buscar,
-            'categorias' => $categorias,
             'categoria' => $categoria,
             'orden' => $orden,
             'filtrando' => $filtrando,
@@ -112,8 +116,11 @@ class TiendaController extends Controller
                 'url' => (string) Tienda::url($empresa->tienda_slug),
                 'colores' => config('tienda.colores')[$config['color']],
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
+                'productos' => $this->catalogo->total($empresa),
             ],
             'contactos' => $this->catalogo->contactos($empresa, $config),
+            // la barra de categorías y el pie van en todas las páginas
+            'categorias' => $this->catalogo->categorias($empresa),
             'whatsapp' => Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, vi la tienda en línea de {$nombre} y quiero hacer una consulta."),
         ];
     }

@@ -66,7 +66,18 @@ class CatalogoTiendaService
         return $consulta;
     }
 
-    /** Categorías que tienen algo visible en la tienda, con cuántos productos. */
+    /** Cuántos productos se ven en la tienda. */
+    public function total(Empresa $empresa): int
+    {
+        return Producto::query()
+            ->where('empresa_id', $empresa->id)
+            ->where('activo', true)
+            ->where('en_tienda', true)
+            ->whereHas('presentaciones', fn ($q) => $q->where('activo', true))
+            ->count();
+    }
+
+    /** Categorías que tienen algo visible en la tienda, con cuántos productos y una foto que las represente. */
     public function categorias(Empresa $empresa): Collection
     {
         return Categoria::query()
@@ -80,7 +91,8 @@ class CatalogoTiendaService
                 ->where('producto_presentaciones.activo', true))
             ->groupBy('categorias.id', 'categorias.nombre')
             ->orderBy('categorias.nombre')
-            ->selectRaw('categorias.id, categorias.nombre, COUNT(*) as productos')
+            // la foto es la de cualquiera de sus productos que tenga una
+            ->selectRaw('categorias.id, categorias.nombre, COUNT(*) as productos, MAX(productos.imagen_url) as imagen')
             ->toBase()
             ->get();
     }

@@ -2,10 +2,10 @@
 @if ($paginator->hasPages())
     @php
         $base = 'inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl border px-3 text-sm font-medium transition-colors';
-        $normal = 'border-stone-200 bg-white text-neutral-700 hover:border-(--marca) hover:text-(--marca)';
-        $apagado = 'border-stone-200 bg-white text-neutral-300';
+        $normal = 'border-slate-200 bg-white text-slate-700 hover:border-(--marca) hover:text-(--marca)';
+        $apagado = 'border-slate-100 bg-white text-slate-300';
     @endphp
-    <nav class="mt-8 flex flex-wrap items-center justify-center gap-1.5" aria-label="Páginas">
+    <nav class="mt-10 flex flex-wrap items-center justify-center gap-1.5" aria-label="Páginas">
         @if ($paginator->onFirstPage())
             <span class="{{ $base }} {{ $apagado }}" aria-disabled="true">@include('tienda.icono', ['n' => 'izquierda'])<span class="hidden sm:inline">Anterior</span></span>
         @else
@@ -14,7 +14,7 @@
 
         @foreach ($elements as $elemento)
             @if (is_string($elemento))
-                <span class="px-1 text-neutral-400" aria-hidden="true">…</span>
+                <span class="px-1 text-slate-400" aria-hidden="true">…</span>
             @endif
             @if (is_array($elemento))
                 @foreach ($elemento as $numero => $url)

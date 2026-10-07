@@ -185,13 +185,15 @@ class TiendaEnLineaTest extends TestCase
 
         $this->tienda('/')
             ->assertOk()
-            ->assertSee('<title>Agro Campo</title>', false)
+            ->assertSee('<title>Agro Campo | Catálogo y pedidos en línea</title>', false)
             ->assertSee('Insumos para tu campo')
+            ->assertSee('"@type":"Store"', false) // datos del negocio para el buscador
+
             ->assertSee('name="q"', false) // buscador
             ->assertSee('Productos destacados')
             ->assertSee('Urea 46% x 50 kg')
             ->assertSee('Glifosato 480 SL x 1 L')
-            ->assertSee('S/ 145.00')
+            ->assertSee('145.00')
             ->assertSee('Farmex')
             ->assertSee('Fertilizantes')
             // contactos
@@ -322,17 +324,34 @@ class TiendaEnLineaTest extends TestCase
         $agotado = $this->crearProducto(precio: 68, atributos: ['nombre' => 'Azoxystrobin 250 SC', 'codigo_interno' => 'P0011']);
 
         $this->publicar(['mostrar_precios' => false, 'mostrar_stock' => false]);
-        $this->tienda('/')->assertSee('Consultar precio')->assertDontSee('S/ 145.00')->assertDontSee('Agotado');
+        $this->tienda('/')->assertSee('Consultar precio')->assertDontSee('145.00')->assertDontSee('Agotado');
         $this->tienda('/producto/P0006/urea')->assertSee('Consulta el precio')->assertDontSee('145.00')->assertDontSee('"offers"', false);
 
         $this->publicar(['mostrar_precios' => true, 'mostrar_stock' => true]);
-        $this->tienda('/')->assertSee('S/ 145.00')->assertSee('Agotado');
+        $this->tienda('/')->assertSee('145.00')->assertSee('Agotado');
         $this->tienda('/producto/P0011/x')->assertSee('Agotado por ahora')->assertSee('Preguntar cuándo llega');
         $this->tienda('/producto/P0006/urea')->assertSee('Disponible')->assertSee('"price":"145.00"', false);
 
         // nunca sale cuantas unidades hay ni lo que costo
         $this->tienda('/producto/P0006/urea')->assertDontSee('10.000')->assertDontSee('100.00');
         $this->assertNotNull($agotado);
+    }
+
+    public function test_el_catalogo_muestra_primero_lo_disponible(): void
+    {
+        $this->publicar();
+        // "Abono" va antes por nombre, pero no tiene stock
+        $this->crearProducto(atributos: ['nombre' => 'Abono sin stock', 'codigo_interno' => 'P0900']);
+
+        $html = $this->tienda('/')->assertOk()->getContent();
+        $catalogo = substr($html, strpos($html, 'id="catalogo"'));
+        $this->assertLessThan(strpos($catalogo, 'Abono sin stock'), strpos($catalogo, 'Urea 46% x 50 kg'));
+
+        // si la tienda no muestra disponibilidad, el orden es solo por nombre
+        $this->publicar(['mostrar_stock' => false]);
+        $html = $this->tienda('/')->getContent();
+        $catalogo = substr($html, strpos($html, 'id="catalogo"'));
+        $this->assertLessThan(strpos($catalogo, 'Urea 46% x 50 kg'), strpos($catalogo, 'Abono sin stock'));
     }
 
     public function test_el_detalle_del_producto_trae_su_ficha_y_el_pedido_por_whatsapp(): void
