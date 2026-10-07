@@ -27,6 +27,8 @@ import {
     Star,
     Trash2,
     UserRound,
+    Volume2,
+    VolumeX,
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -35,6 +37,7 @@ import { useConfirmar } from '@/composables/confirmar'
 import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
 import { useImpresion } from '@/composables/impresion'
+import { useSonido } from '@/composables/sonido'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
 
 const props = defineProps({
@@ -55,6 +58,8 @@ const page = usePage()
 const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 const { puede } = usePermisos()
 const { modo: modoImpresion, imprimirTicket } = useImpresion()
+// pitido al agregar un producto al carrito (se puede silenciar)
+const { activo: sonidoActivo, pitido } = useSonido()
 const ayudaImpresion = ref(false)
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
@@ -127,7 +132,10 @@ function alPresionarEnter() {
     if (productosFiltrados.value.length === 1) {
         agregar(productosFiltrados.value[0])
         buscar.value = ''
+        return
     }
+    // un código de barras que no es de ningún producto (quien usa la pistola lectora no mira la pantalla): que se oiga
+    if (/^\d{6,}$/.test(texto)) pitido('error')
 }
 
 // ================= carrito =================
@@ -143,13 +151,20 @@ const cotizacionEnVenta = useStorage(`pos-cotizacion-${empresaId}`, null, localS
 // aviso flotante cuando se intenta vender sin stock
 const avisoSinStock = ref(null)
 let avisoTimer = null
+// al activarlo suena una vez, para que se sepa cómo es
+function alternarSonido() {
+    sonidoActivo.value = !sonidoActivo.value
+    pitido('ok')
+}
+
 function avisarSinStock(mensaje) {
     avisoSinStock.value = mensaje
     clearTimeout(avisoTimer)
     avisoTimer = setTimeout(() => (avisoSinStock.value = null), 2500)
 }
 
-function agregar(producto, presentacion = null) {
+// conSonido = false cuando quien llama ya hace su propio pitido (el escáner con la cámara)
+function agregar(producto, presentacion = null, conSonido = true) {
     presentacion = presentacion ?? presentacionDefault(producto)
 
     // no dejar pasar al carrito mas de lo que hay en stock (en unidades base)
@@ -162,6 +177,7 @@ function agregar(producto, presentacion = null) {
             avisarSinStock(producto.stock <= 0
                 ? `"${producto.nombre}" no tiene stock.`
                 : `No hay más stock de "${producto.nombre}" (${producto.stock} disp. y ya tienes ${enCarrito} en el carrito).`)
+            if (conSonido) pitido('error')
             return false
         }
     }
@@ -172,6 +188,7 @@ function agregar(producto, presentacion = null) {
     } else {
         carrito.value.push({ producto, presentacion, cantidad: 1, precio: '', precioCotizado: null, descuento: '', conDescuento: false })
     }
+    if (conSonido) pitido('ok')
     return true
 }
 
@@ -239,7 +256,7 @@ function leerCodigoCamara(codigo) {
     if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
 
     const { producto, presentacion } = encontrado
-    if (!agregar(producto, presentacion)) return { ok: false, mensaje: avisoSinStock.value }
+    if (!agregar(producto, presentacion, false)) return { ok: false, mensaje: avisoSinStock.value }
 
     const item = carrito.value.find((i) => i.presentacion.id === presentacion.id)
     ultimoEscaneado.value = presentacion.id
@@ -1562,14 +1579,29 @@ const claseInput =
                                 </button>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            class="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
-                            @click="ayudaImpresion = true"
-                        >
-                            <CircleHelp class="size-3.5" />
-                            ¿Cómo configurar?
-                        </button>
+                        <div class="flex items-center gap-0.5">
+                            <button
+                                type="button"
+                                class="grid size-7 place-items-center rounded-lg hover:bg-stone-100 dark:hover:bg-neutral-800"
+                                :class="sonidoActivo ? 'text-emerald-600 dark:text-emerald-400' : ''"
+                                :aria-pressed="sonidoActivo"
+                                :aria-label="sonidoActivo ? 'Silenciar el pitido al agregar productos' : 'Activar el pitido al agregar productos'"
+                                :title="sonidoActivo ? 'Pitido al agregar productos: activado' : 'Pitido al agregar productos: silenciado'"
+                                data-sonido
+                                @click="alternarSonido"
+                            >
+                                <Volume2 v-if="sonidoActivo" class="size-4" />
+                                <VolumeX v-else class="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 hover:bg-stone-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                @click="ayudaImpresion = true"
+                            >
+                                <CircleHelp class="size-3.5" />
+                                ¿Cómo configurar?
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
