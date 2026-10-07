@@ -261,13 +261,31 @@ class CatalogoTiendaService
             ? (Str::startsWith($valor, ['http://', 'https://']) ? $valor : $base.ltrim(trim($valor), '@/'))
             : null;
 
+        // sin enlace propio, el mapa se busca por el texto de la dirección
+        $buscarEnMapa = fn (string $direccion) => 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($direccion);
+        // "Jr. San Martín N° 1638-Huánuco" y "jr san martin n 1638 huanuco" son el mismo lugar
+        $igualar = fn (string $direccion) => preg_replace('/[^a-z0-9]+/', '', Str::ascii(mb_strtolower($direccion)));
+
+        // la primera dirección es el local principal: usa el enlace de Google Maps que pegó el dueño
+        $direcciones = collect(Tienda::lineas($config['direccion']))->values()->map(fn (string $texto, int $i) => [
+            'texto' => $texto,
+            'mapa' => $i === 0 && filled($config['mapa_url']) ? $config['mapa_url'] : $buscarEnMapa($texto),
+        ]);
+        $yaListadas = $direcciones->map(fn ($d) => $igualar($d['texto']))->all();
+        $horarios = Tienda::lineas($config['horario']);
+
         return [
             'whatsapp' => Tienda::numeroWhatsapp($config['whatsapp']),
             'whatsapp_texto' => $config['whatsapp'],
             'telefono' => $config['telefono'],
             'email' => $config['email'],
-            'direccion' => $config['direccion'],
-            'horario' => $config['horario'],
+            // el local principal (para la franja superior y los datos del negocio) y todos los que anotó
+            'direccion' => $direcciones->first()['texto'] ?? null,
+            'mapa' => $direcciones->first()['mapa'] ?? null,
+            'direcciones' => $direcciones->all(),
+            // en una línea para donde hay poco espacio, y por separado para listarlos
+            'horario' => $horarios ? implode(' · ', $horarios) : null,
+            'horarios' => $horarios,
             'facebook' => $red($config['facebook'], 'https://www.facebook.com/'),
             'instagram' => $red($config['instagram'], 'https://www.instagram.com/'),
             'tiktok' => $red($config['tiktok'], 'https://www.tiktok.com/@'),
@@ -277,7 +295,10 @@ class CatalogoTiendaService
                 ->where('direccion', '!=', '')
                 ->orderBy('nombre')
                 ->get(['nombre', 'direccion', 'telefono'])
-                ->map(fn ($s) => ['nombre' => $s->nombre, 'direccion' => $s->direccion, 'telefono' => $s->telefono])
+                // una sucursal cuya dirección ya está escrita arriba no se repite
+                ->reject(fn ($s) => in_array($igualar($s->direccion), $yaListadas, true))
+                ->map(fn ($s) => ['nombre' => $s->nombre, 'direccion' => $s->direccion, 'telefono' => $s->telefono, 'mapa' => $buscarEnMapa($s->direccion)])
+                ->values()
                 ->all(),
         ];
     }

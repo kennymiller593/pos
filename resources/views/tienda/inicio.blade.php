@@ -104,7 +104,7 @@
             $ventajas = array_values(array_filter([
                 $whatsapp ? ['whatsapp', 'Pedidos por WhatsApp', 'Te atendemos y confirmamos tu pedido al momento.'] : null,
                 ['actualizado', 'Catálogo al día', 'Lo que ves aquí es lo que tenemos en tienda.'],
-                $contactos['direccion'] ? ['lugar', 'Recojo en tienda', $contactos['direccion']] : null,
+                $contactos['direccion'] ? ['lugar', 'Recojo en tienda', implode(' · ', array_column($contactos['direcciones'], 'texto'))] : null,
                 $contactos['telefono'] ? ['telefono', 'Atención por teléfono', $contactos['telefono']] : null,
             ]));
         @endphp

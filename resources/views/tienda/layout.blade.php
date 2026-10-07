@@ -6,7 +6,6 @@
     // las fotos locales son rutas relativas: para compartir el enlace deben ir completas
     $absoluta = fn (?string $ruta) => $ruta ? (str_starts_with($ruta, 'http') ? $ruta : rtrim($tienda['url'], '/').$ruta) : null;
     $imagenSocial = $absoluta(trim($__env->yieldContent('imagen')) ?: ($tienda['logo'] ?: $categorias->firstWhere('imagen', '!=', null)?->imagen));
-    $mapa = fn (string $direccion) => 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($direccion);
     $soloNumero = fn (?string $telefono) => preg_replace('/[^0-9+]/', '', (string) $telefono);
     $categoriaActiva = $categoria->id ?? null;
 @endphp
@@ -64,7 +63,7 @@
                         <span class="flex min-w-0 items-center gap-1.5">@include('tienda.icono', ['n' => 'reloj', 'clase' => 'size-3.5 text-slate-500'])<span class="truncate">{{ $contactos['horario'] }}</span></span>
                     @endif
                     @if ($contactos['direccion'])
-                        <a href="{{ $mapa($contactos['direccion']) }}" target="_blank" rel="noopener" class="hidden min-w-0 items-center gap-1.5 hover:text-white md:flex">
+                        <a href="{{ $contactos['mapa'] }}" target="_blank" rel="noopener" class="hidden min-w-0 items-center gap-1.5 hover:text-white md:flex">
                             @include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-3.5 text-slate-500'])<span class="truncate">{{ $contactos['direccion'] }}</span>
                         </a>
                     @endif
@@ -246,24 +245,28 @@
             <div class="lg:col-span-3">
                 <h2 class="text-sm font-semibold text-white">Visítanos</h2>
                 <ul class="mt-4 space-y-3 text-sm">
-                    @if ($contactos['direccion'])
+                    @foreach ($contactos['direcciones'] as $lugar)
                         <li>
-                            <a href="{{ $mapa($contactos['direccion']) }}" target="_blank" rel="noopener" class="flex items-start gap-3 transition-colors hover:text-white">
+                            <a href="{{ $lugar['mapa'] }}" target="_blank" rel="noopener" class="flex items-start gap-3 transition-colors hover:text-white">
                                 <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 text-slate-300">@include('tienda.icono', ['n' => 'lugar'])</span>
-                                <span><span class="block font-medium text-slate-200">{{ $contactos['direccion'] }}</span><span class="text-xs text-slate-500">Ver en el mapa</span></span>
+                                <span><span class="block font-medium text-slate-200">{{ $lugar['texto'] }}</span><span class="text-xs text-slate-500">Ver en el mapa</span></span>
                             </a>
                         </li>
-                    @endif
-                    @if ($contactos['horario'])
+                    @endforeach
+                    @if ($contactos['horarios'])
                         <li class="flex items-start gap-3">
                             <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 text-slate-300">@include('tienda.icono', ['n' => 'reloj'])</span>
-                            <span><span class="block text-xs text-slate-500">Horario de atención</span><span class="font-medium text-slate-200">{{ $contactos['horario'] }}</span></span>
+                            <span>
+                                <span class="block text-xs text-slate-500">Horario de atención</span>
+                                @foreach ($contactos['horarios'] as $linea)
+                                    <span class="block font-medium text-slate-200">{{ $linea }}</span>
+                                @endforeach
+                            </span>
                         </li>
                     @endif
                     @foreach ($contactos['locales'] as $local)
-                        @continue($local['direccion'] === $contactos['direccion'])
                         <li>
-                            <a href="{{ $mapa($local['direccion']) }}" target="_blank" rel="noopener" class="flex items-start gap-3 transition-colors hover:text-white">
+                            <a href="{{ $local['mapa'] }}" target="_blank" rel="noopener" class="flex items-start gap-3 transition-colors hover:text-white">
                                 <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white/5 text-slate-300">@include('tienda.icono', ['n' => 'lugar'])</span>
                                 <span>
                                     <span class="block text-xs text-slate-500">{{ $local['nombre'] }}</span>

@@ -12,6 +12,7 @@ import {
     ImageOff,
     ImagePlus,
     LoaderCircle,
+    MapPin,
     Package,
     Pencil,
     Search,
@@ -44,6 +45,7 @@ const form = useForm({
     telefono: props.tienda.config.telefono ?? '',
     email: props.tienda.config.email ?? '',
     direccion: props.tienda.config.direccion ?? '',
+    mapa_url: props.tienda.config.mapa_url ?? '',
     horario: props.tienda.config.horario ?? '',
     facebook: props.tienda.config.facebook ?? '',
     instagram: props.tienda.config.instagram ?? '',
@@ -244,6 +246,8 @@ function guardarDescripcion() {
 const claseTarjeta = 'rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
 const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
+const claseArea =
+    'block w-full resize-y rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm leading-relaxed placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
 const claseLabel = 'mb-1 block text-sm font-medium'
 const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 const claseAyuda = 'mt-1 text-xs text-neutral-400 dark:text-neutral-500'
@@ -427,12 +431,41 @@ const claseInterruptor =
                     </div>
                     <div class="sm:col-span-2">
                         <label :class="claseLabel" for="tienda_direccion">Dirección <span class="font-normal text-neutral-400">(opcional)</span></label>
-                        <input id="tienda_direccion" v-model="form.direccion" type="text" maxlength="250" :class="claseInput" placeholder="Av. Principal 123, tu distrito" />
-                        <p :class="claseAyuda">Sale con un enlace al mapa. Tus sucursales con dirección también aparecen.</p>
+                        <textarea
+                            id="tienda_direccion"
+                            v-model="form.direccion"
+                            rows="2"
+                            maxlength="400"
+                            :class="claseArea"
+                            placeholder="Av. Principal 123, tu distrito"
+                        />
+                        <p v-if="form.errors.direccion" :class="claseError">{{ form.errors.direccion }}</p>
+                        <p v-else :class="claseAyuda">Si tienes más de un local, escribe una dirección por línea. Cada una sale con su enlace al mapa. Tus sucursales con dirección también aparecen.</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label :class="claseLabel" for="tienda_mapa">Enlace de Google Maps <span class="font-normal text-neutral-400">(opcional)</span></label>
+                        <div class="relative">
+                            <MapPin class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-neutral-400" />
+                            <input id="tienda_mapa" v-model="form.mapa_url" type="url" inputmode="url" maxlength="500" :class="[claseInput, 'pl-9']" placeholder="https://maps.app.goo.gl/..." />
+                        </div>
+                        <p v-if="form.errors.mapa_url" :class="claseError">{{ form.errors.mapa_url }}</p>
+                        <p v-else :class="claseAyuda">
+                            Busca tu local en Google Maps, toca "Compartir" y pega aquí el enlace. Lleva al punto exacto de tu local principal, el de la primera línea.
+                            Sin él, el mapa se busca por el texto de la dirección.
+                        </p>
                     </div>
                     <div class="sm:col-span-2">
                         <label :class="claseLabel" for="tienda_horario">Horario de atención <span class="font-normal text-neutral-400">(opcional)</span></label>
-                        <input id="tienda_horario" v-model="form.horario" type="text" maxlength="200" :class="claseInput" placeholder="Lunes a sábado, 8 a. m. a 6 p. m." />
+                        <textarea
+                            id="tienda_horario"
+                            v-model="form.horario"
+                            rows="2"
+                            maxlength="300"
+                            :class="claseArea"
+                            placeholder="Lunes a sábado, 8 a. m. a 6 p. m.&#10;Domingos, 8 a. m. a 1 p. m."
+                        />
+                        <p v-if="form.errors.horario" :class="claseError">{{ form.errors.horario }}</p>
+                        <p v-else :class="claseAyuda">Un horario por línea si cambia según el día.</p>
                     </div>
                     <div>
                         <label :class="claseLabel" for="tienda_facebook">Facebook <span class="font-normal text-neutral-400">(opcional)</span></label>

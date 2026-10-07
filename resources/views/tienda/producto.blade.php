@@ -159,7 +159,7 @@
                     @if ($contactos['direccion'])
                         <li class="flex items-start gap-3">
                             <span class="mt-0.5 text-(--marca)">@include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-4.5'])</span>
-                            <span><span class="font-medium">Recógelo en tienda.</span> <span class="text-slate-500">{{ $contactos['direccion'] }}</span></span>
+                            <span><span class="font-medium">Recógelo en tienda.</span> <span class="text-slate-500">{{ implode(' · ', array_column($contactos['direcciones'], 'texto')) }}</span></span>
                         </li>
                     @endif
                     @if ($contactos['horario'])

@@ -42,7 +42,11 @@
         @if ($contactos['horario'])
             <div class="min-w-0">
                 <dt class="text-sm {{ $tenue }}">Atención</dt>
-                <dd class="text-base leading-8 font-semibold tracking-tight">{{ $contactos['horario'] }}</dd>
+                <dd class="font-semibold tracking-tight {{ count($contactos['horarios']) > 1 ? 'pt-1 text-sm leading-6' : 'text-base leading-8' }}">
+                    @foreach ($contactos['horarios'] as $linea)
+                        <span class="block">{{ $linea }}</span>
+                    @endforeach
+                </dd>
             </div>
         @endif
     </dl>

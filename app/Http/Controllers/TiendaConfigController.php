@@ -157,8 +157,13 @@ class TiendaConfigController extends Controller
             'whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s()-]{6,20}$/'],
             'telefono' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:150'],
-            'direccion' => ['nullable', 'string', 'max:250'],
-            'horario' => ['nullable', 'string', 'max:200'],
+            'direccion' => ['nullable', 'string', 'max:400'],
+            'mapa_url' => ['nullable', 'string', 'max:500', function (string $atributo, mixed $valor, \Closure $falla) {
+                if (! Tienda::esEnlaceDeMapa(trim((string) $valor))) {
+                    $falla('Pega el enlace de Google Maps de tu local (en Maps: Compartir, Copiar enlace).');
+                }
+            }],
+            'horario' => ['nullable', 'string', 'max:300'],
             'facebook' => ['nullable', 'string', 'max:150'],
             'instagram' => ['nullable', 'string', 'max:150'],
             'tiktok' => ['nullable', 'string', 'max:150'],
@@ -179,6 +184,8 @@ class TiendaConfigController extends Controller
             'portada_imagen.image' => 'La foto de portada debe ser una imagen.',
             'portada_imagen.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
             'portada_imagen.max' => 'La foto de portada no debe pesar más de 6 MB.',
+            'direccion.max' => 'La dirección no puede pasar de 400 caracteres.',
+            'horario.max' => 'El horario no puede pasar de 300 caracteres.',
             'portada_titulo.max' => 'El título no puede pasar de 80 caracteres.',
             'portada_boton.max' => 'El texto del botón no puede pasar de 30 caracteres.',
             'anuncio.max' => 'El anuncio no puede pasar de 120 caracteres.',
@@ -208,6 +215,11 @@ class TiendaConfigController extends Controller
             is_bool($porDefecto) => (bool) $datos[$clave],
             default => filled($datos[$clave]) ? trim((string) $datos[$clave]) : null,
         })->all();
+
+        // dirección y horario: una por línea, sin líneas vacías ni espacios sobrantes
+        foreach (['direccion', 'horario'] as $clave) {
+            $config[$clave] = implode("\n", Tienda::lineas($config[$clave])) ?: null;
+        }
 
         $config['portada_estilo'] = $datos['portada_estilo'] ?? $actual['portada_estilo'];
         $config['portada_imagen'] = match (true) {

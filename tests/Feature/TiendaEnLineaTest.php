@@ -677,6 +677,52 @@ class TiendaEnLineaTest extends TestCase
         URL::setRequest(Request::create(config('app.url')));
     }
 
+    public function test_varias_direcciones_y_horarios_van_uno_por_linea_con_su_mapa(): void
+    {
+        $this->sucursal->update(['direccion' => 'JR. SAN MARTIN N 1638 - HUANUCO']);
+        $this->publicar([
+            // lo que ya estaba escrito con punto y coma también se separa
+            'direccion' => "Jr. San Martín N° 1638, Huánuco; Jr. Aguilar N° 347, Huánuco",
+            'mapa_url' => 'https://maps.app.goo.gl/AbCdEf123456',
+            'horario' => "Lunes a sábado, 8 a. m. a 6 p. m.\nDomingos, 8 a. m. a 1 p. m.",
+        ]);
+
+        $html = $this->tienda('/')->assertOk()
+            ->assertSee('Jr. San Martín N° 1638, Huánuco')
+            ->assertSee('Jr. Aguilar N° 347, Huánuco')
+            // el local principal lleva al enlace que pegó el dueño; el otro se busca por su texto
+            ->assertSee('href="https://maps.app.goo.gl/AbCdEf123456"', false)
+            ->assertSee('maps/search/?api=1&amp;query=Jr.%20Aguilar', false)
+            ->assertDontSee('query=Jr.%20San%20Mart', false)
+            ->assertSee('Domingos, 8 a. m. a 1 p. m.')
+            // la sucursal con esa misma dirección no se repite
+            ->assertDontSee('JR. SAN MARTIN N 1638 - HUANUCO')
+            ->getContent();
+
+        $this->assertStringNotContainsString('Huánuco; Jr.', $html);
+    }
+
+    public function test_el_enlace_del_mapa_solo_puede_ser_de_google_maps(): void
+    {
+        $this->actingAs($this->admin);
+
+        foreach (['https://maps.app.goo.gl/AbCdEf123456', 'https://www.google.com/maps/place/Agro/@-9.93,-76.24,17z', 'https://www.google.com.pe/maps?q=-9.93,-76.24', 'https://maps.google.com/?cid=123', 'https://goo.gl/maps/abc'] as $enlace) {
+            $this->put('/tienda-en-linea', $this->datosDeTienda(['mapa_url' => $enlace]))->assertSessionHasNoErrors();
+            $this->assertSame($enlace, $this->empresa->fresh()->tienda_config['mapa_url']);
+        }
+
+        foreach (['https://sitio-raro.com/maps', 'http://maps.app.goo.gl/abc', 'https://google.com.estafa.io/maps', 'https://www.google.com/search?q=x', 'javascript:alert(1)', 'mi local'] as $enlace) {
+            $this->put('/tienda-en-linea', $this->datosDeTienda(['mapa_url' => $enlace]))->assertSessionHasErrors('mapa_url');
+        }
+
+        // se puede dejar vacío, y las líneas se guardan limpias
+        $this->put('/tienda-en-linea', $this->datosDeTienda(['mapa_url' => '', 'direccion' => "  Av. Principal 123 \r\n\r\n Jr. Lima 45  ", 'horario' => "Lunes a sábado\n\n"]))->assertSessionHasNoErrors();
+        $config = $this->empresa->fresh()->tienda_config;
+        $this->assertNull($config['mapa_url']);
+        $this->assertSame("Av. Principal 123\nJr. Lima 45", $config['direccion']);
+        $this->assertSame('Lunes a sábado', $config['horario']);
+    }
+
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void
     {
         $empresa = new Empresa(['ruc' => '20123456786', 'razon_social' => 'AGRO EL SEMBRADOR S.A.C.']);

@@ -21,8 +21,9 @@ class Tienda
         'whatsapp' => null,
         'telefono' => null,
         'email' => null,
-        'direccion' => null,
-        'horario' => null,
+        'direccion' => null, // una por línea
+        'mapa_url' => null, // enlace de Google Maps del local principal
+        'horario' => null, // una línea por horario
         'facebook' => null,
         'instagram' => null,
         'tiktok' => null,
@@ -152,6 +153,32 @@ class Tienda
         }
 
         return $config;
+    }
+
+    /** "a; b\n c" -> ["a", "b", "c"]: una dirección u horario por línea (también se acepta el punto y coma). */
+    public static function lineas(?string $texto): array
+    {
+        return array_values(array_filter(array_map('trim', preg_split('/[\r\n;]+/', (string) $texto))));
+    }
+
+    /** ¿Es un enlace de Google Maps? Solo se aceptan esos: el campo no sirve para enlazar a cualquier sitio. */
+    public static function esEnlaceDeMapa(string $url): bool
+    {
+        $partes = parse_url($url);
+        $host = mb_strtolower((string) ($partes['host'] ?? ''));
+
+        if (($partes['scheme'] ?? '') !== 'https' || $host === '') {
+            return false;
+        }
+
+        // enlaces cortos de "Compartir" y la página del negocio
+        if (in_array($host, ['maps.app.goo.gl', 'goo.gl', 'g.page', 'g.co'], true)) {
+            return true;
+        }
+
+        // maps.google.com, o google.com/maps (y sus dominios por país: google.com.pe)
+        return (bool) preg_match('/^maps\.google\.[a-z.]{2,10}$/', $host)
+            || (preg_match('/^(www\.)?google\.[a-z.]{2,10}$/', $host) && str_starts_with((string) ($partes['path'] ?? ''), '/maps'));
     }
 
     /** Número listo para wa.me: solo dígitos y con el 51 de Perú si es un celular de 9 dígitos. */
