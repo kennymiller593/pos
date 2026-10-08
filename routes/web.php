@@ -63,6 +63,10 @@ if (Tienda::dominio()) {
             Route::get('/catalogo/{ref}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
             // enlaces de antes (/producto/urea-46-x-50-kg y /producto/P0006/urea-46-x-50-kg): se redirigen
             Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'productoAntiguo'])->where('ref', '[A-Za-z0-9_-]+');
+            // páginas de texto que escribe el dueño (existen solo si las llenó)
+            foreach (TiendaController::PAGINAS as $ruta => $pagina) {
+                Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
+            }
             Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
         });
 }

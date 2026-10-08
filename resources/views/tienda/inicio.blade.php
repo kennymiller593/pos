@@ -98,6 +98,31 @@
             </section>
         @endif
 
+        {{-- Banners del dueño: promociones, campañas, novedades. Se deslizan con el dedo o el ratón, sin JavaScript --}}
+        @if ($banners)
+            @php $varios = count($banners) > 1; @endphp
+            <section class="mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8" aria-label="Promociones" data-banners>
+                <div class="{{ $varios ? '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:thin] sm:mx-0 sm:px-0' : '' }}">
+                    @foreach ($banners as $i => $banner)
+                        @php $etiqueta = $banner['enlace'] ? 'a' : 'div'; @endphp
+                        <{{ $etiqueta }} @if ($banner['enlace']) href="{{ $banner['enlace'] }}" @if ($banner['externo']) target="_blank" rel="noopener" @endif @endif
+                            class="group relative block overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200 {{ $varios ? 'w-[88%] shrink-0 snap-center sm:w-[70%] sm:snap-start '.(count($banners) === 2 ? 'lg:w-[calc(50%-0.5rem)]' : 'lg:w-[46%]') : '' }}">
+                            <img src="{{ $banner['imagen'] }}" alt="{{ $banner['titulo'] ?? '' }}" width="1600" height="600" @if ($i === 0) fetchpriority="high" @else loading="lazy" @endif
+                                class="w-full object-cover transition-transform duration-500 {{ $banner['enlace'] ? 'group-hover:scale-[1.02]' : '' }} {{ $varios ? 'aspect-[16/9] sm:aspect-[8/3]' : 'aspect-[16/9] sm:aspect-[16/5]' }}">
+                            @if ($banner['titulo'])
+                                <span class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-slate-950/80 via-slate-950/35 to-transparent px-5 pt-12 pb-4 text-white">
+                                    <span class="text-lg leading-snug font-semibold tracking-tight text-balance sm:text-xl">{{ $banner['titulo'] }}</span>
+                                    @if ($banner['enlace'])
+                                        <span class="grid size-9 shrink-0 place-items-center rounded-full bg-white text-slate-900">@include('tienda.icono', ['n' => 'flecha'])</span>
+                                    @endif
+                                </span>
+                            @endif
+                        </{{ $etiqueta }}>
+                    @endforeach
+                </div>
+            </section>
+        @endif
+
         {{-- Por qué comprar aquí: solo lo que la tienda realmente ofrece --}}
         @php
             $ventajas = array_values(array_filter([
@@ -107,7 +132,7 @@
                 $contactos['telefono'] ? ['telefono', 'Atención por teléfono', $contactos['telefono']] : null,
             ]));
         @endphp
-        <section class="border-b border-slate-100" aria-label="Cómo te atendemos">
+        <section class="border-b border-slate-100 {{ $banners ? 'mt-2' : '' }}" aria-label="Cómo te atendemos">
             <ul class="mx-auto grid max-w-7xl gap-x-8 gap-y-5 px-4 py-7 sm:grid-cols-2 sm:px-6 {{ [1 => 'lg:grid-cols-1', 2 => 'lg:grid-cols-2', 3 => 'lg:grid-cols-3', 4 => 'lg:grid-cols-4'][count($ventajas)] }} lg:px-8">
                 @foreach ($ventajas as [$icono, $tituloVentaja, $detalle])
                     <li class="flex items-center gap-3.5">
@@ -213,7 +238,7 @@
             @endif
         </div>
 
-        @php($conPanel = ! $portada && $categorias->isNotEmpty())
+        @php $conPanel = ! $portada && $categorias->isNotEmpty(); @endphp
         <div class="mt-6 grid gap-8 {{ $conPanel ? 'lg:grid-cols-[15rem_1fr]' : '' }}">
             {{-- categorías: panel lateral en pantallas grandes (en el celular están en la barra de arriba) --}}
             @if ($conPanel)
@@ -289,4 +314,20 @@
             </div>
         </div>
     </section>
+
+    {{-- Sobre nosotros: un adelanto de lo que el dueño escribió, con enlace a la página completa --}}
+    @if ($portada && filled($nosotros))
+        <section class="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8" aria-labelledby="titulo-nosotros">
+            <div class="rounded-3xl bg-(--marca-suave) px-6 py-10 sm:px-10 lg:flex lg:items-center lg:gap-12">
+                <div class="lg:w-1/3">
+                    <p class="text-sm font-semibold text-(--marca)">Conócenos</p>
+                    <h2 id="titulo-nosotros" class="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Sobre {{ $tienda['nombre'] }}</h2>
+                </div>
+                <div class="mt-4 lg:mt-0 lg:flex-1">
+                    <p class="text-[17px] leading-relaxed text-slate-600">{{ \Illuminate\Support\Str::limit(\Illuminate\Support\Str::squish($nosotros), 320) }}</p>
+                    <a href="/nosotros" class="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Conocer más @include('tienda.icono', ['n' => 'flecha'])</a>
+                </div>
+            </div>
+        </section>
+    @endif
 @endsection

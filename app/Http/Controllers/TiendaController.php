@@ -9,12 +9,16 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /** Catálogo público de una empresa en su propia dirección. No usa sesión ni cookies. */
 class TiendaController extends Controller
 {
     private const POR_PAGINA = 24;
+
+    /** Páginas de texto de la tienda: su dirección y de qué parte del contenido salen. */
+    public const PAGINAS = ['nosotros' => 'nosotros', 'politicas' => 'politicas', 'preguntas-frecuentes' => 'preguntas'];
 
     /** Cuántos productos del catálogo asoman en la portada, antes del botón para verlos todos. */
     private const EN_PORTADA = 12;
@@ -153,6 +157,64 @@ class TiendaController extends Controller
         ]);
     }
 
+    /** /nosotros, /politicas y /preguntas-frecuentes: lo que el dueño escribió en "Contenido". */
+    public function pagina(Request $request, string $pagina): View
+    {
+        $empresa = $this->empresa($request);
+        $config = Tienda::config($empresa);
+        $contenido = $this->paginas($config)[$pagina] ?? null;
+        abort_unless($contenido, 404);
+
+        return view('tienda.pagina', [...$this->contexto($request, $empresa, $config), 'pagina' => $contenido]);
+    }
+
+    /**
+     * Las páginas de texto que la tienda tiene llenas, por nombre:
+     * [url, titulo, secciones: [[subtitulo, texto]], preguntas: [[pregunta, respuesta]]].
+     */
+    private function paginas(array $config): array
+    {
+        $politicas = array_values(array_filter([
+            ['Envíos y entregas', $config['envios']],
+            ['Cambios y devoluciones', $config['devoluciones']],
+            ['Formas de pago', $config['pagos']],
+        ], fn ($seccion) => filled($seccion[1])));
+
+        return array_filter([
+            'nosotros' => filled($config['nosotros'])
+                ? ['url' => '/nosotros', 'titulo' => 'Sobre nosotros', 'secciones' => [[null, $config['nosotros']]], 'preguntas' => []]
+                : null,
+            'politicas' => $politicas
+                ? ['url' => '/politicas', 'titulo' => 'Envíos, cambios y pagos', 'secciones' => $politicas, 'preguntas' => []]
+                : null,
+            'preguntas' => $config['preguntas']
+                ? ['url' => '/preguntas-frecuentes', 'titulo' => 'Preguntas frecuentes', 'secciones' => [], 'preguntas' => $config['preguntas']]
+                : null,
+        ]);
+    }
+
+    /** Los banners de la portada, cada uno con el enlace al que lleva (si lleva a alguno). */
+    private function banners(array $config, Collection $categorias, ?string $whatsapp): array
+    {
+        return array_map(function (array $banner) use ($categorias, $whatsapp) {
+            $enlace = match ($banner['destino'] ?? 'ninguno') {
+                'catalogo' => '/catalogo',
+                // una categoría que ya no existe (o quedó sin productos) deja el banner sin enlace
+                'categoria' => $categorias->firstWhere('id', $banner['valor'] ?? null)?->url,
+                'whatsapp' => $whatsapp,
+                'url' => $banner['valor'] ?? null,
+                default => null,
+            };
+
+            return [
+                'imagen' => $banner['imagen'] ?? null,
+                'titulo' => $banner['titulo'] ?? null,
+                'enlace' => $enlace,
+                'externo' => $enlace !== null && ! str_starts_with($enlace, '/'),
+            ];
+        }, array_filter($config['banners'], fn ($b) => filled($b['imagen'] ?? null)));
+    }
+
     /** Mapa del sitio para buscadores: la portada, el catálogo, las categorías y cada producto. */
     public function sitemap(Request $request): Response
     {
@@ -160,6 +222,7 @@ class TiendaController extends Controller
         $base = rtrim((string) Tienda::url($empresa->tienda_slug), '/');
 
         $urls = collect([['loc' => $base.'/', 'lastmod' => null], ['loc' => $base.'/catalogo', 'lastmod' => null]])
+            ->concat(collect($this->paginas(Tienda::config($empresa)))->map(fn ($p) => ['loc' => $base.$p['url'], 'lastmod' => null])->values())
             ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => null]))
             ->concat($this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get()
                 ->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));
@@ -176,6 +239,8 @@ class TiendaController extends Controller
     private function contexto(Request $request, Empresa $empresa, array $config): array
     {
         $nombre = $empresa->nombre_comercial ?: $empresa->razon_social;
+        $categorias = $this->catalogo->categorias($empresa);
+        $whatsapp = Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, vi la tienda en línea de {$nombre} y quiero hacer una consulta.");
 
         return [
             'tienda' => [
@@ -184,7 +249,7 @@ class TiendaController extends Controller
                 'logo' => $empresa->logo_url,
                 'descripcion' => $config['descripcion'],
                 'url' => (string) Tienda::url($empresa->tienda_slug),
-                'colores' => config('tienda.colores')[$config['color']],
+                'colores' => Tienda::colores($config),
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
                 'anuncio' => $config['anuncio'],
@@ -199,8 +264,12 @@ class TiendaController extends Controller
             'previa' => (bool) $request->attributes->get('tienda_previa', false),
             'contactos' => $this->catalogo->contactos($empresa, $config),
             // la barra de categorías y el pie van en todas las páginas
-            'categorias' => $this->catalogo->categorias($empresa),
-            'whatsapp' => Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, vi la tienda en línea de {$nombre} y quiero hacer una consulta."),
+            'categorias' => $categorias,
+            'whatsapp' => $whatsapp,
+            'banners' => $this->banners($config, $categorias, $whatsapp),
+            // páginas de texto que la tienda tiene llenas (para el pie y la portada)
+            'paginas' => array_values(array_map(fn ($p) => ['url' => $p['url'], 'titulo' => $p['titulo']], $this->paginas($config))),
+            'nosotros' => $config['nosotros'],
         ];
     }
 }

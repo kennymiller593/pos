@@ -242,6 +242,23 @@
                         @endforeach
                         <li><a href="/catalogo" class="font-medium text-slate-300 transition-colors hover:text-white">Ver todo el catálogo</a></li>
                     </ul>
+                    @if ($paginas)
+                        <h2 class="mt-8 text-sm font-semibold text-white">Información</h2>
+                        <ul class="mt-4 space-y-2.5 text-sm" data-paginas>
+                            @foreach ($paginas as $enlacePagina)
+                                <li><a href="{{ $enlacePagina['url'] }}" class="transition-colors hover:text-white">{{ $enlacePagina['titulo'] }}</a></li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </div>
+            @elseif ($paginas)
+                <div class="lg:col-span-2">
+                    <h2 class="text-sm font-semibold text-white">Información</h2>
+                    <ul class="mt-4 space-y-2.5 text-sm" data-paginas>
+                        @foreach ($paginas as $enlacePagina)
+                            <li><a href="{{ $enlacePagina['url'] }}" class="transition-colors hover:text-white">{{ $enlacePagina['titulo'] }}</a></li>
+                        @endforeach
+                    </ul>
                 </div>
             @endif
 

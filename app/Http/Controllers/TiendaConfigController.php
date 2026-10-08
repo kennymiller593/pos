@@ -67,6 +67,8 @@ class TiendaConfigController extends Controller
                 'dominio' => Tienda::dominio(),
                 'url' => Tienda::url($empresa->tienda_slug),
                 'colores' => collect(config('tienda.colores'))->map(fn ($c) => $c[0])->all(),
+                'categorias' => $this->catalogo->categorias($empresa)->map(fn ($c) => ['id' => $c->id, 'nombre' => $c->nombre])->values(),
+                'limites' => ['banners' => Tienda::MAX_BANNERS, 'preguntas' => Tienda::MAX_PREGUNTAS],
             ],
             'resumen' => $this->catalogo->resumen($empresa),
             'maxDestacados' => CatalogoTiendaService::DESTACADOS,
@@ -88,7 +90,8 @@ class TiendaConfigController extends Controller
         }
 
         $antes = ['slug' => $empresa->tienda_slug, 'publicada' => (bool) $empresa->tienda_publicada];
-        $fotoAnterior = Tienda::config($empresa)['portada_imagen'];
+        $anterior = Tienda::config($empresa);
+        $fotosAnteriores = array_filter([$anterior['portada_imagen'], ...array_column($anterior['banners'], 'imagen')]);
 
         $config = $this->armarConfig($request, $datos, fn ($archivo) => $portada->guardar($archivo, $empresa));
 
@@ -98,9 +101,9 @@ class TiendaConfigController extends Controller
             'tienda_config' => $config,
         ]);
 
-        // la foto que se reemplazó o se quitó ya no se usa
-        if ($fotoAnterior && $fotoAnterior !== $config['portada_imagen']) {
-            $portada->eliminar($fotoAnterior);
+        // las fotos que se reemplazaron o se quitaron (portada o banners) ya no se usan
+        foreach (array_diff($fotosAnteriores, [$config['portada_imagen'], ...array_column($config['banners'], 'imagen')]) as $sobrante) {
+            $portada->eliminar($sobrante);
         }
 
         $ahora = ['slug' => $datos['slug'], 'publicada' => (bool) $datos['publicada']];
@@ -151,7 +154,14 @@ class TiendaConfigController extends Controller
             ],
             'publicada' => ['required', 'boolean'],
             'descripcion' => ['nullable', 'string', 'max:300'],
-            'color' => ['required', Rule::in(array_keys(config('tienda.colores')))],
+            'color' => ['required', Rule::in([...array_keys(config('tienda.colores')), 'propio'])],
+            'color_propio' => ['nullable', 'required_if:color,propio', 'string', function (string $atributo, mixed $valor, \Closure $falla) {
+                if (! Tienda::esColor((string) $valor)) {
+                    $falla('Elige un color válido.');
+                } elseif (! Tienda::colorLegible((string) $valor)) {
+                    $falla('Ese color es muy claro: los botones llevan texto blanco y no se leerían. Elige uno más oscuro.');
+                }
+            }],
             'mostrar_precios' => ['required', 'boolean'],
             'mostrar_stock' => ['required', 'boolean'],
             'whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s()-]{6,20}$/'],
@@ -174,7 +184,42 @@ class TiendaConfigController extends Controller
             'anuncio' => ['nullable', 'string', 'max:120'],
             'portada_imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
             'portada_imagen_quitar' => ['nullable', 'boolean'],
+            // banners (solo cuentan si el formulario avisa que los manda: una lista vacía no viaja)
+            'con_banners' => ['sometimes', 'boolean'],
+            'banners' => ['nullable', 'array', 'max:'.Tienda::MAX_BANNERS],
+            'banners.*.imagen' => ['nullable', 'string', 'max:500'],
+            'banners.*.archivo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
+            'banners.*.titulo' => ['nullable', 'string', 'max:80'],
+            'banners.*.destino' => ['nullable', Rule::in(Tienda::DESTINOS)],
+            'banners.*.categoria' => ['nullable', 'string', 'max:40'],
+            'banners.*.url' => ['nullable', 'string', 'max:300', 'url:https'],
+            // contenido
+            'nosotros' => ['nullable', 'string', 'max:3000'],
+            'envios' => ['nullable', 'string', 'max:2000'],
+            'devoluciones' => ['nullable', 'string', 'max:2000'],
+            'pagos' => ['nullable', 'string', 'max:1000'],
+            'con_preguntas' => ['sometimes', 'boolean'],
+            'preguntas' => ['nullable', 'array', 'max:'.Tienda::MAX_PREGUNTAS],
+            'preguntas.*.pregunta' => ['required', 'string', 'max:160'],
+            'preguntas.*.respuesta' => ['required', 'string', 'max:1000'],
         ], [
+            'color_propio.required_if' => 'Elige tu color.',
+            'banners.max' => 'Puedes tener hasta '.Tienda::MAX_BANNERS.' banners.',
+            'banners.*.archivo.image' => 'El banner debe ser una imagen.',
+            'banners.*.archivo.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
+            'banners.*.archivo.max' => 'El banner no debe pesar más de 6 MB.',
+            'banners.*.titulo.max' => 'El texto del banner no puede pasar de 80 caracteres.',
+            'banners.*.url.url' => 'El enlace debe empezar con https://',
+            'banners.*.url.max' => 'El enlace es demasiado largo.',
+            'nosotros.max' => 'Este texto no puede pasar de 3000 caracteres.',
+            'envios.max' => 'Este texto no puede pasar de 2000 caracteres.',
+            'devoluciones.max' => 'Este texto no puede pasar de 2000 caracteres.',
+            'pagos.max' => 'Este texto no puede pasar de 1000 caracteres.',
+            'preguntas.max' => 'Puedes tener hasta '.Tienda::MAX_PREGUNTAS.' preguntas.',
+            'preguntas.*.pregunta.required' => 'Escribe la pregunta.',
+            'preguntas.*.pregunta.max' => 'La pregunta no puede pasar de 160 caracteres.',
+            'preguntas.*.respuesta.required' => 'Escribe la respuesta.',
+            'preguntas.*.respuesta.max' => 'La respuesta no puede pasar de 1000 caracteres.',
             'slug.required' => 'Elige la dirección de tu tienda.',
             'slug.min' => 'La dirección debe tener al menos 3 caracteres.',
             'slug.max' => 'La dirección no puede pasar de 40 caracteres.',
@@ -199,6 +244,26 @@ class TiendaConfigController extends Controller
             throw ValidationException::withMessages(['portada_imagen' => 'Para el estilo "Foto grande" sube una foto de portada.']);
         }
 
+        // cada banner es una imagen: la que ya tenía guardada o la que está subiendo
+        $guardadas = array_column(Tienda::config($empresa)['banners'], 'imagen');
+        $errores = [];
+
+        foreach ($datos['banners'] ?? [] as $i => $banner) {
+            if (! ($banner['archivo'] ?? null) && ! in_array($banner['imagen'] ?? null, $guardadas, true)) {
+                $errores["banners.{$i}.archivo"] = 'Sube la imagen de este banner.';
+            }
+            if (($banner['destino'] ?? null) === 'url' && blank($banner['url'] ?? null)) {
+                $errores["banners.{$i}.url"] = 'Pega el enlace al que lleva el banner.';
+            }
+            if (($banner['destino'] ?? null) === 'categoria' && blank($banner['categoria'] ?? null)) {
+                $errores["banners.{$i}.categoria"] = 'Elige la categoría a la que lleva el banner.';
+            }
+        }
+
+        if ($errores) {
+            throw ValidationException::withMessages($errores);
+        }
+
         return $datos;
     }
 
@@ -211,7 +276,8 @@ class TiendaConfigController extends Controller
         $actual = Tienda::config($request->user()->empresa);
 
         $config = collect(Tienda::CONFIG)->map(fn ($porDefecto, $clave) => match (true) {
-            ! array_key_exists($clave, $datos) => $actual[$clave],
+            // las listas (banners, preguntas) se arman más abajo
+            is_array($porDefecto) || ! array_key_exists($clave, $datos) => $actual[$clave],
             is_bool($porDefecto) => (bool) $datos[$clave],
             default => filled($datos[$clave]) ? trim((string) $datos[$clave]) : null,
         })->all();
@@ -219,6 +285,32 @@ class TiendaConfigController extends Controller
         // dirección y horario: una por línea, sin líneas vacías ni espacios sobrantes
         foreach (['direccion', 'horario'] as $clave) {
             $config[$clave] = implode("\n", Tienda::lineas($config[$clave])) ?: null;
+        }
+
+        $config['color_propio'] = $config['color'] === 'propio' ? strtoupper((string) $config['color_propio']) : null;
+
+        if ($request->boolean('con_banners')) {
+            $config['banners'] = array_values(array_map(function (array $banner) use ($fotoNueva) {
+                $destino = $banner['destino'] ?? 'ninguno';
+
+                return [
+                    'imagen' => ($banner['archivo'] ?? null) ? $fotoNueva($banner['archivo']) : $banner['imagen'],
+                    'titulo' => filled($banner['titulo'] ?? null) ? trim($banner['titulo']) : null,
+                    'destino' => $destino ?: 'ninguno',
+                    'valor' => match ($destino) {
+                        'categoria' => $banner['categoria'],
+                        'url' => trim($banner['url']),
+                        default => null,
+                    },
+                ];
+            }, $datos['banners'] ?? []));
+        }
+
+        if ($request->boolean('con_preguntas')) {
+            $config['preguntas'] = array_values(array_map(
+                fn (array $p) => ['pregunta' => trim($p['pregunta']), 'respuesta' => trim($p['respuesta'])],
+                $datos['preguntas'] ?? [],
+            ));
         }
 
         $config['portada_estilo'] = $datos['portada_estilo'] ?? $actual['portada_estilo'];

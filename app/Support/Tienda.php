@@ -14,7 +14,8 @@ class Tienda
     /** Claves de tienda_config con su valor por defecto. */
     public const CONFIG = [
         'descripcion' => null,
-        'color' => 'esmeralda',
+        'color' => 'esmeralda', // uno de la paleta, o "propio"
+        'color_propio' => null, // #RRGGBB, cuando color es "propio"
         'mostrar_precios' => false,
         // apagado: la tienda es un catálogo y no mira el stock (nada sale como "Agotado") salvo que el dueño lo pida
         'mostrar_stock' => false,
@@ -33,7 +34,22 @@ class Tienda
         'portada_titulo' => null,
         'portada_boton' => null,
         'anuncio' => null,
+        // banners de la portada: [imagen, titulo, destino, valor]
+        'banners' => [],
+        // contenido: páginas de texto de la tienda
+        'nosotros' => null,
+        'envios' => null,
+        'devoluciones' => null,
+        'pagos' => null,
+        'preguntas' => [], // [pregunta, respuesta]
     ];
+
+    public const MAX_BANNERS = 5;
+
+    public const MAX_PREGUNTAS = 12;
+
+    /** A dónde puede llevar un banner al tocarlo. */
+    public const DESTINOS = ['ninguno', 'catalogo', 'categoria', 'whatsapp', 'url'];
 
     /** Estilos de portada que puede elegir la tienda. */
     public const ESTILOS = ['vitrina', 'foto', 'texto'];
@@ -143,8 +159,14 @@ class Tienda
     {
         $config = array_merge(self::CONFIG, array_intersect_key((array) $empresa->tienda_config, self::CONFIG));
 
-        if (! isset(config('tienda.colores')[$config['color']])) {
+        $propio = $config['color'] === 'propio' && self::colorLegible((string) $config['color_propio']);
+
+        if (! $propio && ! isset(config('tienda.colores')[$config['color']])) {
             $config['color'] = self::CONFIG['color'];
+        }
+
+        foreach (['banners', 'preguntas'] as $lista) {
+            $config[$lista] = array_values(array_filter((array) $config[$lista], 'is_array'));
         }
 
         // el estilo "foto" sin foto no tiene qué mostrar: vuelve a la vitrina
@@ -153,6 +175,51 @@ class Tienda
         }
 
         return $config;
+    }
+
+    /** Los tres tonos de la tienda: [principal, al pasar el cursor, tinte suave]. */
+    public static function colores(array $config): array
+    {
+        if ($config['color'] === 'propio' && self::colorLegible((string) $config['color_propio'])) {
+            $color = strtoupper($config['color_propio']);
+
+            return [$color, self::mezclar($color, '#000000', 0.18), self::mezclar($color, '#FFFFFF', 0.92)];
+        }
+
+        return config('tienda.colores')[$config['color']] ?? config('tienda.colores')[self::CONFIG['color']];
+    }
+
+    public static function esColor(string $color): bool
+    {
+        return (bool) preg_match('/^#[0-9a-fA-F]{6}$/', $color);
+    }
+
+    /** ¿Se lee el texto blanco encima? Los botones y la franja del anuncio van en blanco sobre este color. */
+    public static function colorLegible(string $color): bool
+    {
+        if (! self::esColor($color)) {
+            return false;
+        }
+
+        $canales = array_map(function (string $par) {
+            $c = hexdec($par) / 255;
+
+            return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+        }, str_split(substr($color, 1), 2));
+
+        $luminancia = 0.2126 * $canales[0] + 0.7152 * $canales[1] + 0.0722 * $canales[2];
+
+        // contraste con el blanco de al menos 3 a 1
+        return 1.05 / ($luminancia + 0.05) >= 3;
+    }
+
+    /** Mezcla dos colores: 0 deja el primero, 1 deja el segundo. */
+    private static function mezclar(string $color, string $con, float $cuanto): string
+    {
+        $a = array_map('hexdec', str_split(substr($color, 1), 2));
+        $b = array_map('hexdec', str_split(substr($con, 1), 2));
+
+        return sprintf('#%02X%02X%02X', ...array_map(fn ($x, $y) => (int) round($x + ($y - $x) * $cuanto), $a, $b));
     }
 
     /** "a; b\n c" -> ["a", "b", "c"]: una dirección u horario por línea (también se acepta el punto y coma). */

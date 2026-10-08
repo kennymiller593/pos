@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import {
@@ -21,9 +21,12 @@ import {
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import BannersTienda from '@/Components/Tienda/BannersTienda.vue'
+import ContenidoTienda from '@/Components/Tienda/ContenidoTienda.vue'
+import { claseArea, claseAyuda, claseError, claseInput, claseInterruptor, claseLabel, claseTarjeta } from '@/Components/Tienda/clases'
 
 const props = defineProps({
-    // { slug, sugerencia, publicada, config, dominio, url, colores: { nombre: '#hex' } }
+    // { slug, sugerencia, publicada, config, dominio, url, colores: { nombre: '#hex' }, categorias: [{ id, nombre }], limites: { banners, preguntas } }
     tienda: { type: Object, required: true },
     resumen: { type: Object, required: true },
     maxDestacados: { type: Number, default: 8 },
@@ -33,12 +36,56 @@ const props = defineProps({
 
 const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+// ---- secciones de la pantalla ----
+const SECCIONES = [
+    { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
+    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'mostrar_precios', 'mostrar_stock'] },
+    { valor: 'portada', nombre: 'Portada', campos: ['portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
+    { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
+    { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas'] },
+    { valor: 'productos', nombre: 'Productos', campos: [] },
+]
+const seccion = ref('general')
+
+function irA(valor) {
+    seccion.value = valor
+    // la sección queda en la dirección: al recargar o compartir el enlace se vuelve a la misma
+    history.replaceState(history.state, '', `${location.pathname}${location.search}#${valor}`)
+}
+
+function leerSeccion() {
+    const pedida = location.hash.slice(1)
+    if (SECCIONES.some((s) => s.valor === pedida)) seccion.value = pedida
+}
+
+onMounted(() => {
+    leerSeccion()
+    window.addEventListener('hashchange', leerSeccion)
+})
+onBeforeUnmount(() => window.removeEventListener('hashchange', leerSeccion))
+
 // ---- configuración ----
+const nuevaClave = () => Math.random().toString(36).slice(2)
+// los banners y las preguntas guardados, como filas del formulario
+const bannersGuardados = () =>
+    (props.tienda.config.banners ?? []).map((b) => ({
+        clave: nuevaClave(),
+        imagen: b.imagen,
+        archivo: null, // imagen nueva, si se cambia
+        vista: null, // vista previa local de la imagen nueva
+        titulo: b.titulo ?? '',
+        destino: b.destino ?? 'ninguno',
+        categoria: b.destino === 'categoria' ? (b.valor ?? '') : '',
+        url: b.destino === 'url' ? (b.valor ?? '') : '',
+    }))
+const preguntasGuardadas = () => (props.tienda.config.preguntas ?? []).map((p) => ({ clave: nuevaClave(), pregunta: p.pregunta, respuesta: p.respuesta }))
+
 const form = useForm({
     slug: props.tienda.sugerencia ?? '',
     publicada: props.tienda.publicada,
     descripcion: props.tienda.config.descripcion ?? '',
     color: props.tienda.config.color,
+    color_propio: props.tienda.config.color_propio ?? '#0F766E',
     mostrar_precios: props.tienda.config.mostrar_precios,
     mostrar_stock: props.tienda.config.mostrar_stock,
     whatsapp: props.tienda.config.whatsapp ?? '',
@@ -57,7 +104,44 @@ const form = useForm({
     anuncio: props.tienda.config.anuncio ?? '',
     portada_imagen: null, // archivo nuevo, si se elige uno
     portada_imagen_quitar: false,
+    banners: bannersGuardados(),
+    // contenido: páginas de texto
+    nosotros: props.tienda.config.nosotros ?? '',
+    envios: props.tienda.config.envios ?? '',
+    devoluciones: props.tienda.config.devoluciones ?? '',
+    pagos: props.tienda.config.pagos ?? '',
+    preguntas: preguntasGuardadas(),
 })
+
+/** Lo que viaja al servidor: sin los datos que solo usa la pantalla (claves, vistas locales). */
+function carga(datos) {
+    return {
+        ...datos,
+        con_banners: true,
+        banners: datos.banners.map((b) => ({ imagen: b.imagen ?? '', archivo: b.archivo, titulo: b.titulo, destino: b.destino, categoria: b.categoria, url: b.url })),
+        con_preguntas: true,
+        preguntas: datos.preguntas.map((p) => ({ pregunta: p.pregunta, respuesta: p.respuesta })),
+    }
+}
+
+/** Pasa un objeto con listas y archivos a FormData: banners[0][titulo], banners[0][archivo]... */
+function aFormulario(cuerpo, clave, valor) {
+    if (valor === null || valor === undefined) return
+    if (valor instanceof File) cuerpo.append(clave, valor)
+    else if (Array.isArray(valor)) valor.forEach((v, i) => aFormulario(cuerpo, `${clave}[${i}]`, v))
+    else if (typeof valor === 'object') Object.entries(valor).forEach(([k, v]) => aFormulario(cuerpo, `${clave}[${k}]`, v))
+    else cuerpo.append(clave, typeof valor === 'boolean' ? (valor ? '1' : '0') : valor)
+}
+
+// secciones que tienen algún aviso de error (para marcarlas y saltar a la primera)
+const conError = computed(() => {
+    const campos = Object.keys(form.errors).map((c) => c.split('.')[0])
+    return SECCIONES.filter((s) => s.campos.some((c) => campos.includes(c))).map((s) => s.valor)
+})
+
+function mostrarErrores() {
+    if (conError.value.length && !conError.value.includes(seccion.value)) irA(conError.value[0])
+}
 
 // ---- apariencia de la portada ----
 const ESTILOS = [
@@ -118,10 +202,7 @@ async function vistaPrevia() {
     form.clearErrors()
     try {
         const cuerpo = new FormData()
-        for (const [clave, valor] of Object.entries(form.data())) {
-            if (valor === null || valor === undefined) continue
-            cuerpo.append(clave, typeof valor === 'boolean' ? (valor ? '1' : '0') : valor)
-        }
+        Object.entries(carga(form.data())).forEach(([clave, valor]) => aFormulario(cuerpo, clave, valor))
         const r = await fetch('/tienda-en-linea/vista-previa', {
             method: 'POST',
             headers: { Accept: 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '') },
@@ -136,7 +217,8 @@ async function vistaPrevia() {
         pestana?.close()
         // los mismos avisos que al guardar, cada uno en su campo
         for (const [campo, mensajes] of Object.entries(datos.errors ?? {})) form.setError(campo, mensajes[0])
-        if (!datos.errors) form.setError('vista_previa', datos.message ?? 'No se pudo preparar la vista previa. Inténtalo de nuevo.')
+        if (!datos.errors) form.setError('vista_previa', r.status === 413 ? 'Las imágenes pesan demasiado para la vista previa. Prueba con menos o más livianas.' : (datos.message ?? 'No se pudo preparar la vista previa. Inténtalo de nuevo.'))
+        mostrarErrores()
     } catch {
         pestana?.close()
         form.setError('vista_previa', 'No se pudo preparar la vista previa. Revisa tu conexión.')
@@ -162,16 +244,25 @@ const cambiaDireccion = computed(() => props.tienda.publicada && props.tienda.sl
 
 function guardar() {
     // lleva un archivo (la foto de portada): viaja como formulario con el método PUT indicado dentro
-    form.transform((datos) => ({ ...datos, _method: 'put' })).post('/tienda-en-linea', {
+    form.transform((datos) => ({ ...carga(datos), _method: 'put' })).post('/tienda-en-linea', {
         preserveScroll: true,
         forceFormData: true,
         // lo guardado pasa a ser el punto de partida ("cambios sin guardar" se apaga)
         onSuccess: () => {
             limpiarFotoElegida()
+            // los banners recién subidos ya tienen su dirección guardada
+            form.banners.forEach((b) => b.vista && URL.revokeObjectURL(b.vista))
+            form.banners = bannersGuardados()
+            form.preguntas = preguntasGuardadas()
             form.defaults()
+            // al guardar la dirección pierde la sección: se vuelve a poner
+            irA(seccion.value)
         },
         // si no se pudo publicar (falta un contacto, dirección ocupada...), el estado vuelve al real
-        onError: () => (form.publicada = props.tienda.publicada),
+        onError: () => {
+            form.publicada = props.tienda.publicada
+            mostrarErrores()
+        },
     })
 }
 
@@ -243,16 +334,6 @@ function guardarDescripcion() {
     })
 }
 
-const claseTarjeta = 'rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
-const claseInput =
-    'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
-const claseArea =
-    'block w-full resize-y rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm leading-relaxed placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
-const claseLabel = 'mb-1 block text-sm font-medium'
-const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
-const claseAyuda = 'mt-1 text-xs text-neutral-400 dark:text-neutral-500'
-const claseInterruptor =
-    'relative h-6 w-11 shrink-0 rounded-full bg-stone-300 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-400/50 after:absolute after:top-0.5 after:left-0.5 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5 dark:bg-neutral-700'
 </script>
 
 <template>
@@ -321,9 +402,29 @@ const claseInterruptor =
             </div>
         </div>
 
-        <form class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
+        <!-- Secciones -->
+        <div class="mb-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div class="flex w-max min-w-full gap-1 rounded-xl bg-stone-100 p-1 dark:bg-neutral-800" role="tablist" aria-label="Secciones de la tienda">
+                <button
+                    v-for="s in SECCIONES"
+                    :key="s.valor"
+                    type="button"
+                    role="tab"
+                    :aria-selected="seccion === s.valor"
+                    :data-seccion="s.valor"
+                    class="relative h-9 flex-1 rounded-lg px-4 text-sm font-medium whitespace-nowrap transition-colors"
+                    :class="seccion === s.valor ? 'bg-white shadow-sm dark:bg-neutral-950' : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'"
+                    @click="irA(s.valor)"
+                >
+                    {{ s.nombre }}
+                    <span v-if="conError.includes(s.valor)" class="absolute top-1.5 right-1.5 size-2 rounded-full bg-red-500" aria-label="Tiene un dato por corregir" />
+                </button>
+            </div>
+        </div>
+
+        <form v-show="seccion !== 'productos'" class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
             <!-- Dirección y presentación -->
-            <section :class="[claseTarjeta, 'p-5']">
+            <section v-show="seccion === 'general'" :class="[claseTarjeta, 'p-5']">
                 <h2 class="font-semibold tracking-tight">Dirección y presentación</h2>
 
                 <div class="mt-4">
@@ -362,54 +463,10 @@ const claseInterruptor =
                     <p v-if="form.errors.descripcion" :class="claseError">{{ form.errors.descripcion }}</p>
                     <p v-else :class="claseAyuda">{{ form.descripcion.length }} de 300. Sale en la portada, debajo del nombre de tu negocio.</p>
                 </div>
-
-                <fieldset class="mt-4">
-                    <legend :class="claseLabel">Color de tu tienda</legend>
-                    <div class="flex flex-wrap gap-2">
-                        <label
-                            v-for="(hex, nombre) in tienda.colores"
-                            :key="nombre"
-                            class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
-                            :class="form.color === nombre
-                                ? 'border-neutral-900 bg-stone-50 dark:border-neutral-100 dark:bg-neutral-800'
-                                : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
-                        >
-                            <input v-model="form.color" type="radio" name="color" :value="nombre" class="sr-only" />
-                            <span class="size-5 rounded-full ring-1 ring-black/10" :style="{ backgroundColor: hex }" />
-                            {{ COLORES[nombre] ?? nombre }}
-                        </label>
-                    </div>
-                </fieldset>
-
-                <h3 class="mt-6 text-sm font-semibold tracking-tight">Qué se muestra</h3>
-                <div class="mt-2 divide-y divide-stone-100 rounded-xl border border-stone-200 dark:divide-neutral-800 dark:border-neutral-800">
-                    <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
-                        <span>
-                            <span class="block text-sm font-medium">Mostrar precios</span>
-                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ form.mostrar_precios ? 'Cualquiera puede ver tus precios.' : 'En lugar del precio dirá "Consultar precio".' }}
-                            </span>
-                        </span>
-                        <input v-model="form.mostrar_precios" type="checkbox" class="peer sr-only" />
-                        <span :class="claseInterruptor" aria-hidden="true" />
-                    </label>
-                    <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
-                        <span>
-                            <span class="block text-sm font-medium">Marcar lo agotado</span>
-                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ form.mostrar_stock
-                                    ? 'Lo que no tiene stock sale como "Agotado" y al final del catálogo. Nunca se muestra cuántas unidades hay.'
-                                    : 'La tienda no mira tu stock: todos los productos se muestran igual, haya o no existencias.' }}
-                            </span>
-                        </span>
-                        <input v-model="form.mostrar_stock" type="checkbox" class="peer sr-only" />
-                        <span :class="claseInterruptor" aria-hidden="true" />
-                    </label>
-                </div>
             </section>
 
             <!-- Contactos -->
-            <section :class="[claseTarjeta, 'p-5']">
+            <section v-show="seccion === 'general'" :class="[claseTarjeta, 'p-5']">
                 <h2 class="font-semibold tracking-tight">Contactos</h2>
                 <p class="text-sm text-neutral-500 dark:text-neutral-400">Lo que llenes aparece en tu tienda. Los pedidos llegan a tu WhatsApp.</p>
 
@@ -483,9 +540,83 @@ const claseInterruptor =
 
             </section>
 
-            <!-- Apariencia de la portada -->
-            <section :class="[claseTarjeta, 'p-5 xl:col-span-2']" aria-labelledby="titulo-apariencia">
-                <h2 id="titulo-apariencia" class="font-semibold tracking-tight">Apariencia de la portada</h2>
+            <!-- Apariencia: color y qué se muestra -->
+            <section v-show="seccion === 'apariencia'" :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-color">
+                <h2 id="titulo-color" class="font-semibold tracking-tight">Color de tu tienda</h2>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">Se usa en los botones, los enlaces y la franja del anuncio.</p>
+
+                <fieldset class="mt-4">
+                    <legend class="sr-only">Color de tu tienda</legend>
+                    <div class="flex flex-wrap gap-2">
+                        <label
+                            v-for="(hex, nombre) in tienda.colores"
+                            :key="nombre"
+                            class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
+                            :class="form.color === nombre
+                                ? 'border-neutral-900 bg-stone-50 dark:border-neutral-100 dark:bg-neutral-800'
+                                : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
+                        >
+                            <input v-model="form.color" type="radio" name="color" :value="nombre" class="sr-only" />
+                            <span class="size-5 rounded-full ring-1 ring-black/10" :style="{ backgroundColor: hex }" />
+                            {{ COLORES[nombre] ?? nombre }}
+                        </label>
+                        <label
+                            class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
+                            :class="form.color === 'propio'
+                                ? 'border-neutral-900 bg-stone-50 dark:border-neutral-100 dark:bg-neutral-800'
+                                : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
+                        >
+                            <input v-model="form.color" type="radio" name="color" value="propio" class="sr-only" />
+                            <span class="size-5 rounded-full ring-1 ring-black/10" :style="{ background: form.color === 'propio' ? form.color_propio : 'conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #6366f1, #ec4899, #ef4444)' }" />
+                            Mi color
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div v-if="form.color === 'propio'" class="mt-4">
+                    <label :class="claseLabel" for="tienda_color_propio">El color de tu marca</label>
+                    <div class="flex items-center gap-2">
+                        <input v-model="form.color_propio" type="color" aria-label="Elegir el color" @input="form.clearErrors('color_propio')" class="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" />
+                        <input id="tienda_color_propio" v-model="form.color_propio" type="text" @input="form.clearErrors('color_propio')" maxlength="7" spellcheck="false" autocomplete="off" :class="[claseInput, 'max-w-36 font-mono uppercase']" placeholder="#0F766E" />
+                        <span class="inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold text-white" :style="{ backgroundColor: form.color_propio }">Así se ve un botón</span>
+                    </div>
+                    <p v-if="form.errors.color_propio" :class="claseError">{{ form.errors.color_propio }}</p>
+                    <p v-else :class="claseAyuda">Elige un tono con cuerpo: los botones llevan texto blanco encima.</p>
+                </div>
+            </section>
+
+            <section v-show="seccion === 'apariencia'" :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-muestra">
+                <h2 id="titulo-muestra" class="font-semibold tracking-tight">Qué se muestra</h2>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">Tú decides cuánto ve quien visita tu tienda.</p>
+                <div class="mt-4 divide-y divide-stone-100 rounded-xl border border-stone-200 dark:divide-neutral-800 dark:border-neutral-800">
+                    <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                        <span>
+                            <span class="block text-sm font-medium">Mostrar precios</span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ form.mostrar_precios ? 'Cualquiera puede ver tus precios.' : 'En lugar del precio dirá "Consultar precio".' }}
+                            </span>
+                        </span>
+                        <input v-model="form.mostrar_precios" type="checkbox" class="peer sr-only" />
+                        <span :class="claseInterruptor" aria-hidden="true" />
+                    </label>
+                    <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                        <span>
+                            <span class="block text-sm font-medium">Marcar lo agotado</span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ form.mostrar_stock
+                                    ? 'Lo que no tiene stock sale como "Agotado" y al final del catálogo. Nunca se muestra cuántas unidades hay.'
+                                    : 'La tienda no mira tu stock: todos los productos se muestran igual, haya o no existencias.' }}
+                            </span>
+                        </span>
+                        <input v-model="form.mostrar_stock" type="checkbox" class="peer sr-only" />
+                        <span :class="claseInterruptor" aria-hidden="true" />
+                    </label>
+                </div>
+            </section>
+
+            <!-- Portada -->
+            <section v-show="seccion === 'portada'" :class="[claseTarjeta, 'p-5 xl:col-span-2']" aria-labelledby="titulo-apariencia">
+                <h2 id="titulo-apariencia" class="font-semibold tracking-tight">Portada</h2>
                 <p class="text-sm text-neutral-500 dark:text-neutral-400">Lo primero que ve tu cliente al entrar. Usa "Vista previa" para probar sin que nadie más lo vea.</p>
 
                 <fieldset class="mt-4">
@@ -590,14 +721,30 @@ const claseInterruptor =
                 </div>
             </section>
 
-            <!-- Guardar y vista previa -->
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end xl:col-span-2">
-                <p v-if="form.errors.vista_previa" class="text-sm text-red-600 sm:mr-auto dark:text-red-400">{{ form.errors.vista_previa }}</p>
-                <span v-else-if="form.isDirty" class="text-xs text-neutral-500 sm:mr-auto dark:text-neutral-400">Tienes cambios sin guardar</span>
+            <!-- Banners -->
+            <BannersTienda v-show="seccion === 'banners'" class="xl:col-span-2" :form="form" :categorias="tienda.categorias" :max="tienda.limites.banners" />
+
+            <!-- Contenido: páginas de texto -->
+            <ContenidoTienda
+                v-show="seccion === 'contenido'"
+                class="xl:col-span-2"
+                :form="form"
+                :url="tienda.publicada ? tienda.url : null"
+                :guardado="tienda.config"
+                :max-preguntas="tienda.limites.preguntas"
+            />
+
+            <!-- Guardar y vista previa: siempre a la mano, en cualquier sección -->
+            <div
+                :class="[claseTarjeta, 'sticky bottom-3 z-10 flex flex-wrap items-center gap-x-3 gap-y-2 p-3 shadow-lg shadow-neutral-900/5 sm:justify-end xl:col-span-2']"
+                data-barra-guardar
+            >
+                <p v-if="form.errors.vista_previa" class="w-full text-sm text-red-600 sm:mr-auto sm:w-auto dark:text-red-400">{{ form.errors.vista_previa }}</p>
+                <span v-else-if="form.isDirty" class="w-full text-xs text-neutral-500 sm:mr-auto sm:w-auto dark:text-neutral-400">Tienes cambios sin guardar</span>
                 <button
                     type="button"
                     :disabled="previsualizando || form.processing"
-                    class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-5 text-sm font-semibold transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-5 text-sm font-semibold transition-colors hover:bg-stone-50 disabled:cursor-not-allowed sm:flex-none disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
                     @click="vistaPrevia"
                 >
                     <LoaderCircle v-if="previsualizando" class="size-4 animate-spin" />
@@ -607,7 +754,7 @@ const claseInterruptor =
                 <button
                     type="submit"
                     :disabled="form.processing"
-                    class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    class="inline-flex h-10 flex-1 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
                 >
                     {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
                 </button>
@@ -615,7 +762,7 @@ const claseInterruptor =
         </form>
 
         <!-- Productos de la tienda -->
-        <section :class="[claseTarjeta, 'mt-4 overflow-hidden']" aria-label="Productos de la tienda">
+        <section v-show="seccion === 'productos'" :class="[claseTarjeta, 'overflow-hidden']" aria-label="Productos de la tienda">
             <div class="flex flex-col gap-3 border-b border-stone-200 p-5 dark:border-neutral-800">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <div>

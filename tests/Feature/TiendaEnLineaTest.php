@@ -734,6 +734,147 @@ class TiendaEnLineaTest extends TestCase
         $this->assertSame('Lunes a sábado', $config['horario']);
     }
 
+    public function test_los_banners_se_suben_se_ordenan_enlazan_y_se_quitan(): void
+    {
+        Storage::fake('public');
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+        $banners = fn () => $this->empresa->fresh()->tienda_config['banners'];
+        $categoria = Categoria::where('empresa_id', $this->empresa->id)->value('id');
+
+        $this->tienda('/')->assertDontSee('data-banners', false);
+
+        // un banner es una imagen: sin ella, o con otra cosa, no pasa
+        $guardar(['con_banners' => true, 'banners' => [['titulo' => 'Sin imagen', 'destino' => 'catalogo']]])->assertSessionHasErrors('banners.0.archivo');
+        $guardar(['con_banners' => true, 'banners' => [['archivo' => UploadedFile::fake()->create('promo.pdf', 50, 'application/pdf')]]])->assertSessionHasErrors('banners.0.archivo');
+        // no se puede "guardar" como banner una imagen que no subió esta tienda
+        $guardar(['con_banners' => true, 'banners' => [['imagen' => 'https://otro-sitio.com/foto.jpg', 'destino' => 'ninguno']]])->assertSessionHasErrors('banners.0.archivo');
+
+        $guardar(['con_banners' => true, 'banners' => [
+            ['archivo' => UploadedFile::fake()->image('siembra.jpg', 3200, 1200), 'titulo' => 'Campaña de siembra', 'destino' => 'catalogo'],
+            ['archivo' => UploadedFile::fake()->image('riego.png', 1600, 600), 'destino' => 'categoria', 'categoria' => $categoria],
+        ]])->assertSessionHasNoErrors();
+
+        [$uno, $dos] = $banners();
+        $this->assertSame(['Campaña de siembra', 'catalogo', null], [$uno['titulo'], $uno['destino'], $uno['valor']]);
+        $this->assertSame([null, 'categoria', $categoria], [$dos['titulo'], $dos['destino'], $dos['valor']]);
+        $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
+        [$ancho] = getimagesizefromstring(Storage::disk('public')->get(substr($uno['imagen'], strlen('/storage/'))));
+        $this->assertSame(1920, $ancho); // se guarda reducido
+
+        $this->tienda('/')->assertOk()
+            ->assertSee('data-banners', false)
+            ->assertSeeInOrder([$uno['imagen'], 'Campaña de siembra', $dos['imagen']], false)
+            ->assertSee('href="/categoria/fertilizantes"', false);
+        // los banners son de la portada: el catálogo no los repite
+        $this->tienda('/catalogo')->assertDontSee('data-banners', false);
+
+        // guardar otra cosa (sin tocar los banners) los conserva
+        $guardar(['anuncio' => 'Hola'])->assertSessionHasNoErrors();
+        $this->assertCount(2, $banners());
+
+        // se cambia el orden, el enlace y se reemplaza una imagen: la anterior se borra
+        $guardar(['con_banners' => true, 'banners' => [
+            ['imagen' => $dos['imagen'], 'destino' => 'url', 'url' => 'https://www.facebook.com/agrocampo'],
+            ['imagen' => $uno['imagen'], 'archivo' => UploadedFile::fake()->image('nueva.jpg', 1600, 600), 'destino' => 'whatsapp'],
+        ]])->assertSessionHasNoErrors();
+        [$primero, $segundo] = $banners();
+        $this->assertSame($dos['imagen'], $primero['imagen']);
+        $this->assertSame('https://www.facebook.com/agrocampo', $primero['valor']);
+        $this->assertNotSame($uno['imagen'], $segundo['imagen']);
+        Storage::disk('public')->assertMissing(substr($uno['imagen'], strlen('/storage/')));
+        $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
+        $this->tienda('/')->assertSee('href="https://www.facebook.com/agrocampo" target="_blank"', false)->assertSee('wa.me/51987654321', false);
+
+        // un enlace que no sea https, o "a otro enlace" sin enlace, no pasa
+        $guardar(['con_banners' => true, 'banners' => [['imagen' => $primero['imagen'], 'destino' => 'url', 'url' => 'javascript:alert(1)']]])->assertSessionHasErrors('banners.0.url');
+        $guardar(['con_banners' => true, 'banners' => [['imagen' => $primero['imagen'], 'destino' => 'url']]])->assertSessionHasErrors('banners.0.url');
+        $guardar(['con_banners' => true, 'banners' => array_fill(0, Tienda::MAX_BANNERS + 1, ['imagen' => $primero['imagen'], 'destino' => 'ninguno'])])->assertSessionHasErrors('banners');
+
+        // quitarlos todos borra sus imágenes
+        $guardar(['con_banners' => true])->assertSessionHasNoErrors();
+        $this->assertSame([], $banners());
+        $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
+        $this->tienda('/')->assertDontSee('data-banners', false);
+    }
+
+    public function test_el_contenido_crea_las_paginas_de_la_tienda(): void
+    {
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        // sin contenido no hay páginas ni enlaces
+        foreach (['/nosotros', '/politicas', '/preguntas-frecuentes'] as $ruta) {
+            $this->tienda($ruta)->assertNotFound();
+        }
+        $this->tienda('/')->assertDontSee('data-paginas', false)->assertDontSee('Conócenos');
+
+        $guardar([
+            'nosotros' => "Somos una agroveterinaria familiar.\n\nAtendemos desde 2010 en Huánuco.",
+            'envios' => 'Enviamos por agencia a todo el país.',
+            'pagos' => 'Efectivo, Yape y Plin.',
+            'con_preguntas' => true,
+            'preguntas' => [
+                ['pregunta' => '¿Venden por mayor?', 'respuesta' => 'Sí, desde 10 unidades.'],
+                ['pregunta' => '¿Dan factura?', 'respuesta' => "Sí.\nBoleta o factura electrónica."],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $this->tienda('/')->assertOk()
+            ->assertSee('Sobre Agro Campo')
+            ->assertSee('Somos una agroveterinaria familiar.')
+            ->assertSeeInOrder(['data-paginas', 'href="/nosotros"', 'href="/politicas"', 'href="/preguntas-frecuentes"'], false);
+
+        $this->tienda('/nosotros')->assertOk()
+            ->assertSee('<title>Sobre nosotros · Agro Campo</title>', false)
+            ->assertSee('<link rel="canonical" href="http://agro.tienda.test/nosotros">', false)
+            ->assertSee('<p>Somos una agroveterinaria familiar.</p>', false)
+            ->assertSee('<p>Atendemos desde 2010 en Huánuco.</p>', false);
+        // solo salen las políticas que el dueño escribió
+        $this->tienda('/politicas')->assertOk()
+            ->assertSee('Envíos y entregas')->assertSee('Enviamos por agencia a todo el país.')
+            ->assertSee('Formas de pago')
+            ->assertDontSee('Cambios y devoluciones');
+        $this->tienda('/preguntas-frecuentes')->assertOk()
+            ->assertSee('¿Venden por mayor?')
+            ->assertSee("Sí.<br />\nBoleta o factura electrónica.", false)
+            ->assertSee('"@type":"FAQPage"', false);
+        $this->tienda('/sitemap.xml')
+            ->assertSee('<loc>http://agro.tienda.test/nosotros</loc>', false)
+            ->assertSee('<loc>http://agro.tienda.test/preguntas-frecuentes</loc>', false);
+
+        // el texto es plano: lo que parezca HTML se muestra tal cual, no se ejecuta
+        $guardar(['nosotros' => '<script>alert(1)</script> Hola'])->assertSessionHasNoErrors();
+        $this->tienda('/nosotros')->assertDontSee('<script>alert(1)</script>', false)->assertSee('&lt;script&gt;alert(1)&lt;/script&gt; Hola', false);
+        // guardar sin mandar las preguntas las conserva; mandarlas vacías las quita
+        $this->assertCount(2, $this->empresa->fresh()->tienda_config['preguntas']);
+        $guardar(['con_preguntas' => true, 'preguntas' => [['pregunta' => '¿Sin respuesta?', 'respuesta' => '']]])->assertSessionHasErrors('preguntas.0.respuesta');
+        $guardar(['con_preguntas' => true, 'nosotros' => ''])->assertSessionHasNoErrors();
+        $this->tienda('/preguntas-frecuentes')->assertNotFound();
+        $this->tienda('/nosotros')->assertNotFound();
+    }
+
+    public function test_la_tienda_puede_usar_el_color_de_su_marca(): void
+    {
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        $guardar(['color' => 'propio'])->assertSessionHasErrors('color_propio');
+        $guardar(['color' => 'propio', 'color_propio' => 'morado'])->assertSessionHasErrors('color_propio');
+        $guardar(['color' => 'propio', 'color_propio' => '#fff; } body { display:none'])->assertSessionHasErrors('color_propio');
+        // muy claro: el texto blanco de los botones no se leería
+        $guardar(['color' => 'propio', 'color_propio' => '#FDE047'])->assertSessionHasErrors('color_propio');
+
+        $guardar(['color' => 'propio', 'color_propio' => '#7c3aed'])->assertSessionHasNoErrors();
+        $this->assertSame('#7C3AED', $this->empresa->fresh()->tienda_config['color_propio']);
+        $this->tienda('/')->assertSee('--marca: #7C3AED;', false);
+
+        // volver a un color de la paleta olvida el propio
+        $guardar(['color' => 'rojo'])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['color_propio']);
+        $this->tienda('/')->assertSee('--marca: #DC2626;', false);
+    }
+
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void
     {
         $empresa = new Empresa(['ruc' => '20123456786', 'razon_social' => 'AGRO EL SEMBRADOR S.A.C.']);
