@@ -81,7 +81,7 @@
     $lugar = $contactos['ciudad'] ? " en {$contactos['ciudad']}" : '';
     $resumenListado = match (true) {
         $buscar !== '' => null,
-        $categoria !== null => "{$categoria->nombre}{$lugar}: {$productos->total()} ".($productos->total() === 1 ? 'producto' : 'productos')." en {$tienda['nombre']}. ".($tienda['descripcion'] ?: 'Mira el catálogo y haz tu pedido por WhatsApp.'),
+        $categoria !== null => ($categoria->texto ?? null) ?: "{$categoria->nombre}{$lugar}: {$productos->total()} ".($productos->total() === 1 ? 'producto' : 'productos')." en {$tienda['nombre']}. ".($tienda['descripcion'] ?: 'Mira el catálogo y haz tu pedido por WhatsApp.'),
         ! $portada => "Catálogo completo de {$tienda['nombre']}{$lugar}: {$productos->total()} productos en {$categorias->count()} categorías. ".($tienda['descripcion'] ?: 'Pide por WhatsApp.'),
         default => null,
     };
@@ -113,7 +113,9 @@
         {{-- Portada: el dueño elige entre vitrina de productos, foto grande o solo texto --}}
         @if ($tienda['portada']['estilo'] === 'foto')
             <section class="relative isolate overflow-hidden bg-slate-900" data-portada="foto">
-                <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover">
+                {{-- en el celular se descarga la versión chica --}}
+                <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover"
+                    @if ($tienda['portada']['imagen_movil']) srcset="{{ $tienda['portada']['imagen_movil'] }} 900w, {{ $tienda['portada']['imagen'] }} 1600w" sizes="100vw" @endif>
                 {{-- velo oscuro: el texto se lee sobre cualquier foto, clara u oscura --}}
                 <div class="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/25" aria-hidden="true"></div>
                 <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
@@ -276,6 +278,9 @@
                         Todos los productos
                     @endif
                 </{{ $etiquetaTitulo }}>
+                @if ($categoria && ($categoria->texto ?? null) && $buscar === '' && $pagina === 1)
+                    <p class="mt-2 max-w-3xl leading-relaxed text-slate-600">{{ $categoria->texto }}</p>
+                @endif
                 <p class="mt-1 text-slate-500">
                     {{ number_format($productos->total()) }} producto{{ $productos->total() === 1 ? '' : 's' }}@if ($buscar !== '' && $categoria) en {{ $categoria->nombre }}@endif
                     @if ($filtrando)
@@ -356,7 +361,8 @@
                 @else
                     <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-5 {{ $conPanel ? 'xl:grid-cols-4' : 'lg:grid-cols-4' }}">
                         @foreach ($productos as $p)
-                            @include('tienda.tarjeta', ['p' => $p, 'conInsignia' => true])
+                            {{-- en el catálogo, la primera fila es lo primero que se ve: se carga con prioridad --}}
+                            @include('tienda.tarjeta', ['p' => $p, 'conInsignia' => true, 'prioritaria' => ! $portada && $loop->index < 4])
                         @endforeach
                     </div>
 

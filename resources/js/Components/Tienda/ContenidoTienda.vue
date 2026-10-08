@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { ExternalLink, Plus, Trash2 } from '@lucide/vue'
 import { claseArea, claseAyuda, claseError, claseInput, claseLabel, claseTarjeta } from './clases'
 
@@ -10,7 +11,12 @@ const props = defineProps({
     // lo que está guardado hoy: una página solo existe si su texto ya se guardó
     guardado: { type: Object, required: true },
     maxPreguntas: { type: Number, default: 12 },
+    nombre: { type: String, default: '' },
 })
+
+// así se vería en Google (aproximado)
+const tituloGoogle = computed(() => props.form.seo_titulo?.trim() || `${props.nombre} | Catálogo y pedidos en línea`)
+const descripcionGoogle = computed(() => props.form.seo_descripcion?.trim() || props.form.descripcion?.trim() || `Catálogo en línea de ${props.nombre}. Mira nuestros productos y haz tu pedido por WhatsApp.`)
 
 const TEXTOS = [
     {
@@ -136,6 +142,55 @@ const error = (indice, campo) => props.form.errors[`preguntas.${indice}.${campo}
                     </button>
                 </li>
             </ul>
+        </section>
+
+        <!-- Para Google -->
+        <section :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-google" data-seo-tienda>
+            <h2 id="titulo-google" class="font-semibold tracking-tight">Cómo sale tu portada en Google</h2>
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                Lo que Google muestra cuando alguien busca tu negocio. Di qué vendes y dónde: "Agroveterinaria en Huánuco: fertilizantes, semillas y más".
+            </p>
+            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                <div class="space-y-4">
+                    <div>
+                        <label :class="claseLabel" for="seo_titulo">Título para Google <span class="font-normal text-neutral-400">(opcional)</span></label>
+                        <input id="seo_titulo" v-model="form.seo_titulo" type="text" maxlength="70" :class="claseInput" :placeholder="`${nombre} · Agroveterinaria en tu ciudad`" />
+                        <p v-if="form.errors.seo_titulo" :class="claseError">{{ form.errors.seo_titulo }}</p>
+                        <p v-else :class="claseAyuda">{{ (form.seo_titulo ?? '').length }} de 70. Lo ideal: menos de 60 caracteres.</p>
+                    </div>
+                    <div>
+                        <label :class="claseLabel" for="seo_descripcion">Descripción para Google <span class="font-normal text-neutral-400">(opcional)</span></label>
+                        <textarea id="seo_descripcion" v-model="form.seo_descripcion" rows="3" maxlength="170" :class="claseArea" placeholder="Vendemos fertilizantes, semillas, agroquímicos y productos veterinarios en Huánuco. Pide por WhatsApp y recoge en tienda." />
+                        <p v-if="form.errors.seo_descripcion" :class="claseError">{{ form.errors.seo_descripcion }}</p>
+                        <p v-else :class="claseAyuda">{{ (form.seo_descripcion ?? '').length }} de 170. Lo ideal: entre 120 y 155. Si lo dejas vacío, sale tu presentación.</p>
+                    </div>
+                </div>
+                <!-- vista previa del resultado -->
+                <div class="rounded-2xl border border-stone-200 bg-stone-50 p-4 dark:border-neutral-800 dark:bg-neutral-950" aria-hidden="true">
+                    <p class="text-xs text-neutral-500">Así se vería, aproximadamente:</p>
+                    <div class="mt-3 rounded-xl bg-white p-4 shadow-sm dark:bg-neutral-900">
+                        <p class="truncate text-xs text-neutral-600 dark:text-neutral-300">{{ (url || 'https://tu-negocio.inkanet.pro').replace(/\/$/, '') }}</p>
+                        <p class="mt-1 line-clamp-1 text-lg leading-snug text-blue-700 dark:text-blue-400">{{ tituloGoogle }}</p>
+                        <p class="mt-1 line-clamp-2 text-sm text-neutral-700 dark:text-neutral-300">{{ descripcionGoogle }}</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Texto por categoría -->
+        <section v-if="form.categorias_texto.length" :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-categorias-texto" data-categorias-texto>
+            <h2 id="titulo-categorias-texto" class="font-semibold tracking-tight">Presentación de cada categoría</h2>
+            <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                Una o dos frases que salen al inicio de la página de la categoría y en Google. Qué hay, para qué sirve, qué marcas tienes. Puedes dejar las que quieras vacías.
+            </p>
+            <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                <div v-for="(c, i) in form.categorias_texto" :key="c.id">
+                    <label :class="claseLabel" :for="`categoria_texto_${c.id}`">{{ c.nombre }}</label>
+                    <textarea :id="`categoria_texto_${c.id}`" v-model="c.texto" rows="2" maxlength="400" :class="claseArea" :placeholder="`${c.nombre} para tu campo: marcas, presentaciones y asesoría en tienda.`" />
+                    <p v-if="form.errors[`categorias_texto.${c.id}`]" :class="claseError">{{ form.errors[`categorias_texto.${c.id}`] }}</p>
+                    <p v-else :class="claseAyuda">{{ (c.texto ?? '').length }} de 400</p>
+                </div>
+            </div>
         </section>
     </div>
 </template>

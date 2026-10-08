@@ -257,13 +257,27 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $base = rtrim((string) Tienda::urlDe($empresa), '/');
 
-        $urls = collect([['loc' => $base.'/', 'lastmod' => null], ['loc' => $base.'/catalogo', 'lastmod' => null]])
-            ->concat(collect($this->paginas(Tienda::config($empresa)))->map(fn ($p) => ['loc' => $base.$p['url'], 'lastmod' => null])->values())
-            ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => null]))
-            ->concat($this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get()
-                ->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));
+        $productos = $this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get();
+        // la portada, el catálogo y cada categoría cambian cuando cambia alguno de sus productos
+        $fecha = fn ($coleccion) => $coleccion->max('actualizado_en')?->toDateString();
+        $porCategoria = $productos->groupBy('categoria_id')->map($fecha);
+        $general = $fecha($productos) ?? $empresa->actualizado_en?->toDateString();
+
+        $urls = collect([['loc' => $base.'/', 'lastmod' => $general], ['loc' => $base.'/catalogo', 'lastmod' => $general]])
+            ->concat(collect($this->paginas(Tienda::config($empresa)))->map(fn ($p) => ['loc' => $base.$p['url'], 'lastmod' => $empresa->actualizado_en?->toDateString()])->values())
+            ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => $porCategoria[$c->id] ?? $general]))
+            ->concat($productos->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));
 
         return response()->view('tienda.sitemap', ['urls' => $urls])->header('Content-Type', 'application/xml; charset=utf-8');
+    }
+
+    /** robots.txt propio de cada tienda: todo se puede rastrear salvo las sugerencias del buscador, y declara su sitemap. */
+    public function robots(Request $request): Response
+    {
+        $empresa = $this->empresa($request);
+        $base = rtrim((string) Tienda::urlDe($empresa), '/');
+
+        return response("User-agent: *\nAllow: /\nDisallow: /buscar\n\nSitemap: {$base}/sitemap.xml\n")->header('Content-Type', 'text/plain; charset=utf-8');
     }
 
     private function empresa(Request $request): Empresa
@@ -275,7 +289,8 @@ class TiendaController extends Controller
     private function contexto(Request $request, Empresa $empresa, array $config): array
     {
         $nombre = $empresa->nombre_comercial ?: $empresa->razon_social;
-        $categorias = $this->catalogo->categorias($empresa);
+        // cada categoría con el texto que el dueño escribió para ella (si lo hay)
+        $categorias = $this->catalogo->categorias($empresa)->each(fn ($c) => $c->texto = $config['categorias_texto'][$c->id] ?? null);
         $whatsapp = Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, vi la tienda en línea de {$nombre} y quiero hacer una consulta.");
 
         return [
@@ -290,9 +305,11 @@ class TiendaController extends Controller
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
                 'anuncio' => $config['anuncio'],
+                'seo' => ['titulo' => $config['seo_titulo'], 'descripcion' => $config['seo_descripcion']],
                 'portada' => [
                     'estilo' => $config['portada_estilo'],
                     'imagen' => $config['portada_imagen'],
+                    'imagen_movil' => $config['portada_imagen_movil'],
                     'titulo' => $config['portada_titulo'] ?: $nombre,
                     'boton' => $config['portada_boton'] ?: 'Ver catálogo',
                 ],

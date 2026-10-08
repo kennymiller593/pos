@@ -34,6 +34,7 @@ class Tienda
         // apariencia de la portada
         'portada_estilo' => 'vitrina',
         'portada_imagen' => null,
+        'portada_imagen_movil' => null, // la misma foto, más chica, para el celular
         'favicon' => null, // ícono de la pestaña del navegador (PNG cuadrado); sin él se usa el logo
         'portada_titulo' => null,
         'portada_boton' => null,
@@ -46,6 +47,12 @@ class Tienda
         'devoluciones' => null,
         'pagos' => null,
         'preguntas' => [], // [pregunta, respuesta]
+        // para los buscadores
+        'seo_titulo' => null, // título de la portada en Google (si no, el nombre + "Catálogo y pedidos en línea")
+        'seo_descripcion' => null, // descripción de la portada en Google (si no, la presentación)
+        'categorias_texto' => [], // id de categoría => texto que presenta la categoría
+        // "UREA 46% X 50 KG" se muestra como "Urea 46% x 50 kg"
+        'nombres_bonitos' => true,
     ];
 
     public const MAX_BANNERS = 5;
@@ -320,6 +327,7 @@ class Tienda
         foreach (['banners', 'preguntas'] as $lista) {
             $config[$lista] = array_values(array_filter((array) $config[$lista], 'is_array'));
         }
+        $config['categorias_texto'] = array_filter((array) $config['categorias_texto'], 'is_string');
 
         // el estilo "foto" sin foto no tiene qué mostrar: vuelve a la vitrina
         if (! in_array($config['portada_estilo'], self::ESTILOS, true) || ($config['portada_estilo'] === 'foto' && blank($config['portada_imagen']))) {
@@ -392,6 +400,50 @@ class Tienda
         $b = array_map('hexdec', str_split(substr($con, 1), 2));
 
         return sprintf('#%02X%02X%02X', ...array_map(fn ($x, $y) => (int) round($x + ($y - $x) * $cuanto), $a, $b));
+    }
+
+    /** Unidades y códigos de formulación que se escriben de una forma fija. */
+    private const UNIDADES = ['ML' => 'ml', 'KG' => 'kg', 'G' => 'g', 'GR' => 'gr', 'LT' => 'lt', 'L' => 'L', 'CC' => 'cc', 'UND' => 'und', 'UN' => 'un', 'X' => 'x'];
+
+    private const CODIGOS = ['SC', 'EC', 'WP', 'WG', 'SL', 'EW', 'OD', 'CS', 'FS', 'SG', 'DF', 'ME', 'ZC', 'SE', 'SP', 'WDG', 'UV', 'PVC', 'HDPE', 'LED', 'ATV', 'NPK'];
+
+    /**
+     * Un nombre escrito todo en mayúsculas ("UREA 46% X 50 KG") se muestra como oración
+     * ("Urea 46% x 50 kg"). Los que ya tienen minúsculas se dejan como están.
+     */
+    public static function nombreBonito(string $nombre): string
+    {
+        if (! preg_match('/\p{Lu}/u', $nombre) || preg_match('/\p{Ll}/u', $nombre)) {
+            return $nombre;
+        }
+
+        $palabras = preg_split('/(\s+)/u', trim($nombre), -1, PREG_SPLIT_DELIM_CAPTURE);
+        $primera = true;
+
+        foreach ($palabras as $i => $palabra) {
+            if (trim($palabra) === '') {
+                continue;
+            }
+            $limpia = trim($palabra, '()[],.;:');
+
+            if (isset(self::UNIDADES[$limpia])) {
+                $palabras[$i] = str_replace($limpia, self::UNIDADES[$limpia], $palabra);
+            } elseif (in_array($limpia, self::CODIGOS, true) || preg_match('/\d/', $limpia)) {
+                // "250 SC", "100ML", "5X1": se quedan como están
+            } else {
+                $minuscula = mb_strtolower($palabra, 'UTF-8');
+                $palabras[$i] = $primera ? mb_strtoupper(mb_substr($minuscula, 0, 1), 'UTF-8').mb_substr($minuscula, 1) : $minuscula;
+            }
+            $primera = false;
+        }
+
+        return implode('', $palabras);
+    }
+
+    /** El nombre tal como lo muestra la tienda, según la preferencia del dueño. */
+    public static function nombreVisible(string $nombre, array $config): string
+    {
+        return ($config['nombres_bonitos'] ?? true) ? self::nombreBonito($nombre) : $nombre;
     }
 
     /** "a; b\n c" -> ["a", "b", "c"]: una dirección u horario por línea (también se acepta el punto y coma). */

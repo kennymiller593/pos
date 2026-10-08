@@ -17,6 +17,21 @@ class CabecerasTienda
 
     public function handle(Request $request, Closure $next): Response
     {
-        return $this->cabeceras->handle($request, $next);
+        $respuesta = $this->cabeceras->handle($request, $next);
+
+        // La tienda no usa sesión ni cookies: sus páginas pueden guardarse en la caché de borde (Cloudflare)
+        // un minuto, y servirse al instante mientras se renuevan. El borrador del dueño (vista previa) y las
+        // respuestas JSON del buscador no. Al guardar cambios, además, se purga (CloudflareService).
+        $cacheable = $request->isMethod('GET')
+            && $respuesta->getStatusCode() === 200
+            && ! $request->attributes->get('tienda_previa')
+            && ! $respuesta->headers->has('Set-Cookie')
+            && ! str_contains((string) $respuesta->headers->get('Content-Type'), 'json');
+
+        if ($cacheable) {
+            $respuesta->headers->set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
+        }
+
+        return $respuesta;
     }
 }

@@ -24,6 +24,9 @@ return [
     // (tiendas.inkanet.pro, el "fallback origin" de Cloudflare for SaaS); 'dominios' es quien emite
     // el certificado: 'cloudflare', o 'simulado' en desarrollo (acepta todo sin DNS ni Cloudflare).
     // Sin ambos, la sección "Dominio" no se ofrece.
+    // al guardar cambios se le pide a Cloudflare que olvide las páginas cacheadas de la tienda
+    'purga' => (bool) env('TIENDA_PURGA_CACHE', true),
+
     'origen' => env('TIENDA_ORIGEN') ?: null,
     'dominios' => env('TIENDA_DOMINIOS') ?: null,
 

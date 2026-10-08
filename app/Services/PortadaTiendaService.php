@@ -16,9 +16,12 @@ use Illuminate\Support\Str;
 class PortadaTiendaService
 {
     /** La foto de portada se ve a todo el ancho: se guarda como máximo a este tamaño. */
-    public const ANCHO = 1920;
+    public const ANCHO = 1600;
 
     public const ALTO = 1200;
+
+    /** La misma foto para el celular, donde 900 px de ancho sobran. */
+    public const ANCHO_MOVIL = 900;
 
     /** Minutos que dura un enlace de vista previa. */
     public const MINUTOS_PREVIA = 30;
@@ -27,10 +30,29 @@ class PortadaTiendaService
 
     public function __construct(private readonly ImagenProductoService $imagenes) {}
 
-    /** Guarda la foto de portada (ya optimizada) y devuelve su dirección. */
+    /** Guarda una foto (banner) optimizada y devuelve su dirección. */
     public function guardar(UploadedFile $archivo, Empresa $empresa): string
     {
-        [$contenido, $extension] = $this->preparar($archivo);
+        return $this->subir($this->preparar($archivo), $empresa);
+    }
+
+    /**
+     * La foto de portada en dos tamaños: grande (pantallas anchas) y para el celular.
+     *
+     * @return array{0: string, 1: string} direcciones de la grande y de la móvil
+     */
+    public function guardarPortada(UploadedFile $archivo, Empresa $empresa): array
+    {
+        return [
+            $this->subir($this->preparar($archivo, self::ANCHO, self::ALTO, 72), $empresa),
+            $this->subir($this->preparar($archivo, self::ANCHO_MOVIL, self::ALTO, 70), $empresa),
+        ];
+    }
+
+    /** @param  array{0: string, 1: string}  $preparada  binario y extensión */
+    private function subir(array $preparada, Empresa $empresa): string
+    {
+        [$contenido, $extension] = $preparada;
 
         $carpeta = $this->imagenes->enNube() ? "empresas/{$empresa->id}/tienda" : 'tienda';
         $ruta = $carpeta.'/'.Str::uuid().'.'.$extension;
@@ -122,7 +144,7 @@ class PortadaTiendaService
      *
      * @return array{0: string, 1: string} binario y extensión
      */
-    private function preparar(UploadedFile $archivo): array
+    private function preparar(UploadedFile $archivo, int $maxAncho = self::ANCHO, int $maxAlto = self::ALTO, int $calidad = 80): array
     {
         $original = (string) file_get_contents($archivo->getRealPath());
         $imagen = function_exists('imagecreatefromstring') ? @imagecreatefromstring($original) : false;
@@ -133,7 +155,7 @@ class PortadaTiendaService
 
         $ancho = imagesx($imagen);
         $alto = imagesy($imagen);
-        $factor = min(1, self::ANCHO / $ancho, self::ALTO / $alto);
+        $factor = min(1, $maxAncho / $ancho, $maxAlto / $alto);
 
         if ($factor < 1) {
             $reducida = imagecreatetruecolor(max(1, (int) round($ancho * $factor)), max(1, (int) round($alto * $factor)));
@@ -144,10 +166,10 @@ class PortadaTiendaService
         }
 
         ob_start();
-        $webp = function_exists('imagewebp') && imagewebp($imagen, null, 80);
+        $webp = function_exists('imagewebp') && imagewebp($imagen, null, $calidad);
         if (! $webp) {
             ob_clean();
-            imagejpeg($imagen, null, 82);
+            imagejpeg($imagen, null, $calidad + 2);
         }
         $binario = (string) ob_get_clean();
         imagedestroy($imagen);

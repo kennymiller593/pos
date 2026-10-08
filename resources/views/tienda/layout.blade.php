@@ -1,7 +1,8 @@
 @php
-    $titulo = trim($__env->yieldContent('titulo')) ?: "{$tienda['nombre']} | Catálogo y pedidos en línea".($contactos['ciudad'] ? " en {$contactos['ciudad']}" : '');
+    // la portada (sin título propio) usa el que el dueño escribió para Google, si lo hay
+    $titulo = trim($__env->yieldContent('titulo')) ?: ($tienda['seo']['titulo'] ?: "{$tienda['nombre']} | Catálogo y pedidos en línea".($contactos['ciudad'] ? " en {$contactos['ciudad']}" : ''));
     // una sola línea: la descripción puede venir con saltos y eso ensucia el resultado en el buscador
-    $resumen = \Illuminate\Support\Str::squish(trim($__env->yieldContent('resumen')) ?: ($tienda['descripcion'] ?: "Catálogo en línea de {$tienda['nombre']}. Mira nuestros productos y haz tu pedido por WhatsApp."));
+    $resumen = \Illuminate\Support\Str::squish(trim($__env->yieldContent('resumen')) ?: ($tienda['seo']['descripcion'] ?: ($tienda['descripcion'] ?: "Catálogo en línea de {$tienda['nombre']}. Mira nuestros productos y haz tu pedido por WhatsApp.")));
     $canonica = trim($__env->yieldContent('canonica')) ?: $tienda['url'];
     // las fotos locales son rutas relativas: para compartir el enlace deben ir completas
     $absoluta = fn (?string $ruta) => $ruta ? (str_starts_with($ruta, 'http') ? $ruta : rtrim($tienda['url'], '/').$ruta) : null;

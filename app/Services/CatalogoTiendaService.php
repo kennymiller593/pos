@@ -187,17 +187,29 @@ class CatalogoTiendaService
     /** Otros productos de la misma categoría, para seguir mirando. */
     public function relacionados(Empresa $empresa, Producto $producto, int $cuantos = 4): Collection
     {
-        if (! $producto->categoria_id) {
-            return collect();
+        $relacionados = $producto->categoria_id
+            ? $this->productos($empresa)
+                ->where('productos.categoria_id', $producto->categoria_id)
+                ->whereKeyNot($producto->id)
+                ->orderByDesc('productos.destacado')
+                ->orderBy('productos.nombre')
+                ->limit($cuantos)
+                ->get()
+            : $this->productos($empresa)->whereRaw('false')->get();
+
+        // en una categoría chica se completa con productos de nombre parecido ("Urea ..."), aunque sean de otra
+        if ($relacionados->count() < $cuantos && preg_match('/^(\p{L}{3,})/u', trim($producto->nombre), $m)) {
+            $parecidos = $this->productos($empresa)
+                ->where('productos.nombre', 'ilike', addcslashes($m[1], '%_\\').'%')
+                ->whereKeyNot($producto->id)
+                ->whereNotIn('productos.id', $relacionados->modelKeys())
+                ->orderBy('productos.nombre')
+                ->limit($cuantos - $relacionados->count())
+                ->get();
+            $relacionados = $relacionados->concat($parecidos);
         }
 
-        return $this->productos($empresa)
-            ->where('productos.categoria_id', $producto->categoria_id)
-            ->whereKeyNot($producto->id)
-            ->orderByDesc('productos.destacado')
-            ->orderBy('productos.nombre')
-            ->limit($cuantos)
-            ->get();
+        return $relacionados;
     }
 
     /**
@@ -210,7 +222,7 @@ class CatalogoTiendaService
 
         return [
             'id' => $producto->id,
-            'nombre' => $producto->nombre,
+            'nombre' => Tienda::nombreVisible($producto->nombre, $config),
             'codigo' => $producto->codigo_interno,
             'marca' => $producto->marca?->nombre,
             'categoria' => $producto->categoria?->nombre,

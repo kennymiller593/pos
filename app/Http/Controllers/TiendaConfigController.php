@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Auditoria;
+use App\Models\Categoria;
+use App\Models\Empresa;
 use App\Models\Producto;
 use App\Services\CatalogoTiendaService;
+use App\Services\CloudflareService;
 use App\Services\DominioTiendaService;
 use App\Services\PortadaTiendaService;
 use App\Support\Tienda;
@@ -106,9 +109,15 @@ class TiendaConfigController extends Controller
 
         $antes = ['slug' => $empresa->tienda_slug, 'publicada' => (bool) $empresa->tienda_publicada];
         $anterior = Tienda::config($empresa);
-        $fotosAnteriores = array_filter([$anterior['portada_imagen'], $anterior['favicon'], ...array_column($anterior['banners'], 'imagen')]);
+        $fotosAnteriores = array_filter([$anterior['portada_imagen'], $anterior['portada_imagen_movil'], $anterior['favicon'], ...array_column($anterior['banners'], 'imagen')]);
 
-        $config = $this->armarConfig($request, $datos, fn ($archivo) => $portada->guardar($archivo, $empresa), fn ($archivo) => $portada->guardarIcono($archivo, $empresa));
+        $config = $this->armarConfig(
+            $request,
+            $datos,
+            fn ($archivo) => $portada->guardar($archivo, $empresa),
+            fn ($archivo) => $portada->guardarIcono($archivo, $empresa),
+            fn ($archivo) => $portada->guardarPortada($archivo, $empresa),
+        );
 
         $empresa->update([
             'tienda_slug' => $datos['slug'],
@@ -117,9 +126,12 @@ class TiendaConfigController extends Controller
         ]);
 
         // las fotos que se reemplazaron o se quitaron (portada o banners) ya no se usan
-        foreach (array_diff($fotosAnteriores, [$config['portada_imagen'], $config['favicon'], ...array_column($config['banners'], 'imagen')]) as $sobrante) {
+        foreach (array_diff($fotosAnteriores, [$config['portada_imagen'], $config['portada_imagen_movil'], $config['favicon'], ...array_column($config['banners'], 'imagen')]) as $sobrante) {
             $portada->eliminar($sobrante);
         }
+
+        // lo cacheado en Cloudflare se olvida para que el cambio se vea al momento
+        $this->purgarTienda($empresa->fresh());
 
         $ahora = ['slug' => $datos['slug'], 'publicada' => (bool) $datos['publicada']];
         if ($antes !== $ahora) {
@@ -142,7 +154,13 @@ class TiendaConfigController extends Controller
         $this->exigirAdicional($request);
 
         $datos = $this->validar($request);
-        $config = $this->armarConfig($request, $datos, fn ($archivo) => $portada->incrustada($archivo), fn ($archivo) => $portada->iconoIncrustado($archivo));
+        $config = $this->armarConfig(
+            $request,
+            $datos,
+            fn ($archivo) => $portada->incrustada($archivo),
+            fn ($archivo) => $portada->iconoIncrustado($archivo),
+            fn ($archivo) => [$portada->incrustada($archivo), null],
+        );
 
         return response()->json([
             'url' => $portada->crearVistaPrevia($request->user()->empresa, $datos['slug'], $config),
@@ -201,6 +219,12 @@ class TiendaConfigController extends Controller
             // ícono de la pestaña
             'favicon' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'favicon_quitar' => ['nullable', 'boolean'],
+            // para los buscadores
+            'seo_titulo' => ['nullable', 'string', 'max:70'],
+            'seo_descripcion' => ['nullable', 'string', 'max:170'],
+            'categorias_texto' => ['nullable', 'array'],
+            'categorias_texto.*' => ['nullable', 'string', 'max:400'],
+            'nombres_bonitos' => ['sometimes', 'boolean'],
             // banners (solo cuentan si el formulario avisa que los manda: una lista vacía no viaja)
             'con_banners' => ['sometimes', 'boolean'],
             'banners' => ['nullable', 'array', 'max:'.Tienda::MAX_BANNERS],
@@ -224,6 +248,9 @@ class TiendaConfigController extends Controller
             'favicon.image' => 'El ícono debe ser una imagen.',
             'favicon.mimes' => 'Formatos permitidos para el ícono: PNG, JPG o WEBP.',
             'favicon.max' => 'El ícono no debe pesar más de 2 MB.',
+            'seo_titulo.max' => 'El título para Google no puede pasar de 70 caracteres.',
+            'seo_descripcion.max' => 'La descripción para Google no puede pasar de 170 caracteres.',
+            'categorias_texto.*.max' => 'El texto de una categoría no puede pasar de 400 caracteres.',
             'banners.max' => 'Puedes tener hasta '.Tienda::MAX_BANNERS.' banners.',
             'banners.*.archivo.image' => 'El banner debe ser una imagen.',
             'banners.*.archivo.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
@@ -291,7 +318,7 @@ class TiendaConfigController extends Controller
      * La configuración completa a partir del formulario. $fotoNueva recibe el archivo subido y
      * devuelve lo que se guarda como foto (su dirección al guardar; la imagen incrustada en la vista previa).
      */
-    private function armarConfig(Request $request, array $datos, \Closure $fotoNueva, \Closure $iconoNuevo): array
+    private function armarConfig(Request $request, array $datos, \Closure $fotoNueva, \Closure $iconoNuevo, \Closure $portadaNueva): array
     {
         $actual = Tienda::config($request->user()->empresa);
 
@@ -340,11 +367,22 @@ class TiendaConfigController extends Controller
         }
 
         $config['portada_estilo'] = $datos['portada_estilo'] ?? $actual['portada_estilo'];
-        $config['portada_imagen'] = match (true) {
-            $request->hasFile('portada_imagen') => $fotoNueva($request->file('portada_imagen')),
-            $request->boolean('portada_imagen_quitar') => null,
-            default => $actual['portada_imagen'],
+        [$config['portada_imagen'], $config['portada_imagen_movil']] = match (true) {
+            $request->hasFile('portada_imagen') => $portadaNueva($request->file('portada_imagen')),
+            $request->boolean('portada_imagen_quitar') => [null, null],
+            default => [$actual['portada_imagen'], $actual['portada_imagen_movil']],
         };
+
+        // texto por categoría: solo de categorías de la empresa y sin vacíos
+        if (array_key_exists('categorias_texto', $datos)) {
+            $ids = array_filter(array_map('strval', array_keys((array) $datos['categorias_texto'])), fn ($id) => \Illuminate\Support\Str::isUuid($id));
+            $propias = Categoria::where('empresa_id', $request->user()->empresa_id)->whereIn('id', $ids)->pluck('id')->all();
+            $config['categorias_texto'] = collect((array) $datos['categorias_texto'])
+                ->only($propias)
+                ->map(fn ($t) => trim((string) $t))
+                ->filter()
+                ->all();
+        }
         $config['favicon'] = match (true) {
             $request->hasFile('favicon') => $iconoNuevo($request->file('favicon')),
             $request->boolean('favicon_quitar') => null,
@@ -420,6 +458,29 @@ class TiendaConfigController extends Controller
 
         $producto->update($datos);
 
+        $this->purgarTienda($request->user()->empresa, [$this->catalogo->url($producto)]);
+
         return back();
+    }
+
+    /** Pide a Cloudflare que olvide las páginas de la tienda que pudieron cambiar (en sus dos direcciones). */
+    private function purgarTienda(Empresa $empresa, array $rutasExtra = []): void
+    {
+        if (! CloudflareService::configurado() || ! $empresa->tienda_slug) {
+            return;
+        }
+
+        $rutas = ['/', '/catalogo', '/sitemap.xml', '/robots.txt', '/nosotros', '/politicas', '/preguntas-frecuentes', ...$rutasExtra];
+        $rutas = [...$rutas, ...$this->catalogo->categorias($empresa)->pluck('url')->all()];
+
+        $bases = array_filter(array_unique([rtrim((string) Tienda::urlDe($empresa), '/'), rtrim((string) Tienda::url($empresa->tienda_slug), '/')]));
+        $urls = [];
+        foreach ($bases as $base) {
+            foreach ($rutas as $ruta) {
+                $urls[] = $base.$ruta;
+            }
+        }
+
+        app(CloudflareService::class)->purgar($urls);
     }
 }

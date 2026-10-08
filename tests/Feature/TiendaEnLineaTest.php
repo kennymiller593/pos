@@ -602,7 +602,7 @@ class TiendaEnLineaTest extends TestCase
         $segunda = $this->empresa->fresh()->tienda_config['portada_imagen'];
         $this->assertNotSame($primera, $segunda);
         Storage::disk('public')->assertMissing($ruta);
-        $this->assertCount(1, Storage::disk('public')->allFiles('tienda'));
+        $this->assertCount(2, Storage::disk('public')->allFiles('tienda')); // la grande y la del celular
 
         // quitarla la borra, y la portada vuelve a la vitrina
         $guardar(['portada_estilo' => 'foto', 'portada_imagen_quitar' => true])->assertSessionHasErrors('portada_imagen');
@@ -761,7 +761,7 @@ class TiendaEnLineaTest extends TestCase
         $this->assertSame([null, 'categoria', $categoria], [$dos['titulo'], $dos['destino'], $dos['valor']]);
         $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
         [$ancho] = getimagesizefromstring(Storage::disk('public')->get(substr($uno['imagen'], strlen('/storage/'))));
-        $this->assertSame(1920, $ancho); // se guarda reducido
+        $this->assertSame(1600, $ancho); // se guarda reducido
 
         $this->tienda('/')->assertOk()
             ->assertSee('data-banners', false)
@@ -1127,6 +1127,151 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/')->assertDontSee('"latitude"', false);
         $guardar(['mapa_url' => ''])->assertSessionHasNoErrors();
         $this->assertNull($this->empresa->fresh()->tienda_config['mapa_lng']);
+    }
+
+    public function test_las_paginas_de_la_tienda_se_pueden_guardar_en_la_cache_de_borde_salvo_el_borrador(): void
+    {
+        $this->publicar();
+
+        $this->tienda('/')->assertOk()->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
+        $this->tienda('/sitemap.xml')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
+        // el buscador en vivo y lo que no existe, no
+        $this->assertStringContainsString('no-store', (string) $this->tienda('/buscar?q=ur')->headers->get('Cache-Control'));
+        $this->assertStringNotContainsString('public', (string) $this->tienda('/catalogo/no-existe')->headers->get('Cache-Control'));
+        // el borrador del dueño tampoco
+        $respuesta = $this->actingAs($this->admin->fresh())->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda(['slug' => 'agro', 'anuncio' => 'Borrador']))->assertOk();
+        $previa = $this->tienda(parse_url($respuesta->json('url'), PHP_URL_PATH).'?'.parse_url($respuesta->json('url'), PHP_URL_QUERY))->assertSee('Borrador');
+        $this->assertStringContainsString('no-store', (string) $previa->headers->get('Cache-Control'));
+
+        // al guardar, se le pide a Cloudflare que olvide las páginas (en la dirección gratuita y en la propia)
+        config(['tienda.purga' => true]);
+        Http::fake(['https://api.cloudflare.com/client/v4/zones/zona-de-prueba/purge_cache' => Http::response(['success' => true])]);
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro']))->assertSessionHasNoErrors();
+        Http::assertSent(fn ($r) => $r->method() === 'POST'
+            && in_array('http://agro.tienda.test/', $r['files'], true)
+            && in_array('http://agro.tienda.test/categoria/fertilizantes', $r['files'], true)
+            && in_array('Bearer token-de-prueba', $r->header('Authorization'), true));
+        // y al cambiar un producto, su página también
+        $this->actingAs($this->admin->fresh())->patch("/tienda-en-linea/productos/{$this->urea->id}", ['destacado' => true]);
+        Http::assertSent(fn ($r) => in_array('http://agro.tienda.test/catalogo/urea-46-x-50-kg', $r['files'], true));
+        // si Cloudflare falla, guardar sigue funcionando
+        Http::fake(['https://api.cloudflare.com/*' => Http::response(['success' => false, 'errors' => [['message' => 'sin permiso']]], 403)]);
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'anuncio' => 'Hola']))->assertSessionHasNoErrors();
+    }
+
+    public function test_robots_y_sitemap_llevan_las_fechas_y_el_mapa_del_sitio(): void
+    {
+        $this->publicar();
+        $hoy = now()->toDateString();
+
+        $this->tienda('/robots.txt')->assertOk()
+            ->assertHeader('Content-Type', 'text/plain; charset=utf-8')
+            ->assertSee("Sitemap: http://agro.tienda.test/sitemap.xml", false)
+            ->assertSee('Disallow: /buscar', false);
+        $this->tienda('/sitemap.xml')
+            ->assertSee("<loc>http://agro.tienda.test/</loc>\n        <lastmod>{$hoy}</lastmod>", false)
+            ->assertSee("<loc>http://agro.tienda.test/categoria/fertilizantes</loc>\n        <lastmod>{$hoy}</lastmod>", false);
+    }
+
+    public function test_el_dueno_escribe_el_titulo_y_la_descripcion_para_google_y_el_texto_de_cada_categoria(): void
+    {
+        $this->publicar(['descripcion' => 'Insumos para tu campo']);
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+        $fertilizantes = Categoria::where('empresa_id', $this->empresa->id)->where('nombre', 'Fertilizantes')->value('id');
+
+        // sin nada escrito: lo de siempre
+        $this->tienda('/')->assertSee('<title>Agro Campo | Catálogo y pedidos en línea</title>', false)->assertSee('content="Insumos para tu campo"', false);
+
+        $guardar(['seo_titulo' => str_repeat('x', 71)])->assertSessionHasErrors('seo_titulo');
+        $guardar([
+            'seo_titulo' => 'Agro Campo · Agroveterinaria en Huánuco',
+            'seo_descripcion' => 'Fertilizantes, semillas y productos veterinarios en Huánuco. Pide por WhatsApp.',
+            'categorias_texto' => [$fertilizantes => '  Urea, fosfato y abonos foliares de las mejores marcas. ', 'no-es-mia' => 'x'],
+        ])->assertSessionHasNoErrors();
+
+        $config = $this->empresa->fresh()->tienda_config;
+        $this->assertSame([$fertilizantes => 'Urea, fosfato y abonos foliares de las mejores marcas.'], $config['categorias_texto']);
+
+        $this->tienda('/')
+            ->assertSee('<title>Agro Campo · Agroveterinaria en Huánuco</title>', false)
+            ->assertSee('content="Fertilizantes, semillas y productos veterinarios en Huánuco. Pide por WhatsApp."', false);
+        // las demás páginas conservan su propio título y descripción
+        $this->tienda('/catalogo')->assertSee('<title>Catálogo de Agro Campo</title>', false)->assertSee('content="Catálogo completo de Agro Campo', false);
+        $this->tienda('/categoria/fertilizantes')
+            ->assertSee('<p class="mt-2 max-w-3xl leading-relaxed text-slate-600">Urea, fosfato y abonos foliares de las mejores marcas.</p>', false)
+            ->assertSee('content="Urea, fosfato y abonos foliares de las mejores marcas."', false);
+        // en la página 2 y en una búsqueda el texto de la categoría no se repite
+        $this->tienda('/categoria/fertilizantes?q=urea')->assertDontSee('max-w-3xl leading-relaxed', false);
+
+        // vaciarlo lo quita
+        $guardar(['seo_titulo' => '', 'categorias_texto' => [$fertilizantes => '']])->assertSessionHasNoErrors();
+        $this->assertSame([], $this->empresa->fresh()->tienda_config['categorias_texto']);
+        $this->tienda('/')->assertSee('<title>Agro Campo | Catálogo y pedidos en línea</title>', false);
+    }
+
+    public function test_la_foto_de_portada_se_guarda_tambien_en_tamano_movil_y_el_catalogo_prioriza_la_primera_fila(): void
+    {
+        Storage::fake('public');
+        $this->publicar(['mostrar_stock' => false]); // sin "agotados al final", el orden es por nombre
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen' => UploadedFile::fake()->image('local.jpg', 4000, 3000)])->assertSessionHasNoErrors();
+        $config = $this->empresa->fresh()->tienda_config;
+        $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
+        [$ancho] = getimagesizefromstring(Storage::disk('public')->get(substr($config['portada_imagen_movil'], strlen('/storage/'))));
+        $this->assertSame(900, $ancho);
+        $this->tienda('/')->assertSee('srcset="'.$config['portada_imagen_movil'].' 900w, '.$config['portada_imagen'].' 1600w" sizes="100vw"', false);
+
+        // al reemplazar o quitar la foto se van las dos
+        $guardar(['portada_estilo' => 'vitrina', 'portada_imagen_quitar' => true])->assertSessionHasNoErrors();
+        $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
+        $this->assertNull($this->empresa->fresh()->tienda_config['portada_imagen_movil']);
+
+        // en el catálogo, las cuatro primeras tarjetas con foto se cargan con prioridad y las demás en diferido
+        foreach (range(1, 6) as $i) {
+            $this->darStock($this->crearProducto(precio: 10, atributos: ['nombre' => "Abono {$i}", 'imagen_url' => "/storage/productos/p{$i}.webp"]), 5, 1);
+        }
+        $html = $this->tienda('/catalogo')->getContent();
+        $this->assertSame(4, substr_count($html, 'fetchpriority="high"'));
+        $this->assertStringContainsString('alt="Abono 1" fetchpriority="high"', $html);
+        $this->assertStringContainsString('alt="Abono 5" loading="lazy"', $html);
+        $this->assertSame(0, substr_count($this->tienda('/')->getContent(), 'alt="Abono 1" fetchpriority="high"'));
+    }
+
+    public function test_los_nombres_en_mayusculas_se_muestran_ordenados_si_el_dueno_quiere(): void
+    {
+        foreach ([
+            'UREA 46% X 50 KG' => 'Urea 46% x 50 kg',
+            'AZOXYSTROBIN 250 SC X 1 L' => 'Azoxystrobin 250 SC x 1 L',
+            'ACEITE STIHL X 100ML' => 'Aceite stihl x 100ML',
+            'PLANTINES DE APIO KELVIN X MILLAR' => 'Plantines de apio kelvin x millar',
+            'Urea Agrícola x 50 kg' => 'Urea Agrícola x 50 kg', // ya tiene minúsculas: se respeta
+            '5x1 dorado (sachet) x 30 ml sf' => '5x1 dorado (sachet) x 30 ml sf',
+            'ÑANDÚ (FÓSFORO)' => 'Ñandú (fósforo)',
+        ] as $nombre => $esperado) {
+            $this->assertSame($esperado, Tienda::nombreBonito($nombre), $nombre);
+        }
+
+        $this->crearProducto(precio: 20, atributos: ['nombre' => 'ABONO FOLIAR 20-20-20 X 1 KG', 'codigo_interno' => 'P0090']);
+        $this->publicar();
+        $this->tienda('/catalogo')->assertSee('Abono foliar 20-20-20 x 1 kg')->assertDontSee('ABONO FOLIAR');
+        $this->tienda('/buscar?q=abono')->assertJsonPath('productos.0.nombre', 'Abono foliar 20-20-20 x 1 kg');
+        // el dueño puede apagarlo
+        $this->publicar(['nombres_bonitos' => false]);
+        $this->tienda('/catalogo')->assertSee('ABONO FOLIAR 20-20-20 X 1 KG');
+    }
+
+    public function test_los_relacionados_se_completan_con_productos_de_nombre_parecido(): void
+    {
+        $this->publicar();
+        // la urea está sola en su categoría: se completa con otras "Urea ..." aunque sean de otra categoría
+        $this->crearProducto(precio: 80, atributos: ['nombre' => 'Urea granulada x 25 kg', 'codigo_interno' => 'P0091']);
+        $this->crearProducto(precio: 30, atributos: ['nombre' => 'Sulfato de potasio', 'codigo_interno' => 'P0092']);
+
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()
+            ->assertSee('Urea granulada x 25 kg')
+            ->assertDontSee('Sulfato de potasio');
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void

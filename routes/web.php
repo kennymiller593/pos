@@ -66,6 +66,7 @@ if (Tienda::dominio()) {
                 Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
             }
             Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
+            Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
     };
     $middlewareDeTienda = [CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class];
 

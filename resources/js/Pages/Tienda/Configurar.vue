@@ -40,10 +40,10 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 // ---- secciones de la pantalla ----
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
-    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock', 'favicon'] },
+    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
     { valor: 'portada', nombre: 'Portada', campos: ['portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
-    { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas'] },
+    { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
     { valor: 'dominio', nombre: 'Dominio', campos: [] },
 ]
@@ -91,6 +91,7 @@ const form = useForm({
     color_texto: props.tienda.config.color_texto ?? null, // "claro" u "oscuro"; null = el que mejor se lea
     mostrar_precios: props.tienda.config.mostrar_precios,
     mostrar_stock: props.tienda.config.mostrar_stock,
+    nombres_bonitos: props.tienda.config.nombres_bonitos ?? true,
     whatsapp: props.tienda.config.whatsapp ?? '',
     telefono: props.tienda.config.telefono ?? '',
     email: props.tienda.config.email ?? '',
@@ -116,6 +117,10 @@ const form = useForm({
     devoluciones: props.tienda.config.devoluciones ?? '',
     pagos: props.tienda.config.pagos ?? '',
     preguntas: preguntasGuardadas(),
+    // para los buscadores
+    seo_titulo: props.tienda.config.seo_titulo ?? '',
+    seo_descripcion: props.tienda.config.seo_descripcion ?? '',
+    categorias_texto: props.tienda.categorias.map((c) => ({ id: c.id, nombre: c.nombre, texto: props.tienda.config.categorias_texto?.[c.id] ?? '' })),
 })
 
 /** Lo que viaja al servidor: sin los datos que solo usa la pantalla (claves, vistas locales). */
@@ -126,6 +131,7 @@ function carga(datos) {
         banners: datos.banners.map((b) => ({ imagen: b.imagen ?? '', archivo: b.archivo, titulo: b.titulo, destino: b.destino, categoria: b.categoria, url: b.url })),
         con_preguntas: true,
         preguntas: datos.preguntas.map((p) => ({ pregunta: p.pregunta, respuesta: p.respuesta })),
+        categorias_texto: Object.fromEntries(datos.categorias_texto.map((c) => [c.id, c.texto])),
     }
 }
 
@@ -708,6 +714,18 @@ function guardarDescripcion() {
                         <input v-model="form.mostrar_stock" type="checkbox" class="peer sr-only" />
                         <span :class="claseInterruptor" aria-hidden="true" />
                     </label>
+                    <label class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3">
+                        <span>
+                            <span class="block text-sm font-medium">Ordenar las mayúsculas de los nombres</span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ form.nombres_bonitos
+                                    ? 'Un nombre escrito todo en mayúsculas ("UREA 46% X 50 KG") se muestra como "Urea 46% x 50 kg". Tus productos no cambian.'
+                                    : 'Los nombres se muestran tal cual los escribiste.' }}
+                            </span>
+                        </span>
+                        <input v-model="form.nombres_bonitos" type="checkbox" class="peer sr-only" />
+                        <span :class="claseInterruptor" aria-hidden="true" />
+                    </label>
                 </div>
             </section>
 
@@ -863,6 +881,7 @@ function guardarDescripcion() {
                 :url="tienda.publicada ? tienda.url : null"
                 :guardado="tienda.config"
                 :max-preguntas="tienda.limites.preguntas"
+                :nombre="tienda.nombre_tienda"
             />
 
             <!-- Guardar y vista previa: siempre a la mano, en cualquier sección -->
