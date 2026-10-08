@@ -25,6 +25,8 @@ class Tienda
         'email' => null,
         'direccion' => null, // una por línea
         'mapa_url' => null, // enlace de Google Maps del local principal
+        'mapa_lat' => null, // coordenadas sacadas del enlace (para los datos estructurados del negocio)
+        'mapa_lng' => null,
         'horario' => null, // una línea por horario
         'facebook' => null,
         'instagram' => null,
@@ -100,6 +102,93 @@ class Tienda
             || in_array($host, array_map('mb_strtolower', (array) config('app.trusted_hosts')), true)
             || $host === 'localhost'
             || filter_var($host, FILTER_VALIDATE_IP) !== false;
+    }
+
+    /** ¿Este host es el de una tienda (dirección gratuita o dominio propio) y no el del sistema? */
+    public static function esHostDeTienda(string $host): bool
+    {
+        return self::esHost($host) || (self::conDominiosPropios() && ! self::esHostDeLaApp($host));
+    }
+
+    /**
+     * Latitud y longitud dentro de un enlace de Google Maps ya desplegado (no el corto):
+     * ".../@-9.93,-76.24,17z", "?q=-9.93,-76.24", "!3d-9.93!4d-76.24" o "ll=".
+     *
+     * @return array{0: float, 1: float}|null
+     */
+    public static function coordenadasDeMapa(string $url): ?array
+    {
+        $numero = '(-?\d{1,3}\.\d{2,})';
+
+        foreach (["/@{$numero},{$numero}/", "/[?&](?:q|query|ll|center)={$numero}(?:,|%2C){$numero}/", "/!3d{$numero}!4d{$numero}/"] as $patron) {
+            if (preg_match($patron, $url, $m) && abs((float) $m[1]) <= 90 && abs((float) $m[2]) <= 180) {
+                return [(float) $m[1], (float) $m[2]];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Horario escrito por el dueño -> OpeningHoursSpecification de schema.org. Entiende lo que se
+     * escribe normalmente: "Lunes a sábado, 8 a. m. a 6 p. m.", "Lun-Vie 8:00-18:00", "Domingos 8 am - 1 pm".
+     * Las líneas que no se entienden se omiten (mejor nada que un horario inventado).
+     *
+     * @param  list<string>  $lineas
+     */
+    public static function horarioEstructurado(array $lineas): array
+    {
+        $dias = ['lunes' => 'Monday', 'martes' => 'Tuesday', 'miercoles' => 'Wednesday', 'jueves' => 'Thursday', 'viernes' => 'Friday', 'sabado' => 'Saturday', 'domingo' => 'Sunday'];
+        $orden = array_values($dias);
+        $resultado = [];
+
+        foreach ($lineas as $linea) {
+            $texto = mb_strtolower(Str::ascii($linea));
+            $texto = preg_replace('/\b(lun|mar|mie|jue|vie|sab|dom)\b\.?/', '$1xx', $texto); // abreviaturas
+            $texto = str_replace(['lunxx', 'marxx', 'miexx', 'juexx', 'viexx', 'sabxx', 'domxx'], ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'], $texto);
+
+            // qué días
+            preg_match_all('/\b(lunes|martes|miercoles|jueves|viernes|sabado|domingo)s?\b/', $texto, $encontrados);
+            $nombres = array_values(array_unique($encontrados[1]));
+            if (preg_match('/todos los dias|diario|lunes a domingo/', $texto)) {
+                $elegidos = $orden;
+            } elseif (count($nombres) >= 2 && preg_match('/\b'.$nombres[0].'s?\s*(a|al|-|–|hasta)\s*(el\s+)?'.$nombres[1].'/', $texto)) {
+                $desde = array_search($dias[$nombres[0]], $orden, true);
+                $hasta = array_search($dias[$nombres[1]], $orden, true);
+                $elegidos = $hasta >= $desde ? array_slice($orden, $desde, $hasta - $desde + 1) : [...array_slice($orden, $desde), ...array_slice($orden, 0, $hasta + 1)];
+            } else {
+                $elegidos = array_map(fn ($n) => $dias[$n], $nombres);
+            }
+
+            // qué horas: dos horas (con o sin minutos, con o sin a. m. / p. m.)
+            $hora = '(\d{1,2})(?::(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?|am|pm|hrs?\.?|h\b)?';
+            if (! $elegidos || ! preg_match("/{$hora}\s*(?:a|-|–|hasta)\s*{$hora}/", $texto, $h)) {
+                continue;
+            }
+
+            $aHora = function (string $hh, string $mm, string $sufijo, ?int $referencia) {
+                $n = (int) $hh;
+                $sufijo = preg_replace('/[^ap]/', '', $sufijo);
+                if ($sufijo === 'p' && $n < 12) {
+                    $n += 12;
+                } elseif ($sufijo === 'a' && $n === 12) {
+                    $n = 0;
+                } elseif ($sufijo === '' && $referencia !== null && $n <= 12 && $n < $referencia) {
+                    $n += 12; // "8 a 6" sin a. m. / p. m.: la segunda es de la tarde
+                }
+
+                return $n <= 23 ? sprintf('%02d:%02d', $n, (int) ($mm ?: 0)) : null;
+            };
+
+            $abre = $aHora($h[1], $h[2] ?? '', $h[3] ?? '', null);
+            $cierra = $aHora($h[4], $h[5] ?? '', $h[6] ?? '', (int) $h[1]);
+
+            if ($abre && $cierra && $cierra > $abre) {
+                $resultado[] = ['@type' => 'OpeningHoursSpecification', 'dayOfWeek' => $elegidos, 'opens' => $abre, 'closes' => $cierra];
+            }
+        }
+
+        return $resultado;
     }
 
     /** ¿Se atienden dominios propios (www.agrocampo.com)? Solo si el servicio está configurado. */

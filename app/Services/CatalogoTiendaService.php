@@ -286,6 +286,10 @@ class CatalogoTiendaService
         $yaListadas = $direcciones->map(fn ($d) => $igualar($d['texto']))->all();
         $horarios = Tienda::lineas($config['horario']);
 
+        // distrito y departamento del local principal (la primera sucursal activa con ubigeo)
+        $ubigeo = $empresa->sucursales()->where('activo', true)->whereNotNull('ubigeo')->orderBy('nombre')->first()?->ubigeoInfo;
+        $titulo = fn (?string $t) => $t ? mb_convert_case(mb_strtolower($t), MB_CASE_TITLE, 'UTF-8') : null;
+
         return [
             'whatsapp' => Tienda::numeroWhatsapp($config['whatsapp']),
             'whatsapp_texto' => $config['whatsapp'],
@@ -298,6 +302,12 @@ class CatalogoTiendaService
             // en una línea para donde hay poco espacio, y por separado para listarlos
             'horario' => $horarios ? implode(' · ', $horarios) : null,
             'horarios' => $horarios,
+            // para los datos estructurados del negocio
+            'horario_estructurado' => Tienda::horarioEstructurado($horarios),
+            'ciudad' => $titulo($ubigeo?->distrito),
+            'provincia' => $titulo($ubigeo?->provincia),
+            'region' => $titulo($ubigeo?->departamento),
+            'coordenadas' => $config['mapa_lat'] && $config['mapa_lng'] ? [(float) $config['mapa_lat'], (float) $config['mapa_lng']] : null,
             'facebook' => $red($config['facebook'], 'https://www.facebook.com/'),
             'instagram' => $red($config['instagram'], 'https://www.instagram.com/'),
             'tiktok' => $red($config['tiktok'], 'https://www.tiktok.com/@'),

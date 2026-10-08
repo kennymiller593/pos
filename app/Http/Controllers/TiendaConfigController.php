@@ -11,6 +11,7 @@ use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -307,6 +308,11 @@ class TiendaConfigController extends Controller
         }
 
         $config['color_propio'] = $config['color'] === 'propio' ? strtoupper((string) $config['color_propio']) : null;
+
+        // las coordenadas del local salen del enlace de Maps (se resuelven una vez, al cambiarlo)
+        if ($config['mapa_url'] !== $actual['mapa_url'] || ($config['mapa_url'] && ! $actual['mapa_lat'])) {
+            [$config['mapa_lat'], $config['mapa_lng']] = $config['mapa_url'] ? ($this->coordenadas($config['mapa_url']) ?? [null, null]) : [null, null];
+        }
         $config['color_texto'] = $config['color'] === 'propio' ? $config['color_texto'] : null;
 
         if ($request->boolean('con_banners')) {
@@ -346,6 +352,36 @@ class TiendaConfigController extends Controller
         };
 
         return $config;
+    }
+
+    /**
+     * Latitud y longitud de un enlace de Google Maps. Los enlaces de "Compartir" son cortos
+     * (maps.app.goo.gl): se siguen sus redirecciones hasta el enlace largo, que sí trae las coordenadas.
+     *
+     * @return array{0: float, 1: float}|null
+     */
+    private function coordenadas(string $url): ?array
+    {
+        try {
+            for ($salto = 0; $salto < 4; $salto++) {
+                if ($coordenadas = Tienda::coordenadasDeMapa($url)) {
+                    return $coordenadas;
+                }
+
+                $respuesta = Http::withOptions(['allow_redirects' => false])->timeout(5)->withUserAgent('Mozilla/5.0 (inkaPos)')->get($url);
+                $siguiente = $respuesta->header('Location');
+
+                if (! $respuesta->redirect() || ! $siguiente) {
+                    return null;
+                }
+
+                $url = $siguiente;
+            }
+        } catch (\Throwable) {
+            // sin internet o Google no respondió: la tienda funciona igual, solo sin coordenadas
+        }
+
+        return null;
     }
 
     /** Cambia cómo aparece un producto en la tienda: si se muestra, si va destacado y su descripción. */

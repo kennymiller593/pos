@@ -122,6 +122,9 @@ class TiendaController extends Controller
             ->withQueryString()
             ->through(fn ($p) => $this->catalogo->tarjeta($p, $config));
 
+        // una página más allá de la última no existe: 404 de verdad, no una página vacía que Google indexe
+        abort_if($productos->currentPage() > 1 && $productos->isEmpty(), 404);
+
         $filtrando = $buscar !== '' || $categoria !== null;
         $destacados = $portada ? $this->catalogo->destacados($empresa) : null;
 

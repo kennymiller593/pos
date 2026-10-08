@@ -1,11 +1,16 @@
 @extends('tienda.layout')
 
 @php
-    $descripcion = $producto['descripcion']
-        ?: trim("{$producto['nombre']}".($producto['marca'] ? " de {$producto['marca']}" : '').". Disponible en {$tienda['nombre']}.");
+    $principal = $producto['presentaciones'][0];
+    // sin descripción del dueño, una frase con lo que sí sabemos: qué es, de quién, dónde y cuánto
+    $descripcion = $producto['descripcion'] ?: trim(implode(' ', array_filter([
+        $producto['nombre'].($producto['marca'] ? " de {$producto['marca']}" : '').($producto['categoria'] ? ", {$producto['categoria']}" : '').'.',
+        count($producto['presentaciones']) > 1 ? 'Presentaciones: '.implode(', ', array_column($producto['presentaciones'], 'nombre')).'.' : null,
+        $producto['precio'] !== null ? 'Precio S/ '.number_format($producto['precio'], 2).'.' : null,
+        "Pídelo por WhatsApp en {$tienda['nombre']}".($contactos['ciudad'] ? ", {$contactos['ciudad']}" : '').'.',
+    ])));
     $imagen = $producto['imagen'] ? (str_starts_with($producto['imagen'], 'http') ? $producto['imagen'] : rtrim($tienda['url'], '/').$producto['imagen']) : null;
     $variasPresentaciones = count($producto['presentaciones']) > 1;
-    $principal = $producto['presentaciones'][0];
     $cantidad = fn (float $n) => rtrim(rtrim(number_format($n, 3), '0'), '.');
     $soloNumero = fn (?string $telefono) => preg_replace('/[^0-9+]/', '', (string) $telefono);
     $textoPedido = $producto['disponible'] === false ? 'Preguntar cuándo llega' : 'Pedir por WhatsApp';
@@ -25,9 +30,24 @@
             'url' => $enlace,
             'priceCurrency' => 'PEN',
             'price' => number_format($producto['precio'], 2, '.', ''),
-            'availability' => $producto['disponible'] === null ? null : 'https://schema.org/'.($producto['disponible'] ? 'InStock' : 'OutOfStock'),
+            // si la tienda no marca lo agotado, lo que está publicado se vende
+            'availability' => 'https://schema.org/'.($producto['disponible'] === false ? 'OutOfStock' : 'InStock'),
+            'itemCondition' => 'https://schema.org/NewCondition',
+            'seller' => ['@type' => 'Store', '@id' => rtrim($tienda['url'], '/').'/#negocio', 'name' => $tienda['nombre']],
         ]) : null,
     ]);
+
+    // la ruta Inicio › Catálogo › Categoría › Producto, también para el buscador
+    $ruta = [
+        '@context' => 'https://schema.org',
+        '@type' => 'BreadcrumbList',
+        'itemListElement' => array_values(array_filter([
+            ['@type' => 'ListItem', 'position' => 1, 'name' => 'Inicio', 'item' => $tienda['url']],
+            ['@type' => 'ListItem', 'position' => 2, 'name' => 'Catálogo', 'item' => rtrim($tienda['url'], '/').'/catalogo'],
+            $producto['categoria'] && ($categoriaUrl ?? null) ? ['@type' => 'ListItem', 'position' => 3, 'name' => $producto['categoria'], 'item' => rtrim($tienda['url'], '/').$categoriaUrl] : null,
+            ['@type' => 'ListItem', 'position' => $producto['categoria'] && ($categoriaUrl ?? null) ? 4 : 3, 'name' => $producto['nombre']],
+        ])),
+    ];
 @endphp
 
 @section('titulo', "{$producto['nombre']} · {$tienda['nombre']}")
@@ -38,6 +58,7 @@
 
 @push('cabecera')
     <script type="application/ld+json">{!! json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+    <script type="application/ld+json">{!! json_encode($ruta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
 @endpush
 
 @section('contenido')

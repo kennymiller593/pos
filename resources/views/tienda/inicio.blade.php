@@ -22,20 +22,76 @@
     // cada página del catálogo es su propia dirección (la 2 no es una copia de la portada)
     $canonica = rtrim($tienda['url'], '/').($categoria ? $categoria->url : ($portada ? '/' : '/catalogo')).($pagina > 1 ? "?page={$pagina}" : '');
 
-    // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección y horario
+    // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección, horario y mapa
+    $direccionPostal = fn (string $calle) => array_filter([
+        '@type' => 'PostalAddress',
+        'streetAddress' => $calle,
+        'addressLocality' => $contactos['ciudad'],
+        'addressRegion' => $contactos['region'],
+        'addressCountry' => 'PE',
+    ]);
+    $telefonoNegocio = $contactos['telefono'] ?: ($contactos['whatsapp'] ? '+'.$contactos['whatsapp'] : null);
+    // los demás locales (direcciones escritas por el dueño y sucursales con dirección)
+    $otrasSedes = array_merge(
+        array_map(fn ($d) => ['@type' => 'Store', 'name' => $tienda['nombre'], 'address' => $direccionPostal($d['texto']), 'hasMap' => $d['mapa']], array_slice($contactos['direcciones'], 1)),
+        array_map(fn ($l) => array_filter(['@type' => 'Store', 'name' => "{$tienda['nombre']} · {$l['nombre']}", 'address' => $direccionPostal($l['direccion']), 'telephone' => $l['telefono'], 'hasMap' => $l['mapa']]), $contactos['locales']),
+    );
     $negocio = array_filter([
         '@context' => 'https://schema.org',
         '@type' => 'Store',
+        '@id' => rtrim($tienda['url'], '/').'/#negocio',
         'name' => $tienda['nombre'],
         'url' => $tienda['url'],
         'description' => $tienda['descripcion'],
         'image' => $tienda['logo'] ? (str_starts_with($tienda['logo'], 'http') ? $tienda['logo'] : rtrim($tienda['url'], '/').$tienda['logo']) : null,
-        'telephone' => $contactos['telefono'] ?: ($contactos['whatsapp'] ? '+'.$contactos['whatsapp'] : null),
+        'telephone' => $telefonoNegocio,
         'email' => $contactos['email'],
-        'address' => $contactos['direccion'] ? ['@type' => 'PostalAddress', 'streetAddress' => $contactos['direccion'], 'addressCountry' => 'PE'] : null,
-        'openingHours' => $contactos['horario'],
+        'address' => $contactos['direccion'] ? $direccionPostal($contactos['direccion']) : null,
+        'hasMap' => $contactos['mapa'],
+        'geo' => $contactos['coordenadas'] ? ['@type' => 'GeoCoordinates', 'latitude' => $contactos['coordenadas'][0], 'longitude' => $contactos['coordenadas'][1]] : null,
+        'openingHoursSpecification' => $contactos['horario_estructurado'] ?: null,
+        'currenciesAccepted' => 'PEN',
+        'sameAs' => array_values(array_filter([$contactos['facebook'], $contactos['instagram'], $contactos['tiktok']])) ?: null,
+        'department' => $otrasSedes ?: null,
     ]);
+
+    // la lista de productos de la página (catálogo y categorías), con su ruta de navegación
+    $listaProductos = $portada ? null : [
+        '@context' => 'https://schema.org',
+        '@type' => 'CollectionPage',
+        'name' => $categoria ? $categoria->nombre : 'Catálogo',
+        'url' => $canonica,
+        'isPartOf' => ['@id' => rtrim($tienda['url'], '/').'/#sitio'],
+        'breadcrumb' => [
+            '@type' => 'BreadcrumbList',
+            'itemListElement' => array_values(array_filter([
+                ['@type' => 'ListItem', 'position' => 1, 'name' => 'Inicio', 'item' => $tienda['url']],
+                ['@type' => 'ListItem', 'position' => 2, 'name' => 'Catálogo', 'item' => rtrim($tienda['url'], '/').'/catalogo'],
+                $categoria ? ['@type' => 'ListItem', 'position' => 3, 'name' => $categoria->nombre, 'item' => rtrim($tienda['url'], '/').$categoria->url] : null,
+            ])),
+        ],
+        'mainEntity' => [
+            '@type' => 'ItemList',
+            'numberOfItems' => $productos->total(),
+            'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
+        ],
+    ];
+
+    // descripción para el buscador: distinta en el catálogo, en cada categoría y en cada página
+    $lugar = $contactos['ciudad'] ? " en {$contactos['ciudad']}" : '';
+    $resumenListado = match (true) {
+        $buscar !== '' => null,
+        $categoria !== null => "{$categoria->nombre}{$lugar}: {$productos->total()} ".($productos->total() === 1 ? 'producto' : 'productos')." en {$tienda['nombre']}. ".($tienda['descripcion'] ?: 'Mira el catálogo y haz tu pedido por WhatsApp.'),
+        ! $portada => "Catálogo completo de {$tienda['nombre']}{$lugar}: {$productos->total()} productos en {$categorias->count()} categorías. ".($tienda['descripcion'] ?: 'Pide por WhatsApp.'),
+        default => null,
+    };
+    if ($resumenListado && $pagina > 1) {
+        $resumenListado = "Página {$pagina}. {$resumenListado}";
+    }
 @endphp
+@if ($resumenListado)
+    @section('resumen', $resumenListado)
+@endif
 
 @section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre} · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
 @section('canonica', $canonica)
@@ -46,6 +102,10 @@
     @push('cabecera')
         <script type="application/ld+json">{!! json_encode($negocio, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
     @endpush
+@elseif ($listaProductos && $buscar === '')
+    @push('cabecera')
+        <script type="application/ld+json">{!! json_encode($listaProductos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+    @endpush
 @endif
 
 @section('contenido')
@@ -53,7 +113,7 @@
         {{-- Portada: el dueño elige entre vitrina de productos, foto grande o solo texto --}}
         @if ($tienda['portada']['estilo'] === 'foto')
             <section class="relative isolate overflow-hidden bg-slate-900" data-portada="foto">
-                <img src="{{ $tienda['portada']['imagen'] }}" alt="" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover">
+                <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover">
                 {{-- velo oscuro: el texto se lee sobre cualquier foto, clara u oscura --}}
                 <div class="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/25" aria-hidden="true"></div>
                 <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
@@ -154,7 +214,7 @@
                     @foreach ($categoriasConFoto->take(6) as $cat)
                         <a href="{{ $cat->url }}" class="group rounded-2xl bg-slate-50 p-4 text-center ring-1 ring-slate-100 transition hover:bg-white hover:shadow-lg hover:shadow-slate-900/5 hover:ring-slate-200">
                             <div class="mx-auto aspect-square w-full max-w-28">
-                                <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="800" height="600" class="size-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-110">
+                                <img src="{{ $cat->imagen }}" alt="{{ $cat->nombre }}" loading="lazy" width="800" height="600" class="size-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-110">
                             </div>
                             <p class="mt-3 truncate text-sm font-semibold group-hover:text-(--marca-texto)">{{ $cat->nombre }}</p>
                             <p class="text-xs text-slate-500">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</p>
@@ -203,17 +263,19 @@
 
         <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
             <div class="min-w-0">
-                <h2 id="titulo-catalogo" class="text-2xl font-semibold tracking-tight">
+                {{-- en la portada el H1 es el de la presentación; en el catálogo y las categorías, este título --}}
+                @php $etiquetaTitulo = $portada ? 'h2' : 'h1'; @endphp
+                <{{ $etiquetaTitulo }} id="titulo-catalogo" class="text-2xl font-semibold tracking-tight">
                     @if ($buscar !== '')
                         Resultados para “{{ $buscar }}”
                     @elseif ($categoria)
-                        {{ $categoria->nombre }}
+                        {{ $categoria->nombre }}@if ($contactos['ciudad']) <span class="font-normal text-slate-500">en {{ $contactos['ciudad'] }}</span>@endif
                     @elseif ($portada)
                         Nuestro catálogo
                     @else
                         Todos los productos
                     @endif
-                </h2>
+                </{{ $etiquetaTitulo }}>
                 <p class="mt-1 text-slate-500">
                     {{ number_format($productos->total()) }} producto{{ $productos->total() === 1 ? '' : 's' }}@if ($buscar !== '' && $categoria) en {{ $categoria->nombre }}@endif
                     @if ($filtrando)

@@ -55,7 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $estado = $response->getStatusCode();
 
             // en la direccion de una tienda los errores salen con su propia pagina, sin nada del sistema
-            if (Tienda::esHost($request->getHost()) && ($estado === 404 || (! app()->environment(['local', 'testing']) && in_array($estado, [403, 429, 500, 503], true)))) {
+            if (Tienda::esHostDeTienda($request->getHost()) && ($estado === 404 || (! app()->environment(['local', 'testing']) && in_array($estado, [403, 429, 500, 503], true)))) {
                 return response()->view('tienda.error', ['estado' => $estado], $estado);
             }
 

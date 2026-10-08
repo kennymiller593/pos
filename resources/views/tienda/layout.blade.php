@@ -1,5 +1,5 @@
 @php
-    $titulo = trim($__env->yieldContent('titulo')) ?: "{$tienda['nombre']} | Catálogo y pedidos en línea";
+    $titulo = trim($__env->yieldContent('titulo')) ?: "{$tienda['nombre']} | Catálogo y pedidos en línea".($contactos['ciudad'] ? " en {$contactos['ciudad']}" : '');
     // una sola línea: la descripción puede venir con saltos y eso ensucia el resultado en el buscador
     $resumen = \Illuminate\Support\Str::squish(trim($__env->yieldContent('resumen')) ?: ($tienda['descripcion'] ?: "Catálogo en línea de {$tienda['nombre']}. Mira nuestros productos y haz tu pedido por WhatsApp."));
     $canonica = trim($__env->yieldContent('canonica')) ?: $tienda['url'];
@@ -16,14 +16,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $titulo }}</title>
-    <meta name="description" content="{{ \Illuminate\Support\Str::limit($resumen, 160) }}">
+    <meta name="description" content="{{ \Illuminate\Support\Str::limit($resumen, 158, '…', true) }}">
     <meta name="robots" content="{{ $previa ? 'noindex,nofollow' : (trim($__env->yieldContent('robots')) ?: 'index,follow') }}">
     <link rel="canonical" href="{{ $canonica }}">
     <meta property="og:type" content="@yield('og_tipo', 'website')">
     <meta property="og:locale" content="es_PE">
     <meta property="og:site_name" content="{{ $tienda['nombre'] }}">
     <meta property="og:title" content="{{ $titulo }}">
-    <meta property="og:description" content="{{ \Illuminate\Support\Str::limit($resumen, 200) }}">
+    <meta property="og:description" content="{{ \Illuminate\Support\Str::limit($resumen, 200, '…', true) }}">
     <meta property="og:url" content="{{ $canonica }}">
     @if ($imagenSocial)
         <meta property="og:image" content="{{ $imagenSocial }}">
@@ -42,6 +42,16 @@
         /* lo que solo sirve con el pedido activo (necesita JavaScript) no aparece hasta que carga */
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }</style>
     <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
+    {{-- el sitio y su buscador, para que Google entienda la tienda como un todo --}}
+    <script type="application/ld+json">{!! json_encode([
+        '@context' => 'https://schema.org',
+        '@type' => 'WebSite',
+        '@id' => rtrim($tienda['url'], '/').'/#sitio',
+        'name' => $tienda['nombre'],
+        'url' => $tienda['url'],
+        'inLanguage' => 'es-PE',
+        'potentialAction' => ['@type' => 'SearchAction', 'target' => ['@type' => 'EntryPoint', 'urlTemplate' => rtrim($tienda['url'], '/').'/catalogo?q={termino}'], 'query-input' => 'required name=termino'],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">

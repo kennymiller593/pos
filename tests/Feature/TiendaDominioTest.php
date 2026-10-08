@@ -173,8 +173,9 @@ class TiendaDominioTest extends TestCase
         $this->visitar('http://www.agrocampo-prueba.net/sitemap.xml')->assertSee('<loc>http://www.agrocampo-prueba.net/catalogo</loc>', false);
         // la dirección gratuita sigue, pero manda al dominio propio (con la ruta y lo demás)
         $this->visitar('http://agro.tienda.test/catalogo?q=urea')->assertStatus(301)->assertRedirect('http://www.agrocampo-prueba.net/catalogo?q=urea');
-        // en el dominio del cliente no existe el sistema; y un dominio que nadie registró no es nada
-        $this->visitar('http://www.agrocampo-prueba.net/login')->assertNotFound();
+        // en el dominio del cliente no existe el sistema (y el 404 es el de la tienda); un dominio que nadie registró no es nada
+        $this->visitar('http://www.agrocampo-prueba.net/login')->assertNotFound()->assertSee('No encontramos esta página');
+        $this->visitar('http://www.agrocampo-prueba.net/catalogo/no-existe')->assertNotFound()->assertSee('Ir al inicio de la tienda');
         $this->visitar('http://www.otro-negocio.com/')->assertNotFound();
         $this->visitar('http://agrocampo-prueba.net/')->assertNotFound();
         $this->dueno()->get('/tienda-en-linea')->assertInertia(fn (Assert $p) => $p

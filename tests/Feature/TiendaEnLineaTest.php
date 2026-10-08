@@ -11,6 +11,7 @@ use App\Support\Tienda;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
@@ -990,6 +991,142 @@ class TiendaEnLineaTest extends TestCase
         $this->assertNull($this->empresa->fresh()->tienda_config['favicon']);
         $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
         $this->tienda('/')->assertSee('<link rel="icon" href="/favicon.ico?v=5">', false);
+    }
+
+    public function test_los_listados_tienen_h1_descripcion_propia_y_no_hay_paginas_vacias(): void
+    {
+        $this->sucursal->update(['ubigeo' => '100101']); // Huánuco
+        $this->publicar(['descripcion' => 'Insumos para tu campo']);
+
+        // el catálogo y las categorías tienen su H1 y su propia descripción; la portada conserva el suyo
+        $this->tienda('/catalogo')->assertOk()
+            ->assertSee('<h1 id="titulo-catalogo"', false)
+            ->assertSee('<meta name="description" content="Catálogo completo de Agro Campo en Huanuco: 2 productos en 1 categorías. Insumos para tu campo">', false)
+            ->assertSee('"@type":"CollectionPage"', false)
+            ->assertSee('"@type":"ItemList"', false)
+            ->assertSee('"numberOfItems":2', false)
+            ->assertSee('"@type":"BreadcrumbList"', false);
+        $this->tienda('/categoria/fertilizantes')->assertOk()
+            ->assertSee('<h1 id="titulo-catalogo"', false)
+            ->assertSee('Fertilizantes <span class="font-normal text-slate-500">en Huanuco</span>', false)
+            ->assertSee('content="Fertilizantes en Huanuco: 1 producto en Agro Campo. Insumos para tu campo"', false)
+            ->assertSee('"name":"Fertilizantes","item":"http://agro.tienda.test/categoria/fertilizantes"', false);
+        $this->tienda('/')->assertOk()->assertSee('<h2 id="titulo-catalogo"', false)->assertDontSee('"CollectionPage"', false);
+        // el título general lleva la ciudad y la descripción se corta en una palabra completa
+        $this->publicar(['descripcion' => str_repeat('Insumos agrícolas de calidad para tu campo y tu ganado. ', 6)]);
+        $html = $this->tienda('/')->assertSee('<title>Agro Campo | Catálogo y pedidos en línea en Huanuco</title>', false)->getContent();
+        preg_match('/<meta name="description" content="([^"]*)"/', $html, $m);
+        // termina en el carácter de elipsis y, antes, una palabra entera (no cortada)
+        $this->assertMatchesRegularExpression('/[\p{L}.] ?…$/u', $m[1]);
+        $this->assertLessThanOrEqual(160, mb_strlen($m[1]));
+
+        // una página más allá de la última es un 404, no una página vacía indexable
+        $this->tienda('/catalogo?page=1')->assertOk();
+        $this->tienda('/catalogo?page=2')->assertNotFound();
+        $this->tienda('/categoria/fertilizantes?page=9')->assertNotFound();
+        $this->tienda('/catalogo?q=urea&page=5')->assertNotFound();
+    }
+
+    public function test_los_datos_estructurados_del_negocio_y_del_producto_estan_completos(): void
+    {
+        $this->sucursal->update(['ubigeo' => '100101', 'direccion' => 'Jr. Aguilar 347', 'telefono' => '062 512345', 'nombre' => 'Sucursal Centro']);
+        $this->publicar([
+            'direccion' => 'Jr. San Martín 1638', 'mapa_url' => 'https://maps.app.goo.gl/abc', 'mapa_lat' => -9.9306, 'mapa_lng' => -76.2422,
+            'horario' => "Lunes a sábado, 8 a. m. a 6 p. m.\nDomingos 8 am - 1 pm", 'facebook' => 'agrocampo', 'instagram' => '@agrocampo',
+        ]);
+
+        $html = $this->tienda('/')->assertOk()->getContent();
+        preg_match_all('/<script type="application\/ld\+json">(.*?)<\/script>/s', $html, $bloques);
+        $esquemas = collect($bloques[1])->map(fn ($j) => json_decode($j, true))->keyBy('@type');
+
+        $negocio = $esquemas['Store'];
+        $this->assertSame('http://agro.tienda.test/#negocio', $negocio['@id']);
+        $this->assertSame(['@type' => 'PostalAddress', 'streetAddress' => 'Jr. San Martín 1638', 'addressLocality' => 'Huanuco', 'addressRegion' => 'Huanuco', 'addressCountry' => 'PE'], $negocio['address']);
+        $this->assertSame(['@type' => 'GeoCoordinates', 'latitude' => -9.9306, 'longitude' => -76.2422], $negocio['geo']);
+        $this->assertSame('https://maps.app.goo.gl/abc', $negocio['hasMap']);
+        $this->assertSame([
+            ['@type' => 'OpeningHoursSpecification', 'dayOfWeek' => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], 'opens' => '08:00', 'closes' => '18:00'],
+            ['@type' => 'OpeningHoursSpecification', 'dayOfWeek' => ['Sunday'], 'opens' => '08:00', 'closes' => '13:00'],
+        ], $negocio['openingHoursSpecification']);
+        $this->assertArrayNotHasKey('openingHours', $negocio);
+        $this->assertSame(['https://www.facebook.com/agrocampo', 'https://www.instagram.com/agrocampo'], $negocio['sameAs']);
+        // la sucursal es otra sede del mismo negocio
+        $this->assertSame('Agro Campo · Sucursal Centro', $negocio['department'][0]['name']);
+        $this->assertSame('Jr. Aguilar 347', $negocio['department'][0]['address']['streetAddress']);
+        $this->assertSame('062 512345', $negocio['department'][0]['telephone']);
+        // el sitio con su buscador
+        $this->assertSame('http://agro.tienda.test/catalogo?q={termino}', $esquemas['WebSite']['potentialAction']['target']['urlTemplate']);
+
+        // el producto: oferta completa (sin marcar agotados, lo publicado se vende) y su ruta
+        $html = $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->getContent();
+        preg_match_all('/<script type="application\/ld\+json">(.*?)<\/script>/s', $html, $bloques);
+        $esquemas = collect($bloques[1])->map(fn ($j) => json_decode($j, true))->keyBy('@type');
+        $oferta = $esquemas['Product']['offers'];
+        $this->assertSame(['https://schema.org/InStock', 'https://schema.org/NewCondition', '145.00'], [$oferta['availability'], $oferta['itemCondition'], $oferta['price']]);
+        $this->assertSame('http://agro.tienda.test/#negocio', $oferta['seller']['@id']);
+        $this->assertSame(['Inicio', 'Catálogo', 'Fertilizantes', 'Urea 46% x 50 kg'], array_column($esquemas['BreadcrumbList']['itemListElement'], 'name'));
+        // la descripción automática dice qué es, de quién, cuánto y dónde
+        $this->assertStringContainsString('content="Urea 46% x 50 kg de Farmex, Fertilizantes. Precio S/ 145.00. Pídelo por WhatsApp en Agro Campo, Huanuco."', $html);
+        $this->assertStringNotContainsString('Disponible en Agro Campo', $html);
+        // con "marcar lo agotado", lo agotado sale como tal
+        $this->publicar(['mostrar_stock' => true]);
+        $sinStock = $this->crearProducto(precio: 50, atributos: ['nombre' => 'Azoxystrobin 250 SC']);
+        $this->tienda('/catalogo/azoxystrobin-250-sc')->assertSee('"availability":"https://schema.org/OutOfStock"', false);
+    }
+
+    public function test_el_horario_escrito_se_entiende_como_horario_estructurado(): void
+    {
+        $semana = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        $casos = [
+            'Lunes a sábado, 8 a. m. a 6 p. m.' => [[$semana, '08:00', '18:00']],
+            'Lunes a Sábado de 7 am - 6:30 pm' => [[$semana, '07:00', '18:30']],
+            'Lun-Vie 8:00-18:00' => [[array_slice($semana, 0, 5), '08:00', '18:00']],
+            'Domingos 8 am - 1 pm' => [[['Sunday'], '08:00', '13:00']],
+            'De lunes a viernes de 9 a 6' => [[array_slice($semana, 0, 5), '09:00', '18:00']],
+            'Todos los días de 8:30 a 20:00' => [[[...$semana, 'Sunday'], '08:30', '20:00']],
+            'Sábados y domingos 9 a. m. a 1 p. m.' => [[['Saturday', 'Sunday'], '09:00', '13:00']],
+            'Atención previa cita' => [],
+            'Lunes a viernes, horario de oficina' => [],
+        ];
+
+        foreach ($casos as $texto => $esperado) {
+            $this->assertSame(
+                array_map(fn ($e) => ['@type' => 'OpeningHoursSpecification', 'dayOfWeek' => $e[0], 'opens' => $e[1], 'closes' => $e[2]], $esperado),
+                Tienda::horarioEstructurado([$texto]),
+                $texto,
+            );
+        }
+    }
+
+    public function test_las_coordenadas_salen_del_enlace_de_maps_al_guardarlo(): void
+    {
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        $this->assertSame([-9.9306, -76.2422], Tienda::coordenadasDeMapa('https://www.google.com/maps/place/Agro/@-9.9306,-76.2422,17z/data=x'));
+        $this->assertSame([-9.93, -76.24], Tienda::coordenadasDeMapa('https://www.google.com/maps?q=-9.93,-76.24'));
+        $this->assertSame([-9.9306, -76.2422], Tienda::coordenadasDeMapa('https://www.google.com/maps/place/x/data=!3d-9.9306!4d-76.2422'));
+        $this->assertNull(Tienda::coordenadasDeMapa('https://maps.app.goo.gl/abc'));
+
+        // el enlace corto de "Compartir" se sigue hasta el largo
+        Http::fake([
+            'https://maps.app.goo.gl/corto' => Http::response('', 302, ['Location' => 'https://www.google.com/maps/place/Agro+Campo/@-9.9306,-76.2422,17z/']),
+            'https://maps.app.goo.gl/roto' => Http::response('', 404),
+        ]);
+        $guardar(['mapa_url' => 'https://maps.app.goo.gl/corto'])->assertSessionHasNoErrors();
+        $config = $this->empresa->fresh()->tienda_config;
+        $this->assertSame([-9.9306, -76.2422], [$config['mapa_lat'], $config['mapa_lng']]);
+        $this->tienda('/')->assertSee('"latitude":-9.9306', false);
+
+        // guardar otra cosa no vuelve a consultar; cambiar el enlace sí, y si no resuelve se queda sin coordenadas
+        $guardar(['anuncio' => 'Hola'])->assertSessionHasNoErrors();
+        $this->assertSame(-9.9306, $this->empresa->fresh()->tienda_config['mapa_lat']);
+        Http::assertSentCount(1);
+        $guardar(['mapa_url' => 'https://maps.app.goo.gl/roto'])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['mapa_lat']);
+        $this->tienda('/')->assertDontSee('"latitude"', false);
+        $guardar(['mapa_url' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['mapa_lng']);
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void
