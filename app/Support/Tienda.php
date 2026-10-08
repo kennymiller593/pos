@@ -32,6 +32,7 @@ class Tienda
         // apariencia de la portada
         'portada_estilo' => 'vitrina',
         'portada_imagen' => null,
+        'favicon' => null, // ícono de la pestaña del navegador (PNG cuadrado); sin él se usa el logo
         'portada_titulo' => null,
         'portada_boton' => null,
         'anuncio' => null,

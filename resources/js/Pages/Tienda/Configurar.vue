@@ -40,7 +40,7 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 // ---- secciones de la pantalla ----
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
-    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock'] },
+    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock', 'favicon'] },
     { valor: 'portada', nombre: 'Portada', campos: ['portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas'] },
@@ -107,6 +107,8 @@ const form = useForm({
     anuncio: props.tienda.config.anuncio ?? '',
     portada_imagen: null, // archivo nuevo, si se elige uno
     portada_imagen_quitar: false,
+    favicon: null, // ícono de la pestaña nuevo, si se elige uno
+    favicon_quitar: false,
     banners: bannersGuardados(),
     // contenido: páginas de texto
     nosotros: props.tienda.config.nosotros ?? '',
@@ -211,6 +213,42 @@ function quitarFoto() {
     if (form.portada_estilo === 'foto') form.portada_estilo = 'vitrina'
 }
 
+// ---- ícono de la pestaña (favicon) ----
+const inputIcono = ref(null)
+const iconoNuevo = ref(null) // vista previa local del archivo elegido
+const icono = computed(() => iconoNuevo.value ?? (form.favicon_quitar ? null : props.tienda.config.favicon))
+
+function elegirIcono(evento) {
+    const archivo = evento.target.files?.[0]
+    if (!archivo) return
+    form.clearErrors('favicon')
+    if (archivo.size > 2 * 1024 * 1024) {
+        form.setError('favicon', 'El ícono no debe pesar más de 2 MB.')
+        evento.target.value = ''
+        return
+    }
+    if (iconoNuevo.value) URL.revokeObjectURL(iconoNuevo.value)
+    iconoNuevo.value = URL.createObjectURL(archivo)
+    form.favicon = archivo
+    form.favicon_quitar = false
+}
+
+function quitarIcono() {
+    if (iconoNuevo.value) URL.revokeObjectURL(iconoNuevo.value)
+    iconoNuevo.value = null
+    form.favicon = null
+    form.favicon_quitar = true
+    if (inputIcono.value) inputIcono.value.value = ''
+}
+
+function limpiarIconoElegido() {
+    if (iconoNuevo.value) URL.revokeObjectURL(iconoNuevo.value)
+    iconoNuevo.value = null
+    form.favicon = null
+    form.favicon_quitar = false
+    if (inputIcono.value) inputIcono.value.value = ''
+}
+
 function limpiarFotoElegida() {
     if (fotoNueva.value) URL.revokeObjectURL(fotoNueva.value)
     fotoNueva.value = null
@@ -280,6 +318,7 @@ function guardar() {
         // lo guardado pasa a ser el punto de partida ("cambios sin guardar" se apaga)
         onSuccess: () => {
             limpiarFotoElegida()
+            limpiarIconoElegido()
             // los banners recién subidos ya tienen su dirección guardada
             form.banners.forEach((b) => b.vista && URL.revokeObjectURL(b.vista))
             form.banners = bannersGuardados()
@@ -670,6 +709,40 @@ function guardarDescripcion() {
                         <span :class="claseInterruptor" aria-hidden="true" />
                     </label>
                 </div>
+            </section>
+
+            <!-- Ícono de la pestaña -->
+            <section v-show="seccion === 'apariencia'" :class="[claseTarjeta, 'p-5 xl:col-span-2']" aria-labelledby="titulo-icono" data-icono-tienda>
+                <h2 id="titulo-icono" class="font-semibold tracking-tight">Ícono de la pestaña</h2>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">
+                    El cuadradito que sale en la pestaña del navegador, en favoritos y al guardar tu tienda en la pantalla del celular. Si no subes uno, se usa tu logo.
+                </p>
+                <div class="mt-4 flex flex-wrap items-center gap-4">
+                    <!-- así se ve en una pestaña -->
+                    <div class="flex h-10 items-center gap-2 rounded-t-xl border border-b-0 border-stone-200 bg-stone-50 px-3 text-sm text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" aria-hidden="true">
+                        <img v-if="icono" :src="icono" alt="" class="size-4 rounded-sm object-contain" />
+                        <span v-else class="grid size-4 place-items-center rounded-sm bg-emerald-600 text-[9px] font-bold text-white">{{ (tienda.nombre_inicial ?? 'T') }}</span>
+                        <span class="max-w-40 truncate">{{ tienda.nombre_tienda ?? 'Tu tienda' }} | Catálogo</span>
+                        <X class="size-3.5 text-neutral-400" />
+                    </div>
+                    <div class="grid size-16 place-items-center overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-700 dark:bg-neutral-950">
+                        <img v-if="icono" :src="icono" alt="Ícono actual" class="size-12 object-contain" />
+                        <ImageOff v-else class="size-6 text-neutral-300" />
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-semibold hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="inputIcono?.click()">
+                            <ImagePlus class="size-4" />
+                            {{ icono ? 'Cambiar ícono' : 'Subir ícono' }}
+                        </button>
+                        <button v-if="icono" type="button" class="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10" @click="quitarIcono">
+                            <Trash2 class="size-4" />
+                            Quitar
+                        </button>
+                    </div>
+                    <input ref="inputIcono" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" aria-label="Ícono de la pestaña" @change="elegirIcono" />
+                </div>
+                <p v-if="form.errors.favicon" :class="claseError">{{ form.errors.favicon }}</p>
+                <p v-else :class="claseAyuda">Mejor un PNG cuadrado con fondo transparente, de al menos 256 × 256 px. Se guarda cuadrado sin recortar nada.</p>
             </section>
 
             <!-- Portada -->

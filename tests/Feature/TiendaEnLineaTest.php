@@ -952,6 +952,46 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/catalogo')->assertOk()->assertDontSee('id="pedido"', false)->assertDontSee('data-anadir=', false);
     }
 
+    public function test_el_icono_de_la_pestana_se_sube_cuadrado_se_reemplaza_y_se_quita(): void
+    {
+        Storage::fake('public');
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        // sin ícono la pestaña usa el de inkaPos (la empresa no tiene logo)
+        $this->tienda('/')->assertSee('<link rel="icon" href="/favicon.ico?v=5">', false)->assertDontSee('apple-touch-icon');
+
+        $guardar(['favicon' => UploadedFile::fake()->create('icono.pdf', 10, 'application/pdf')])->assertSessionHasErrors('favicon');
+
+        // un logo apaisado queda cuadrado, entero, en PNG
+        $guardar(['favicon' => UploadedFile::fake()->image('logo.jpg', 900, 300)])->assertSessionHasNoErrors();
+        $icono = $this->empresa->fresh()->tienda_config['favicon'];
+        $this->assertStringEndsWith('.png', $icono);
+        $ruta = substr($icono, strlen('/storage/'));
+        [$ancho, $alto, $tipo] = getimagesizefromstring(Storage::disk('public')->get($ruta));
+        $this->assertSame([256, 256, IMAGETYPE_PNG], [$ancho, $alto, $tipo]);
+        $this->tienda('/')->assertSee('<link rel="icon" href="'.$icono.'">', false)->assertSee('<link rel="apple-touch-icon" href="'.$icono.'">', false);
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('<link rel="icon" href="'.$icono.'">', false);
+
+        // guardar otra cosa lo conserva; reemplazarlo borra el anterior
+        $guardar(['anuncio' => 'Hola'])->assertSessionHasNoErrors();
+        $this->assertSame($icono, $this->empresa->fresh()->tienda_config['favicon']);
+        $guardar(['favicon' => UploadedFile::fake()->image('otro.png', 64, 64)])->assertSessionHasNoErrors();
+        Storage::disk('public')->assertMissing($ruta);
+        $this->assertCount(1, Storage::disk('public')->allFiles('tienda'));
+
+        // la vista previa lo incrusta sin guardarlo
+        $respuesta = $this->actingAs($this->admin->fresh())->postJson('/tienda-en-linea/vista-previa', $this->datosDeTienda(['slug' => 'agro', 'favicon' => UploadedFile::fake()->image('previa.png', 100, 100)]))->assertOk();
+        $this->tienda(parse_url($respuesta->json('url'), PHP_URL_PATH).'?'.parse_url($respuesta->json('url'), PHP_URL_QUERY))->assertSee('<link rel="icon" href="data:image/png;base64,', false);
+        $this->assertCount(1, Storage::disk('public')->allFiles('tienda'));
+
+        // quitarlo borra el archivo y la pestaña vuelve al de inkaPos
+        $guardar(['favicon_quitar' => true])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['favicon']);
+        $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
+        $this->tienda('/')->assertSee('<link rel="icon" href="/favicon.ico?v=5">', false);
+    }
+
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void
     {
         $empresa = new Empresa(['ruc' => '20123456786', 'razon_social' => 'AGRO EL SEMBRADOR S.A.C.']);

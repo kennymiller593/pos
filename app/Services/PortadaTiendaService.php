@@ -54,6 +54,62 @@ class PortadaTiendaService
         return 'data:'.(['webp' => 'image/webp', 'png' => 'image/png'][$extension] ?? 'image/jpeg').';base64,'.base64_encode($contenido);
     }
 
+    /** Lado del ícono de la pestaña: cuadrado, suficiente para pestañas, favoritos y pantalla de inicio del celular. */
+    public const ICONO = 256;
+
+    /** Guarda el ícono de la pestaña como PNG cuadrado y devuelve su dirección. */
+    public function guardarIcono(UploadedFile $archivo, Empresa $empresa): string
+    {
+        $carpeta = $this->imagenes->enNube() ? "empresas/{$empresa->id}/tienda" : 'tienda';
+        $ruta = $carpeta.'/'.Str::uuid().'.png';
+
+        Storage::disk($this->imagenes->enNube() ? ImagenProductoService::DISCO : 'public')->put($ruta, $this->prepararIcono($archivo), [
+            'CacheControl' => self::CACHE,
+            'ContentType' => 'image/png',
+        ]);
+
+        return $this->imagenes->direccion($ruta);
+    }
+
+    /** El ícono listo para incrustarse en la página (vista previa, sin guardarlo). */
+    public function iconoIncrustado(UploadedFile $archivo): string
+    {
+        return 'data:image/png;base64,'.base64_encode($this->prepararIcono($archivo));
+    }
+
+    /**
+     * Cualquier imagen pasa a un PNG cuadrado de 256 px: se encaja entera (sin recortar) sobre
+     * fondo transparente, así un logo apaisado no se deforma.
+     */
+    private function prepararIcono(UploadedFile $archivo): string
+    {
+        $original = (string) file_get_contents($archivo->getRealPath());
+        $imagen = function_exists('imagecreatefromstring') ? @imagecreatefromstring($original) : false;
+
+        if (! $imagen) {
+            return $original;
+        }
+
+        $ancho = imagesx($imagen);
+        $alto = imagesy($imagen);
+        $factor = min(self::ICONO / $ancho, self::ICONO / $alto);
+        $nuevoAncho = max(1, (int) round($ancho * $factor));
+        $nuevoAlto = max(1, (int) round($alto * $factor));
+
+        $lienzo = imagecreatetruecolor(self::ICONO, self::ICONO);
+        imagealphablending($lienzo, false);
+        imagesavealpha($lienzo, true);
+        imagefill($lienzo, 0, 0, imagecolorallocatealpha($lienzo, 0, 0, 0, 127));
+        imagecopyresampled($lienzo, $imagen, (int) ((self::ICONO - $nuevoAncho) / 2), (int) ((self::ICONO - $nuevoAlto) / 2), 0, 0, $nuevoAncho, $nuevoAlto, $ancho, $alto);
+        imagedestroy($imagen);
+
+        ob_start();
+        imagepng($lienzo, null, 6);
+        imagedestroy($lienzo);
+
+        return (string) ob_get_clean();
+    }
+
     /** Borra una foto de portada guardada por nosotros. */
     public function eliminar(?string $url): void
     {

@@ -280,6 +280,7 @@ class TiendaController extends Controller
                 'nombre' => $nombre,
                 'inicial' => Str::upper(Str::substr($nombre, 0, 1)),
                 'logo' => $empresa->logo_url,
+                'favicon' => $config['favicon'],
                 'descripcion' => $config['descripcion'],
                 'url' => (string) Tienda::urlDe($empresa),
                 'colores' => Tienda::colores($config),

@@ -30,7 +30,11 @@
         <meta name="twitter:card" content="summary_large_image">
     @endif
     <meta name="theme-color" content="{{ $tienda['colores'][0] }}">
-    <link rel="icon" href="{{ $tienda['logo'] ?: '/favicon.ico?v=5' }}">
+    {{-- ícono de la pestaña: el que subió el dueño; si no, su logo; si no, el de inkaPos --}}
+    <link rel="icon" href="{{ $tienda['favicon'] ?: ($tienda['logo'] ?: '/favicon.ico?v=5') }}">
+    @if ($tienda['favicon'])
+        <link rel="apple-touch-icon" href="{{ $tienda['favicon'] }}">
+    @endif
     @fonts
     @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     {{-- color de marca elegido por la tienda --}}
