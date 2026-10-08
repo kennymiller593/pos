@@ -1087,12 +1087,12 @@ function guardarDescripcion() {
                         id="producto_descripcion"
                         v-model="formDescripcion.descripcion"
                         rows="7"
-                        maxlength="1500"
+                        maxlength="3000"
                         placeholder="Para qué sirve, cómo se usa, qué incluye, medidas..."
                         class="mt-3 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500"
                     />
                     <p v-if="formDescripcion.errors.descripcion" :class="claseError">{{ formDescripcion.errors.descripcion }}</p>
-                    <p v-else :class="claseAyuda">{{ formDescripcion.descripcion.length }} de 1500. Sale en la página del producto. Puedes dejarla vacía.</p>
+                    <p v-else :class="claseAyuda">{{ formDescripcion.descripcion.length }} de 3000. Sale en la página del producto. Separa los párrafos con una línea en blanco; puedes dejarla vacía.</p>
 
                     <div class="mt-5 flex justify-end gap-2">
                         <button type="button" class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="editando = null">Cancelar</button>

@@ -431,9 +431,9 @@ class TiendaConfigController extends Controller
         $datos = $request->validate([
             'en_tienda' => ['sometimes', 'boolean'],
             'destacado' => ['sometimes', 'boolean'],
-            'descripcion' => ['sometimes', 'nullable', 'string', 'max:1500'],
+            'descripcion' => ['sometimes', 'nullable', 'string', 'max:3000'],
         ], [
-            'descripcion.max' => 'La descripción no puede pasar de 1500 caracteres.',
+            'descripcion.max' => 'La descripción no puede pasar de 3000 caracteres.',
         ]);
 
         if (($datos['destacado'] ?? false) && ! $producto->destacado) {
