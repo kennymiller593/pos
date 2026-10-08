@@ -208,10 +208,10 @@ class TiendaEnLineaTest extends TestCase
             ->assertSee('Lunes a sábado')
             ->assertSee('https://www.instagram.com/agrocampo', false)
             // direcciones amigables: sin códigos ni identificadores
-            ->assertSee('href="/producto/urea-46-x-50-kg"', false)
+            ->assertSee('href="/catalogo/urea-46-x-50-kg"', false)
             ->assertSee('href="/categoria/fertilizantes"', false)
             ->assertDontSee('?categoria=', false)
-            ->assertDontSee('/producto/P0006', false);
+            ->assertDontSee('/catalogo/P0006', false);
     }
 
     public function test_la_tienda_es_publica_sin_sesion_y_no_expone_el_sistema(): void
@@ -276,28 +276,28 @@ class TiendaEnLineaTest extends TestCase
             ->assertDontSee('Producto sin presentacion')
             ->assertDontSee('Producto de la competencia');
 
-        $this->tienda('/producto/P0001/glifosato')->assertNotFound();
-        $this->tienda("/producto/{$inactivo->id}/x")->assertNotFound();
-        $this->tienda('/producto/AJENO1/x')->assertNotFound();
-        $this->tienda("/producto/{$ajeno->id}/x")->assertNotFound();
+        $this->tienda('/catalogo/P0001')->assertNotFound();
+        $this->tienda("/catalogo/{$inactivo->id}")->assertNotFound();
+        $this->tienda('/catalogo/AJENO1')->assertNotFound();
+        $this->tienda("/catalogo/{$ajeno->id}")->assertNotFound();
     }
 
     public function test_el_buscador_encuentra_por_palabras_marca_y_codigo_y_filtra_por_categoria(): void
     {
         $this->publicar();
 
-        $this->tienda('/?q=urea+50')->assertOk()
+        $this->tienda('/catalogo?q=urea+50')->assertOk()
             ->assertSee('Resultados para “urea 50”', false)
             ->assertSee('Urea 46% x 50 kg')
             ->assertDontSee('Glifosato 480 SL x 1 L')
             ->assertDontSee('Productos destacados')
             ->assertSee('noindex', false);
 
-        $this->tienda('/?q=farmex')->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL x 1 L');
-        $this->tienda('/?q=P0001')->assertSee('Glifosato 480 SL x 1 L')->assertDontSee('Urea 46% x 50 kg');
+        $this->tienda('/catalogo?q=farmex')->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL x 1 L');
+        $this->tienda('/catalogo?q=P0001')->assertSee('Glifosato 480 SL x 1 L')->assertDontSee('Urea 46% x 50 kg');
         // los comodines de LIKE se buscan como texto: "%" solo coincide con el nombre que lo tiene
-        $this->tienda('/?q=%25')->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL x 1 L');
-        $this->tienda('/?q=zzzz')->assertOk()->assertSee('No encontramos productos con esa búsqueda');
+        $this->tienda('/catalogo?q=%25')->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL x 1 L');
+        $this->tienda('/catalogo?q=zzzz')->assertOk()->assertSee('No encontramos productos con esa búsqueda');
 
         $this->tienda('/categoria/fertilizantes')->assertOk()
             ->assertSee('<title>Fertilizantes · Agro Campo</title>', false)
@@ -313,6 +313,16 @@ class TiendaEnLineaTest extends TestCase
         $id = Categoria::where('empresa_id', $this->empresa->id)->value('id');
         $this->tienda("/?categoria={$id}")->assertStatus(301)->assertRedirect('http://agro.tienda.test/categoria/fertilizantes');
         $this->tienda("/?categoria={$id}&q=urea")->assertRedirect('http://agro.tienda.test/categoria/fertilizantes?q=urea');
+        // la portada ya no busca ni pagina: eso pasa a /catalogo
+        $this->tienda('/?q=urea&orden=mayor')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo?q=urea&orden=mayor');
+        $this->tienda('/?page=2')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo?page=2');
+        $this->tienda('/catalogo')->assertOk()
+            ->assertSee('<title>Catálogo de Agro Campo</title>', false)
+            ->assertSee('<link rel="canonical" href="http://agro.tienda.test/catalogo">', false)
+            ->assertSee('Todos los productos')
+            ->assertSee('Urea 46% x 50 kg')
+            ->assertSee('Glifosato 480 SL x 1 L')
+            ->assertDontSee('Productos destacados');
         // una categoria inventada no rompe: muestra todo
         $this->tienda('/?categoria=no-es-un-id&orden=cualquiera&page=abc')->assertOk()->assertSee('Glifosato 480 SL x 1 L');
     }
@@ -357,15 +367,15 @@ class TiendaEnLineaTest extends TestCase
 
         $this->publicar(['mostrar_precios' => false, 'mostrar_stock' => false]);
         $this->tienda('/')->assertSee('Consultar precio')->assertDontSee('145.00')->assertDontSee('Agotado');
-        $this->tienda('/producto/urea-46-x-50-kg')->assertSee('Consulta el precio')->assertDontSee('145.00')->assertDontSee('"offers"', false);
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('Consulta el precio')->assertDontSee('145.00')->assertDontSee('"offers"', false);
 
         $this->publicar(['mostrar_precios' => true, 'mostrar_stock' => true]);
         $this->tienda('/')->assertSee('145.00')->assertSee('Agotado');
-        $this->tienda('/producto/azoxystrobin-250-sc')->assertSee('Agotado por ahora')->assertSee('Preguntar cuándo llega');
-        $this->tienda('/producto/urea-46-x-50-kg')->assertSee('Disponible')->assertSee('"price":"145.00"', false);
+        $this->tienda('/catalogo/azoxystrobin-250-sc')->assertSee('Agotado por ahora')->assertSee('Preguntar cuándo llega');
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('Disponible')->assertSee('"price":"145.00"', false);
 
         // nunca sale cuantas unidades hay ni lo que costo
-        $this->tienda('/producto/urea-46-x-50-kg')->assertDontSee('10.000')->assertDontSee('100.00');
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertDontSee('10.000')->assertDontSee('100.00');
         $this->assertNotNull($agotado);
     }
 
@@ -393,7 +403,7 @@ class TiendaEnLineaTest extends TestCase
         $this->agregarPresentacion($this->urea, 'Saco x 50 kg', 50, 140);
         $hermano = $this->crearProducto(precio: 150, atributos: ['nombre' => 'Nitrato de amonio', 'categoria_id' => $this->urea->categoria_id]);
 
-        $respuesta = $this->tienda('/producto/urea-46-x-50-kg');
+        $respuesta = $this->tienda('/catalogo/urea-46-x-50-kg');
         $respuesta->assertOk()
             ->assertSee('<title>Urea 46% x 50 kg · Agro Campo</title>', false)
             ->assertSee('Fertilizante nitrogenado de alta concentración.')
@@ -408,23 +418,23 @@ class TiendaEnLineaTest extends TestCase
             ->assertSee('También te puede interesar')
             ->assertSee($hermano->nombre)
             ->assertSee('application/ld+json', false)
-            ->assertSee('<link rel="canonical" href="http://agro.tienda.test/producto/urea-46-x-50-kg">', false);
+            ->assertSee('<link rel="canonical" href="http://agro.tienda.test/catalogo/urea-46-x-50-kg">', false);
 
         // el mensaje de WhatsApp lleva el producto y su enlace
         preg_match('/href="(https:\/\/wa\.me\/51987654321\?text=[^"]*P0006[^"]*)"/', $respuesta->getContent(), $coincide);
         $mensaje = rawurldecode(html_entity_decode($coincide[1] ?? ''));
         $this->assertStringContainsString('Urea 46% x 50 kg (código P0006)', $mensaje);
-        $this->assertStringContainsString('http://agro.tienda.test/producto/urea-46-x-50-kg', $mensaje);
+        $this->assertStringContainsString('http://agro.tienda.test/catalogo/urea-46-x-50-kg', $mensaje);
 
         // la página enlaza a su categoría por su dirección amigable
         $respuesta->assertSee('href="/categoria/fertilizantes"', false);
 
         // los enlaces de antes, con el código o el id, llevan a la dirección nueva (ya se compartieron por WhatsApp)
-        foreach (['/producto/P0006/urea-46-x-50-kg', '/producto/P0006/cualquier-cosa', '/producto/P0006', "/producto/{$this->urea->id}/x"] as $antiguo) {
-            $this->tienda($antiguo)->assertStatus(301)->assertRedirect('http://agro.tienda.test/producto/urea-46-x-50-kg');
+        foreach (['/producto/urea-46-x-50-kg', '/producto/P0006/urea-46-x-50-kg', '/producto/P0006/cualquier-cosa', '/producto/P0006', "/producto/{$this->urea->id}/x", '/catalogo/P0006'] as $antiguo) {
+            $this->tienda($antiguo)->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo/urea-46-x-50-kg');
         }
         $this->tienda('/producto/NOEXISTE/x')->assertNotFound()->assertSee('No encontramos esta página');
-        $this->tienda('/producto/no-existe')->assertNotFound();
+        $this->tienda('/catalogo/no-existe')->assertNotFound();
     }
 
     public function test_cada_producto_tiene_un_nombre_de_enlace_unico_que_sigue_a_su_nombre(): void
@@ -435,8 +445,8 @@ class TiendaEnLineaTest extends TestCase
         // mismo nombre en la misma empresa: el segundo se numera
         $gemelo = $this->crearProducto(atributos: ['nombre' => 'UREA 46% X 50 KG']);
         $this->assertSame('urea-46-x-50-kg-2', $gemelo->fresh()->slug);
-        $this->tienda('/producto/urea-46-x-50-kg')->assertOk()->assertSee('Código P0006');
-        $this->tienda('/producto/urea-46-x-50-kg-2')->assertOk()->assertSee("Código {$gemelo->codigo_interno}");
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('Código P0006');
+        $this->tienda('/catalogo/urea-46-x-50-kg-2')->assertOk()->assertSee("Código {$gemelo->codigo_interno}");
 
         // tildes, eñes y símbolos
         $this->assertSame('nandu-fosforo-1-2-litro', $this->crearProducto(atributos: ['nombre' => 'ÑANDÚ Fósforo 1/2 litro'])->slug);
@@ -447,7 +457,7 @@ class TiendaEnLineaTest extends TestCase
         $this->assertSame('urea-granulada-50-kg', $this->urea->fresh()->slug);
         $this->urea->update(['descripcion' => 'Nueva descripción']);
         $this->assertSame('urea-granulada-50-kg', $this->urea->fresh()->slug);
-        $this->tienda('/producto/urea-granulada-50-kg')->assertOk();
+        $this->tienda('/catalogo/urea-granulada-50-kg')->assertOk();
 
         // otra empresa puede usar el mismo nombre sin chocar
         $miEmpresa = $this->empresa;
@@ -461,7 +471,7 @@ class TiendaEnLineaTest extends TestCase
         $this->publicar(['descripcion' => '<script>alert(1)</script>']);
         $this->urea->update(['nombre' => 'Urea <img src=x onerror=alert(1)>', 'descripcion' => '</script><script>alert(2)</script>']);
 
-        foreach (['/', '/producto/'.$this->urea->fresh()->slug, '/?q=%3Cscript%3Ealert(3)%3C%2Fscript%3E'] as $ruta) {
+        foreach (['/', '/catalogo/'.$this->urea->fresh()->slug, '/catalogo?q=%3Cscript%3Ealert(3)%3C%2Fscript%3E'] as $ruta) {
             $html = $this->tienda($ruta)->assertOk()->getContent();
             $this->assertStringNotContainsString('<script>alert', $html);
             $this->assertStringNotContainsString('<img src=x', $html);
@@ -476,8 +486,9 @@ class TiendaEnLineaTest extends TestCase
         $respuesta = $this->tienda('/sitemap.xml')->assertOk();
         $this->assertStringContainsString('application/xml', $respuesta->headers->get('content-type'));
         $respuesta->assertSee('<loc>http://agro.tienda.test/</loc>', false)
+            ->assertSee('<loc>http://agro.tienda.test/catalogo</loc>', false)
             ->assertSee('<loc>http://agro.tienda.test/categoria/fertilizantes</loc>', false)
-            ->assertSee('<loc>http://agro.tienda.test/producto/urea-46-x-50-kg</loc>', false)
+            ->assertSee('<loc>http://agro.tienda.test/catalogo/urea-46-x-50-kg</loc>', false)
             ->assertDontSee('glifosato');
     }
 
@@ -547,7 +558,7 @@ class TiendaEnLineaTest extends TestCase
             ->assertSee('Mira lo que tenemos')
             ->assertSee('Envíos a todo Huánuco');
         // el anuncio va en todas las páginas
-        $this->tienda('/producto/urea-46-x-50-kg')->assertSee('Envíos a todo Huánuco');
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('Envíos a todo Huánuco');
 
         // guardar sin mandar la apariencia (un formulario viejo) no la borra
         $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', collect($this->datosDeTienda(['slug' => 'agro']))->all())->assertSessionHasNoErrors();
@@ -629,7 +640,7 @@ class TiendaEnLineaTest extends TestCase
         $this->assertStringContainsString('no-store', (string) $previa->headers->get('Cache-Control'));
 
         // la clave viaja en una cookie: se puede seguir navegando por el borrador
-        $this->withUnencryptedCookie('tienda_previa', $clave)->get('http://agro.tienda.test/producto/urea-46-x-50-kg')->assertOk()->assertSee('Vista previa')->assertSee('Anuncio en borrador');
+        $this->withUnencryptedCookie('tienda_previa', $clave)->get('http://agro.tienda.test/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('Vista previa')->assertSee('Anuncio en borrador');
         // "Salir" borra la cookie y vuelve a la tienda real
         $this->withUnencryptedCookie('tienda_previa', $clave)->get('http://agro.tienda.test/?previa=salir')->assertRedirect('http://agro.tienda.test')->assertCookieExpired('tienda_previa');
 

@@ -2,12 +2,11 @@
 
 @php
     $pagina = $productos->currentPage();
-    $portada = ! $filtrando && $pagina === 1;
     // enlace a una categoría (o a todo el catálogo) conservando la búsqueda y el orden ya elegidos
     $enlace = function (?object $cat) use ($buscar, $orden) {
         $parametros = http_build_query(array_filter(['q' => $buscar ?: null, 'orden' => $orden !== 'nombre' ? $orden : null]));
 
-        return ($cat ? $cat->url : '/').($parametros !== '' ? "?{$parametros}" : '').($cat ? '' : '#catalogo');
+        return ($cat ? $cat->url : '/catalogo').($parametros !== '' ? "?{$parametros}" : '');
     };
     $subtitulos = [
         'elegidos' => 'Lo que más recomendamos de nuestra tienda.',
@@ -21,7 +20,7 @@
     $categoriasConFoto = $categorias->filter(fn ($c) => $c->imagen);
 
     // cada página del catálogo es su propia dirección (la 2 no es una copia de la portada)
-    $canonica = rtrim($tienda['url'], '/').($categoria ? $categoria->url : '/').($pagina > 1 ? "?page={$pagina}" : '');
+    $canonica = rtrim($tienda['url'], '/').($categoria ? $categoria->url : ($portada ? '/' : '/catalogo')).($pagina > 1 ? "?page={$pagina}" : '');
 
     // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección y horario
     $negocio = array_filter([
@@ -38,7 +37,7 @@
     ]);
 @endphp
 
-@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre} · {$tienda['nombre']}" : ($pagina > 1 ? "Catálogo de {$tienda['nombre']} · página {$pagina}" : '')))
+@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre} · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
 @section('canonica', $canonica)
 {{-- los resultados de búsqueda no se indexan: son infinitas combinaciones de la misma tienda --}}
 @section('robots', $buscar !== '' ? 'noindex,follow' : 'index,follow')
@@ -151,7 +150,7 @@
                     </h2>
                     <p class="mt-1 text-slate-500">{{ $subtitulos[$destacados['origen']] }}</p>
                 </div>
-                <a href="#catalogo" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver todo el catálogo @include('tienda.icono', ['n' => 'flecha'])</a>
+                <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver todo el catálogo @include('tienda.icono', ['n' => 'flecha'])</a>
             </div>
             <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">
                 @foreach ($destacados['productos'] as $p)
@@ -163,13 +162,19 @@
 
     {{-- Catálogo --}}
     <section id="catalogo" class="mx-auto max-w-7xl scroll-mt-4 px-4 pt-14 sm:px-6 lg:scroll-mt-36 lg:px-8" aria-labelledby="titulo-catalogo">
-        @if ($filtrando)
-            <nav class="mb-3 flex items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
+        @unless ($portada)
+            <nav class="mb-3 flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
                 <a href="/" class="hover:text-(--marca)">Inicio</a>
                 @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
-                <span class="text-slate-800">{{ $buscar !== '' ? 'Búsqueda' : $categoria->nombre }}</span>
+                @if ($filtrando)
+                    <a href="/catalogo" class="hover:text-(--marca)">Catálogo</a>
+                    @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
+                    <span class="text-slate-800">{{ $categoria ? $categoria->nombre : 'Búsqueda' }}</span>
+                @else
+                    <span class="text-slate-800">Catálogo</span>
+                @endif
             </nav>
-        @endif
+        @endunless
 
         <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
             <div class="min-w-0">
@@ -178,6 +183,8 @@
                         Resultados para “{{ $buscar }}”
                     @elseif ($categoria)
                         {{ $categoria->nombre }}
+                    @elseif ($portada)
+                        Nuestro catálogo
                     @else
                         Todos los productos
                     @endif
@@ -185,13 +192,15 @@
                 <p class="mt-1 text-slate-500">
                     {{ number_format($productos->total()) }} producto{{ $productos->total() === 1 ? '' : 's' }}@if ($buscar !== '' && $categoria) en {{ $categoria->nombre }}@endif
                     @if ($filtrando)
-                        · <a href="/#catalogo" class="font-medium text-(--marca) hover:underline">Ver todo</a>
+                        · <a href="/catalogo" class="font-medium text-(--marca) hover:underline">Ver todo</a>
                     @endif
                 </p>
             </div>
 
-            @if ($tienda['mostrar_precios'] && $productos->total() > 1)
-                <form action="{{ $categoria ? $categoria->url : '/#catalogo' }}" method="get" class="flex items-center gap-2">
+            @if ($portada && $productos->hasMorePages())
+                <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver todos @include('tienda.icono', ['n' => 'flecha'])</a>
+            @elseif (! $portada && $tienda['mostrar_precios'] && $productos->total() > 1)
+                <form action="{{ $categoria ? $categoria->url : '/catalogo' }}" method="get" class="flex items-center gap-2">
                     @if ($buscar !== '') <input type="hidden" name="q" value="{{ $buscar }}"> @endif
                     <label for="orden" class="text-sm text-slate-500">Ordenar por</label>
                     <select id="orden" name="orden" onchange="this.form.submit()" class="h-10 rounded-xl border border-slate-200 bg-white pr-8 pl-3 text-sm font-medium focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
@@ -204,9 +213,10 @@
             @endif
         </div>
 
-        <div class="mt-6 grid gap-8 lg:grid-cols-[15rem_1fr]">
+        @php($conPanel = ! $portada && $categorias->isNotEmpty())
+        <div class="mt-6 grid gap-8 {{ $conPanel ? 'lg:grid-cols-[15rem_1fr]' : '' }}">
             {{-- categorías: panel lateral en pantallas grandes (en el celular están en la barra de arriba) --}}
-            @if ($categorias->isNotEmpty())
+            @if ($conPanel)
                 <aside class="hidden lg:block" aria-label="Filtrar por categoría">
                     <div class="sticky top-40 rounded-2xl ring-1 ring-slate-200">
                         <p class="border-b border-slate-100 px-4 py-3 text-xs font-semibold tracking-wider text-slate-400 uppercase">Categorías</p>
@@ -231,7 +241,7 @@
                 </aside>
             @endif
 
-            <div class="min-w-0 {{ $categorias->isEmpty() ? 'lg:col-span-2' : '' }}">
+            <div class="min-w-0">
                 @if ($productos->isEmpty())
                     <div class="rounded-3xl bg-slate-50 px-6 py-16 text-center ring-1 ring-slate-100">
                         <span class="mx-auto grid size-14 place-items-center rounded-2xl bg-white text-slate-400 ring-1 ring-slate-200">@include('tienda.icono', ['n' => $filtrando ? 'buscar' : 'paquete', 'clase' => 'size-6'])</span>
@@ -247,7 +257,7 @@
                         </p>
                         <div class="mt-6 flex flex-wrap justify-center gap-2">
                             @if ($filtrando)
-                                <a href="/#catalogo" class="inline-flex h-11 items-center rounded-xl bg-white px-5 text-sm font-semibold ring-1 ring-slate-200 hover:ring-slate-300">Ver todo el catálogo</a>
+                                <a href="/catalogo" class="inline-flex h-11 items-center rounded-xl bg-white px-5 text-sm font-semibold ring-1 ring-slate-200 hover:ring-slate-300">Ver todo el catálogo</a>
                             @endif
                             @if ($whatsapp)
                                 <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-white hover:bg-(--marca-oscuro)">
@@ -257,13 +267,24 @@
                         </div>
                     </div>
                 @else
-                    <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-5 {{ $categorias->isEmpty() ? 'lg:grid-cols-4' : 'xl:grid-cols-4' }}">
+                    <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-5 {{ $conPanel ? 'xl:grid-cols-4' : 'lg:grid-cols-4' }}">
                         @foreach ($productos as $p)
                             @include('tienda.tarjeta', ['p' => $p, 'conInsignia' => true])
                         @endforeach
                     </div>
 
-                    {{ $productos->onEachSide(1)->fragment('catalogo')->links('tienda.paginacion') }}
+                    @if ($portada)
+                        {{-- la portada solo muestra una parte: el resto está en /catalogo --}}
+                        @if ($productos->hasMorePages())
+                            <div class="mt-10 text-center">
+                                <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-(--marca) px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+                                    Ver los {{ number_format($productos->total()) }} productos @include('tienda.icono', ['n' => 'flecha'])
+                                </a>
+                            </div>
+                        @endif
+                    @else
+                        {{ $productos->onEachSide(1)->links('tienda.paginacion') }}
+                    @endif
                 @endif
             </div>
         </div>

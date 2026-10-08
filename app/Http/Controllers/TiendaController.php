@@ -16,9 +16,12 @@ class TiendaController extends Controller
 {
     private const POR_PAGINA = 24;
 
+    /** Cuántos productos del catálogo asoman en la portada, antes del botón para verlos todos. */
+    private const EN_PORTADA = 12;
+
     public function __construct(private readonly CatalogoTiendaService $catalogo) {}
 
-    /** Portada: destacados y catálogo; con ?q= pasa a ser el resultado de la búsqueda. */
+    /** Portada: presentación, destacados y una muestra del catálogo. */
     public function inicio(Request $request): View|RedirectResponse
     {
         $empresa = $this->empresa($request);
@@ -32,7 +35,21 @@ class TiendaController extends Controller
             return redirect($antigua->url.($resto !== '' ? "?{$resto}" : ''), 301);
         }
 
-        return $this->listado($request, $config, $contexto, null);
+        // antes la portada también buscaba y paginaba (/?q=urea, /?page=2): eso ahora vive en /catalogo
+        if (filled($request->query('q')) || (int) $request->query('page') > 1 || in_array($request->query('orden'), ['menor', 'mayor'], true)) {
+            return redirect('/catalogo?'.http_build_query($request->only('q', 'orden', 'page')), 301);
+        }
+
+        return $this->listado($request, $config, $contexto, null, portada: true);
+    }
+
+    /** /catalogo: todos los productos, con buscador (?q=) y orden. */
+    public function catalogo(Request $request): View
+    {
+        $empresa = $this->empresa($request);
+        $config = Tienda::config($empresa);
+
+        return $this->listado($request, $config, $this->contexto($request, $empresa, $config), null);
     }
 
     /** /categoria/fertilizantes: el catálogo de una sola categoría. */
@@ -48,10 +65,10 @@ class TiendaController extends Controller
         return $this->listado($request, $config, $contexto, $elegida);
     }
 
-    private function listado(Request $request, array $config, array $contexto, ?object $categoria): View
+    private function listado(Request $request, array $config, array $contexto, ?object $categoria, bool $portada = false): View
     {
         $empresa = $this->empresa($request);
-        $buscar = trim(mb_substr((string) $request->query('q'), 0, 80));
+        $buscar = $portada ? '' : trim(mb_substr((string) $request->query('q'), 0, 80));
         $orden = $config['mostrar_precios'] && in_array($request->query('orden'), ['menor', 'mayor'], true) ? $request->query('orden') : 'nombre';
 
         $productos = $this->catalogo->productos($empresa)
@@ -64,15 +81,16 @@ class TiendaController extends Controller
             ->when($orden === 'menor', fn ($q) => $q->orderBy('precio'))
             ->when($orden === 'mayor', fn ($q) => $q->orderByDesc('precio'))
             ->orderBy('productos.nombre')
-            ->paginate(self::POR_PAGINA)
+            ->paginate($portada ? self::EN_PORTADA : self::POR_PAGINA)
             ->withQueryString()
             ->through(fn ($p) => $this->catalogo->tarjeta($p, $config));
 
         $filtrando = $buscar !== '' || $categoria !== null;
-        $destacados = $filtrando || $productos->currentPage() > 1 ? null : $this->catalogo->destacados($empresa);
+        $destacados = $portada ? $this->catalogo->destacados($empresa) : null;
 
         return view('tienda.inicio', [
             ...$contexto,
+            'portada' => $portada,
             'buscar' => $buscar,
             'categoria' => $categoria,
             'orden' => $orden,
@@ -86,16 +104,29 @@ class TiendaController extends Controller
     }
 
     /**
-     * /producto/urea-46-x-50-kg. Los enlaces de antes llevaban el código
-     * (/producto/P0006/urea-46-x-50-kg): se redirigen a la dirección nueva.
+     * Enlaces de antes: /producto/urea-46-x-50-kg y, más antiguos, con el código
+     * (/producto/P0006/urea-46-x-50-kg). Todos llevan a la dirección nueva del producto.
      */
-    public function producto(Request $request, string $ref, ?string $nombre = null): View|RedirectResponse
+    public function productoAntiguo(Request $request, string $ref, ?string $nombre = null): RedirectResponse
+    {
+        $empresa = $this->empresa($request);
+
+        $producto = ($nombre === null ? $this->catalogo->encontrar($empresa, $ref) : null)
+            ?? $this->catalogo->encontrarPorCodigo($empresa, $ref);
+        abort_unless($producto, 404);
+
+        return redirect($this->catalogo->url($producto), 301);
+    }
+
+    /** /catalogo/urea-46-x-50-kg: la página de un producto. */
+    public function producto(Request $request, string $ref): View|RedirectResponse
     {
         $empresa = $this->empresa($request);
         $config = Tienda::config($empresa);
 
-        $producto = $nombre === null ? $this->catalogo->encontrar($empresa, $ref) : null;
+        $producto = $this->catalogo->encontrar($empresa, $ref);
 
+        // por su código o su id solo se abre el que aún no tiene nombre de enlace
         if (! $producto) {
             $producto = $this->catalogo->encontrarPorCodigo($empresa, $ref);
             abort_unless($producto, 404);
@@ -122,13 +153,13 @@ class TiendaController extends Controller
         ]);
     }
 
-    /** Mapa del sitio para buscadores: la portada y cada producto. */
+    /** Mapa del sitio para buscadores: la portada, el catálogo, las categorías y cada producto. */
     public function sitemap(Request $request): Response
     {
         $empresa = $this->empresa($request);
         $base = rtrim((string) Tienda::url($empresa->tienda_slug), '/');
 
-        $urls = collect([['loc' => $base.'/', 'lastmod' => null]])
+        $urls = collect([['loc' => $base.'/', 'lastmod' => null], ['loc' => $base.'/catalogo', 'lastmod' => null]])
             ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => null]))
             ->concat($this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get()
                 ->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));

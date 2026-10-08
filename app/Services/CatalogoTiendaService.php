@@ -165,7 +165,7 @@ class CatalogoTiendaService
         ];
     }
 
-    /** Un producto visible, por su nombre de enlace: /producto/urea-46-x-50-kg */
+    /** Un producto visible, por su nombre de enlace: /catalogo/urea-46-x-50-kg */
     public function encontrar(Empresa $empresa, string $slug): ?Producto
     {
         return $this->productos($empresa)->where('productos.slug', $slug)->orderBy('productos.id')->first();
@@ -234,11 +234,11 @@ class CatalogoTiendaService
         ];
     }
 
-    /** Ruta de la página del producto: /producto/urea-46-x-50-kg */
+    /** Ruta de la página del producto: /catalogo/urea-46-x-50-kg */
     public function url(Producto $producto): string
     {
         // un producto que aún no tiene nombre de enlace se sigue abriendo por su id
-        return '/producto/'.($producto->slug ?: $producto->id);
+        return '/catalogo/'.($producto->slug ?: $producto->id);
     }
 
     /** Cuántos productos se ven en la tienda y cuántos están destacados (para la pantalla de configuración). */

@@ -44,9 +44,11 @@
     <div class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         <nav class="flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
             <a href="/" class="hover:text-(--marca)">Inicio</a>
+            @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
+            <a href="/catalogo" class="hover:text-(--marca)">Catálogo</a>
             @if ($producto['categoria'])
                 @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
-                <a href="{{ $categoriaUrl ?? '/#catalogo' }}" class="hover:text-(--marca)">{{ $producto['categoria'] }}</a>
+                <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca)">{{ $producto['categoria'] }}</a>
             @endif
             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
             <span class="truncate text-slate-800" aria-current="page">{{ $producto['nombre'] }}</span>
@@ -187,7 +189,7 @@
                         @if ($producto['categoria'])
                             <div class="flex justify-between gap-4 py-2.5">
                                 <dt class="text-slate-500">Categoría</dt>
-                                <dd class="text-right font-medium"><a href="{{ $categoriaUrl ?? '/#catalogo' }}" class="hover:text-(--marca) hover:underline">{{ $producto['categoria'] }}</a></dd>
+                                <dd class="text-right font-medium"><a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca) hover:underline">{{ $producto['categoria'] }}</a></dd>
                             </div>
                         @endif
                         <div class="flex justify-between gap-4 py-2.5"><dt class="text-slate-500">Código</dt><dd class="text-right font-medium">{{ $producto['codigo'] }}</dd></div>
@@ -204,7 +206,7 @@
                 <div class="flex flex-wrap items-end justify-between gap-3">
                     <h2 id="titulo-relacionados" class="text-2xl font-semibold tracking-tight">También te puede interesar</h2>
                     @if ($producto['categoria'])
-                        <a href="{{ $categoriaUrl ?? '/#catalogo' }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver más de {{ $producto['categoria'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
+                        <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver más de {{ $producto['categoria'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
                     @endif
                 </div>
                 <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">

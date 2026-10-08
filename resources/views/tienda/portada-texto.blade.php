@@ -17,7 +17,7 @@
     </p>
 
     <div class="mt-7 flex flex-wrap gap-3 {{ $centrado ? 'justify-center' : '' }}">
-        <a href="#catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-(--marca) px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+        <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-(--marca) px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
             {{ $tienda['portada']['boton'] }} @include('tienda.icono', ['n' => 'flecha'])
         </a>
         @if ($whatsapp)
