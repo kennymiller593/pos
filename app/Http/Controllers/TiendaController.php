@@ -6,6 +6,7 @@ use App\Models\Empresa;
 use App\Services\CatalogoTiendaService;
 use App\Support\Tienda;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -22,6 +23,9 @@ class TiendaController extends Controller
 
     /** Cuántos productos del catálogo asoman en la portada, antes del botón para verlos todos. */
     private const EN_PORTADA = 12;
+
+    /** Cuántos productos sugiere el buscador mientras se escribe. */
+    private const SUGERENCIAS = 6;
 
     public function __construct(private readonly CatalogoTiendaService $catalogo) {}
 
@@ -67,6 +71,35 @@ class TiendaController extends Controller
         abort_unless($elegida, 404);
 
         return $this->listado($request, $config, $contexto, $elegida);
+    }
+
+    /** Sugerencias del buscador mientras se escribe: los primeros productos que coinciden y cuántos hay en total. */
+    public function buscar(Request $request): JsonResponse
+    {
+        $empresa = $this->empresa($request);
+        $config = Tienda::config($empresa);
+        $buscar = trim(mb_substr((string) $request->query('q'), 0, 80));
+
+        if (mb_strlen($buscar) < 2) {
+            return response()->json(['productos' => [], 'total' => 0]);
+        }
+
+        $consulta = $this->catalogo->buscar($this->catalogo->productos($empresa), $buscar);
+        $total = (clone $consulta)->toBase()->getCountForPagination();
+
+        $productos = $consulta->orderBy('productos.nombre')->limit(self::SUGERENCIAS)->get()
+            ->map(fn ($p) => $this->catalogo->tarjeta($p, $config))
+            ->map(fn (array $t) => [
+                'nombre' => $t['nombre'],
+                'url' => $t['url'],
+                'imagen' => $t['imagen'],
+                'precio' => $t['precio'],
+                'detalle' => $t['marca'] ?: $t['categoria'],
+            ]);
+
+        return response()->json(['productos' => $productos, 'total' => $total])
+            ->header('Cache-Control', 'no-store')
+            ->header('X-Robots-Tag', 'noindex');
     }
 
     private function listado(Request $request, array $config, array $contexto, ?object $categoria, bool $portada = false): View

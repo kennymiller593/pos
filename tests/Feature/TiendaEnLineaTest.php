@@ -887,6 +887,71 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/')->assertSee('--marca: #DC2626;', false)->assertSee('--sobre-marca: #FFFFFF;', false);
     }
 
+    public function test_el_buscador_sugiere_mientras_se_escribe(): void
+    {
+        $this->publicar();
+
+        $this->tienda('/buscar?q=ur')->assertOk()
+            ->assertHeader('X-Robots-Tag', 'noindex')
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('productos.0.nombre', 'Urea 46% x 50 kg')
+            ->assertJsonPath('productos.0.url', '/catalogo/urea-46-x-50-kg')
+            ->assertJsonPath('productos.0.precio', 145)
+            ->assertJsonPath('productos.0.detalle', 'Farmex');
+        // por código, y con varias palabras
+        $this->tienda('/buscar?q=P0001')->assertJsonPath('productos.0.nombre', 'Glifosato 480 SL x 1 L');
+        $this->tienda('/buscar?q=glifo+480')->assertJsonPath('total', 1);
+        // una letra no busca, y lo que no existe vuelve vacío
+        $this->tienda('/buscar?q=u')->assertOk()->assertExactJson(['productos' => [], 'total' => 0]);
+        $this->tienda('/buscar?q=zzzz')->assertOk()->assertExactJson(['productos' => [], 'total' => 0]);
+        $this->tienda('/buscar')->assertOk()->assertJsonPath('total', 0);
+
+        // lo oculto no se sugiere, y sin "mostrar precios" no viaja ningún precio
+        $this->glifosato->update(['en_tienda' => false]);
+        $this->tienda('/buscar?q=glifosato')->assertJsonPath('total', 0);
+        $this->publicar(['mostrar_precios' => false]);
+        $this->tienda('/buscar?q=urea')->assertJsonPath('productos.0.precio', null);
+        $this->assertStringNotContainsString('145', $this->tienda('/buscar?q=urea')->getContent());
+    }
+
+    public function test_cada_producto_se_puede_pedir_o_anadir_al_pedido(): void
+    {
+        $this->publicar();
+
+        $html = $this->tienda('/catalogo')->assertOk()
+            ->assertSee('id="pedido"', false) // el pedido que se arma y se envía por WhatsApp
+            ->assertSee('Enviar pedido por WhatsApp')
+            ->assertSee('data-anadir=', false)
+            ->getContent();
+
+        // "Pedir" lleva al WhatsApp de la tienda con el producto ya escrito
+        $this->assertStringContainsString('https://wa.me/51987654321?text='.rawurlencode("Hola, quiero pedir este producto:\nUrea 46% x 50 kg (código P0006)"), $html);
+        // "Añadir" lleva lo que el pedido necesita de ese producto
+        preg_match_all('/data-anadir="([^"]+)"/', $html, $botones);
+        $urea = collect($botones[1])->map(fn ($b) => json_decode(html_entity_decode($b), true))->firstWhere('codigo', 'P0006');
+        $this->assertSame(['Urea 46% x 50 kg', 145, '/catalogo/urea-46-x-50-kg'], [$urea['nombre'], $urea['precio'], $urea['url']]);
+        $this->assertSame((string) $this->urea->id, $urea['id']);
+
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('Añadir al pedido')->assertSee('data-cantidad-elegida', false);
+
+        // lo agotado se consulta, no se añade
+        $agotado = $this->crearProducto(precio: 68, atributos: ['nombre' => 'Mancozeb 80 WP', 'codigo_interno' => 'P0050']);
+        $this->tienda('/catalogo/mancozeb-80-wp')->assertSee('Agotado por ahora')->assertDontSee('Añadir al pedido');
+        $this->assertStringNotContainsString('P0050', implode(' ', array_map('html_entity_decode', (function () {
+            preg_match_all('/data-anadir="([^"]+)"/', $this->tienda('/catalogo')->getContent(), $b);
+
+            return $b[1];
+        })())));
+
+        // sin precios a la vista, el pedido no lleva precios
+        $this->publicar(['mostrar_precios' => false]);
+        $this->assertStringNotContainsString('145', $this->tienda('/catalogo')->getContent());
+
+        // una tienda sin WhatsApp (solo teléfono) no tiene pedido
+        $this->publicar(['whatsapp' => null, 'telefono' => '(062) 51 1234']);
+        $this->tienda('/catalogo')->assertOk()->assertDontSee('id="pedido"', false)->assertDontSee('data-anadir=', false);
+    }
+
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void
     {
         $empresa = new Empresa(['ruc' => '20123456786', 'razon_social' => 'AGRO EL SEMBRADOR S.A.C.']);

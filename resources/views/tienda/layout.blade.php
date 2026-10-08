@@ -32,9 +32,12 @@
     <meta name="theme-color" content="{{ $tienda['colores'][0] }}">
     <link rel="icon" href="{{ $tienda['logo'] ?: '/favicon.ico?v=5' }}">
     @fonts
-    @vite(['resources/css/app.css'])
+    @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     {{-- color de marca elegido por la tienda --}}
-    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }</style>
+    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
+        /* lo que solo sirve con el pedido activo (necesita JavaScript) no aparece hasta que carga */
+        html:not(.con-pedido) [data-necesita-js] { display: none !important; }</style>
+    <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">
@@ -103,6 +106,11 @@
             <div class="ml-auto flex shrink-0 items-center gap-2 lg:order-3 lg:ml-0">
                 <a href="#contacto" class="hidden h-11 items-center rounded-xl px-4 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 sm:inline-flex">Contacto</a>
                 @if ($whatsapp)
+                    <button type="button" data-pedido-abrir data-necesita-js aria-label="Ver mi pedido"
+                        class="relative grid size-11 cursor-pointer place-items-center rounded-xl text-slate-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:ring-slate-300">
+                        @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-5'])
+                        <span data-pedido-cuenta class="absolute -top-1.5 -right-1.5 hidden min-w-5 rounded-full bg-(--marca) px-1 text-center text-[11px] leading-5 font-semibold text-(--sobre-marca) ring-2 ring-white"></span>
+                    </button>
                     <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl bg-(--marca) px-4 text-sm font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
                         @include('tienda.icono', ['n' => 'whatsapp'])
                         <span class="hidden sm:inline">Hacer pedido</span><span class="sm:hidden">Pedir</span>
@@ -119,6 +127,8 @@
                 <input id="buscador" type="search" name="q" value="{{ $buscar ?? '' }}" placeholder="¿Qué producto buscas?" autocomplete="off" maxlength="80"
                     class="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-28 pl-11 text-[15px] placeholder-slate-400 transition-colors focus:border-(--marca) focus:bg-white focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
                 <button type="submit" class="absolute top-1/2 right-1.5 h-9 -translate-y-1/2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">Buscar</button>
+                {{-- sugerencias mientras se escribe (las llena tienda.js) --}}
+                <div id="sugerencias" class="absolute inset-x-0 top-full z-40 mt-2 hidden overflow-hidden rounded-2xl bg-white text-left shadow-2xl ring-1 shadow-slate-900/15 ring-slate-200" aria-live="polite"></div>
             </form>
         </div>
 
@@ -353,5 +363,70 @@
         </a>
     @endif
     @yield('barra_movil')
+
+    {{-- El pedido: lo que el cliente va añadiendo, para enviarlo completo por WhatsApp (lo maneja tienda.js) --}}
+    @if ($whatsapp)
+        {{-- acceso al pedido mientras se baja por la página: aparece cuando ya hay algo añadido.
+             En celular va a la izquierda, para no apilarse con el de WhatsApp encima de los productos --}}
+        <button type="button" data-pedido-abrir data-pedido-flotante data-necesita-js aria-label="Ver mi pedido"
+            class="fixed left-4 z-40 hidden size-14 cursor-pointer place-items-center rounded-full bg-slate-900 text-white shadow-lg ring-4 shadow-black/25 ring-white transition-colors hover:bg-slate-700 sm:right-6 sm:bottom-[6.5rem] sm:left-auto [&:not(.hidden)]:grid bottom-4 {{ $__env->hasSection('barra_movil') ? 'max-sm:!hidden' : '' }}">
+            @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-6'])
+            <span data-pedido-cuenta class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-(--marca) px-1.5 text-center text-xs leading-6 font-semibold text-(--sobre-marca) ring-2 ring-white"></span>
+        </button>
+
+        <div id="pedido-aviso" class="fixed inset-x-4 bottom-4 z-50 mx-auto hidden max-w-md items-center gap-3 rounded-2xl bg-slate-900 py-3 pr-3 pl-4 text-sm text-white shadow-2xl [&:not(.hidden)]:flex" role="status" aria-live="polite">
+            @include('tienda.icono', ['n' => 'check', 'clase' => 'size-5 text-emerald-400'])
+            <span data-aviso-texto class="min-w-0 flex-1 truncate"></span>
+            <button type="button" data-pedido-abrir class="h-9 shrink-0 cursor-pointer rounded-xl bg-white px-3.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100">Ver pedido</button>
+        </div>
+
+        <div id="pedido" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-labelledby="titulo-pedido">
+            <div class="absolute inset-0 bg-slate-950/50" data-pedido-cerrar></div>
+            <aside class="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl">
+                <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                    <div>
+                        <h2 id="titulo-pedido" class="text-lg font-semibold tracking-tight">Tu pedido</h2>
+                        <p class="text-sm text-slate-500">Lo envías por WhatsApp y te lo confirmamos.</p>
+                    </div>
+                    <button type="button" data-pedido-cerrar data-pedido-cerrar-boton aria-label="Cerrar" class="grid size-10 cursor-pointer place-items-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900">
+                        @include('tienda.icono', ['n' => 'cerrar', 'clase' => 'size-5'])
+                    </button>
+                </div>
+
+                <div data-pedido-vacio class="flex flex-1 flex-col items-center justify-center px-8 text-center">
+                    <span class="grid size-16 place-items-center rounded-2xl bg-slate-50 text-slate-400 ring-1 ring-slate-200">@include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-7'])</span>
+                    <p class="mt-5 text-lg font-semibold tracking-tight">Tu pedido está vacío</p>
+                    <p class="mt-1 text-slate-500">Toca "Añadir" en los productos que quieras y aquí se irán sumando.</p>
+                    <a href="/catalogo" class="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-(--sobre-marca) transition-colors hover:bg-(--marca-oscuro)">Ver el catálogo @include('tienda.icono', ['n' => 'flecha'])</a>
+                </div>
+
+                <ul data-pedido-lista class="hidden flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain"></ul>
+
+                <div data-pedido-pie class="hidden border-t border-slate-200 bg-slate-50 px-5 pt-4 pb-5">
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <div>
+                            <label for="pedido-nombre" class="sr-only">Tu nombre</label>
+                            <input id="pedido-nombre" data-pedido-nombre type="text" maxlength="60" autocomplete="name" placeholder="Tu nombre (opcional)"
+                                class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm placeholder-slate-400 focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
+                        </div>
+                        <div>
+                            <label for="pedido-nota" class="sr-only">Nota para la tienda</label>
+                            <input id="pedido-nota" data-pedido-nota type="text" maxlength="160" placeholder="Nota: envío, recojo... (opcional)"
+                                class="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm placeholder-slate-400 focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
+                        </div>
+                    </div>
+                    <p data-pedido-total class="mt-4 flex items-baseline justify-between gap-3"></p>
+                    <a href="{{ $whatsapp }}" data-pedido-enviar target="_blank" rel="noopener"
+                        class="mt-3 flex h-13 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-6 text-base font-semibold text-white shadow-sm transition-colors hover:bg-[#1eb957]">
+                        @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5'])Enviar pedido por WhatsApp
+                    </a>
+                    <div class="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                        <span>La tienda te confirma disponibilidad y precio final.</span>
+                        <button type="button" data-pedido-vaciar class="shrink-0 cursor-pointer font-medium text-slate-600 underline underline-offset-2 hover:text-red-600">Vaciar</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    @endif
 </body>
 </html>

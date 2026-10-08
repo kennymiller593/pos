@@ -60,6 +60,8 @@ if (Tienda::dominio()) {
             Route::get('/', [TiendaController::class, 'inicio'])->name('inicio');
             Route::get('/categoria/{categoria}', [TiendaController::class, 'categoria'])->where('categoria', '[a-z0-9-]+')->name('categoria');
             Route::get('/catalogo', [TiendaController::class, 'catalogo'])->name('catalogo');
+            // sugerencias del buscador mientras se escribe
+            Route::get('/buscar', [TiendaController::class, 'buscar'])->name('buscar');
             Route::get('/catalogo/{ref}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
             // enlaces de antes (/producto/urea-46-x-50-kg y /producto/P0006/urea-46-x-50-kg): se redirigen
             Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'productoAntiguo'])->where('ref', '[A-Za-z0-9_-]+');

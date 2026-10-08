@@ -219,8 +219,20 @@ class CatalogoTiendaService
             'descripcion' => $producto->descripcion,
             'destacado' => (bool) $producto->destacado,
             'url' => $this->url($producto),
-            'precio' => $config['mostrar_precios'] && $principal ? (float) $principal->precio_venta : null,
-            'presentacion' => $principal && $producto->presentaciones->count() > 1 ? $principal->nombre : null,
+            'precio' => $precio = $config['mostrar_precios'] && $principal ? (float) $principal->precio_venta : null,
+            'presentacion' => $presentacion = $principal && $producto->presentaciones->count() > 1 ? $principal->nombre : null,
+            // pedir solo este producto por WhatsApp (null si la tienda no tiene WhatsApp)
+            'pedido' => Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, quiero pedir este producto:\n{$producto->nombre} (código {$producto->codigo_interno})"),
+            // lo que guarda el pedido del cliente al tocar "Añadir"
+            'para_pedido' => [
+                'id' => (string) $producto->id,
+                'nombre' => $producto->nombre,
+                'codigo' => $producto->codigo_interno,
+                'unidad' => $presentacion,
+                'precio' => $precio,
+                'imagen' => $producto->imagen_url,
+                'url' => $this->url($producto),
+            ],
             'disponible' => $config['mostrar_stock']
                 ? (! $producto->controla_stock || (float) $producto->stock_total > 0)
                 : null,
