@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Auditoria;
 use App\Models\Producto;
 use App\Services\CatalogoTiendaService;
+use App\Services\DominioTiendaService;
 use App\Services\PortadaTiendaService;
 use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
@@ -65,7 +66,18 @@ class TiendaConfigController extends Controller
                 'publicada' => (bool) $empresa->tienda_publicada,
                 'config' => Tienda::config($empresa),
                 'dominio' => Tienda::dominio(),
-                'url' => Tienda::url($empresa->tienda_slug),
+                'url' => Tienda::urlDe($empresa),
+                'url_gratuita' => Tienda::url($empresa->tienda_slug),
+                'dominio_propio' => [
+                    'habilitado' => (bool) $empresa->tienda_dominio_habilitado,
+                    'disponible' => DominioTiendaService::disponible(),
+                    'dominio' => $empresa->tienda_dominio,
+                    'raiz' => $empresa->tienda_dominio ? DominioTiendaService::raiz($empresa->tienda_dominio) : null,
+                    'estado' => $empresa->tienda_dominio_estado,
+                    'detalle' => $empresa->tienda_dominio_detalle,
+                    'activado_en' => $empresa->tienda_dominio_activado_en?->toDateTimeString(),
+                    'origen' => config('tienda.origen'),
+                ],
                 'colores' => collect(config('tienda.colores'))->map(fn ($c) => $c[0])->all(),
                 'categorias' => $this->catalogo->categorias($empresa)->map(fn ($c) => ['id' => $c->id, 'nombre' => $c->nombre])->values(),
                 'limites' => ['banners' => Tienda::MAX_BANNERS, 'preguntas' => Tienda::MAX_PREGUNTAS],

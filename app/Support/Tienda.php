@@ -90,12 +90,77 @@ class Tienda
         return '[a-z0-9-]+';
     }
 
+    /** ¿Este host es el del sistema (login, POS...)? En local también valen localhost y la IP. */
+    public static function esHostDeLaApp(string $host): bool
+    {
+        $host = mb_strtolower($host);
+
+        return $host === mb_strtolower((string) config('tienda.host_app'))
+            || in_array($host, array_map('mb_strtolower', (array) config('app.trusted_hosts')), true)
+            || $host === 'localhost'
+            || filter_var($host, FILTER_VALIDATE_IP) !== false;
+    }
+
+    /** ¿Se atienden dominios propios (www.agrocampo.com)? Solo si el servicio está configurado. */
+    public static function conDominiosPropios(): bool
+    {
+        return filled(config('tienda.origen')) && in_array(config('tienda.dominios'), ['cloudflare', 'simulado'], true);
+    }
+
+    /**
+     * Expresión para la ruta de un dominio propio: cualquier nombre con terminación de letras
+     * (nunca una IP ni localhost) que no sea nuestro dominio ni uno bajo él, ni el host del sistema.
+     */
+    public static function patronDeDominioPropio(): string
+    {
+        $nuestro = preg_quote((string) self::dominio(), '/');
+        $hostApp = preg_quote((string) config('tienda.host_app'), '/');
+
+        return "(?!(?:[a-z0-9-]+\.)*{$nuestro}$)(?!{$hostApp}$)[a-z0-9][a-z0-9.-]*\.[a-z]{2,24}";
+    }
+
     /** Hosts de confianza que agrega la tienda (expresiones, como las espera TrustHosts). */
     public static function hostsDeConfianza(): array
     {
         $dominio = self::dominio();
+        $patrones = $dominio ? ['^[a-z0-9-]+\.'.preg_quote($dominio).'$'] : [];
 
-        return $dominio ? ['^[a-z0-9-]+\.'.preg_quote($dominio).'$'] : [];
+        // con dominios propios cualquier host puede ser una tienda: el que no esté registrado cae en 404,
+        // y las rutas del sistema solo se atienden en su propio host (SoloDominioPrincipal)
+        if ($dominio && self::conDominiosPropios()) {
+            $patrones[] = '^[a-z0-9.-]+$';
+        }
+
+        return $patrones;
+    }
+
+    /** ¿La empresa tiene su dominio propio contratado, registrado y con certificado? */
+    public static function dominioActivo(Empresa $empresa): bool
+    {
+        return self::conDominiosPropios()
+            && (bool) $empresa->tienda_dominio_habilitado
+            && filled($empresa->tienda_dominio)
+            && $empresa->tienda_dominio_estado === 'activo';
+    }
+
+    /** Enlace absoluto de la tienda de una empresa: su dominio propio si está activo, si no su dirección gratuita. */
+    public static function urlDe(Empresa $empresa, string $ruta = '/'): ?string
+    {
+        if (! self::dominioActivo($empresa)) {
+            return self::url($empresa->tienda_slug, $ruta);
+        }
+
+        return self::esquemaYPuerto()[0]."://{$empresa->tienda_dominio}".self::esquemaYPuerto()[1].'/'.ltrim($ruta, '/');
+    }
+
+    /** @return array{0: string, 1: string} esquema de la app y ":puerto" si corre en uno distinto del estándar */
+    private static function esquemaYPuerto(): array
+    {
+        $esquema = parse_url((string) config('app.url'), PHP_URL_SCHEME) ?: 'https';
+        // en local la app corre en un puerto (127.0.0.1:8017): la tienda usa el mismo
+        $puerto = request()?->getPort();
+
+        return [$esquema, $puerto && ! in_array($puerto, [80, 443], true) ? ":{$puerto}" : ''];
     }
 
     /**
@@ -146,11 +211,7 @@ class Tienda
             return null;
         }
 
-        $base = (string) config('app.url');
-        $esquema = parse_url($base, PHP_URL_SCHEME) ?: 'https';
-        // en local la app corre en un puerto (127.0.0.1:8017): la tienda usa el mismo
-        $puerto = request()?->getPort();
-        $conPuerto = $puerto && ! in_array($puerto, [80, 443], true) ? ":{$puerto}" : '';
+        [$esquema, $conPuerto] = self::esquemaYPuerto();
 
         return "{$esquema}://{$slug}.{$dominio}{$conPuerto}/".ltrim($ruta, '/');
     }

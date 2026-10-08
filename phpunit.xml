@@ -37,6 +37,10 @@
         <env name="IMAGENES_SECRET_ACCESS_KEY" value="" force="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TIENDA_DOMINIO" value="tienda.test"/>
+        <env name="TIENDA_ORIGEN" value="tiendas.tienda.test" force="true"/>
+        <env name="TIENDA_DOMINIOS" value="cloudflare" force="true"/>
+        <env name="CLOUDFLARE_API_TOKEN" value="token-de-prueba" force="true"/>
+        <env name="CLOUDFLARE_ZONE_ID" value="zona-de-prueba" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

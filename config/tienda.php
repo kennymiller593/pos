@@ -20,11 +20,18 @@ return [
     // host de la propia app: nunca es una tienda aunque comparta el dominio
     'host_app' => $hostApp,
 
+    // Dominio propio (www.agrocampo.com). 'origen' es a donde apunta el CNAME del cliente
+    // (tiendas.inkanet.pro, el "fallback origin" de Cloudflare for SaaS); 'dominios' es quien emite
+    // el certificado: 'cloudflare', o 'simulado' en desarrollo (acepta todo sin DNS ni Cloudflare).
+    // Sin ambos, la sección "Dominio" no se ofrece.
+    'origen' => env('TIENDA_ORIGEN') ?: null,
+    'dominios' => env('TIENDA_DOMINIOS') ?: null,
+
     // nombres que una empresa no puede usar como dirección (propios de la plataforma o genéricos)
     'reservados' => array_values(array_unique(array_filter(array_map('trim', [
         'www', 'pos', 'bot', 'api', 'app', 'admin', 'panel', 'img', 'cdn', 'static', 'assets', 'mail', 'smtp', 'ftp',
         'ns1', 'ns2', 'soporte', 'ayuda', 'blog', 'tienda', 'tiendas', 'inkapos', 'inkanet', 'login', 'registro',
-        'test', 'dev', 'staging', 'status',
+        'test', 'dev', 'staging', 'status', 'tiendas',
         ...explode(',', (string) env('TIENDA_RESERVADOS', '')),
     ])))),
 

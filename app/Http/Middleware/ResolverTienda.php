@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Empresa;
 use App\Services\PortadaTiendaService;
 use App\Services\SuscripcionService;
+use App\Support\Tienda;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -29,7 +30,11 @@ class ResolverTienda
 
     public function handle(Request $request, Closure $next): Response
     {
-        $slug = mb_strtolower((string) $request->route('tienda'));
+        // la tienda llega por su dirección gratuita ({slug}.inkanet.pro) o por su dominio propio (www.agrocampo.com)
+        $porDominio = $request->route('dominio') !== null;
+        $slug = $porDominio
+            ? (string) Empresa::where('tienda_dominio', mb_strtolower($request->getHost()))->value('tienda_slug')
+            : mb_strtolower((string) $request->route('tienda'));
 
         // "Salir de la vista previa": se olvida el borrador y se vuelve a la tienda real
         if ($request->query('previa') === 'salir') {
@@ -51,6 +56,14 @@ class ResolverTienda
 
         abort_if(! $empresa || ! $this->suscripciones->resumen($empresa)['vigente'], 404);
 
+        if ($porDominio) {
+            // el dominio propio solo atiende con su adicional activo y el certificado emitido
+            abort_unless(Tienda::dominioActivo($empresa) && $empresa->tienda_dominio === mb_strtolower($request->getHost()), 404);
+        } elseif (! $borrador && Tienda::dominioActivo($empresa)) {
+            // la dirección gratuita sigue funcionando, pero manda a la propia: una sola dirección para Google y para compartir
+            return redirect()->away(Tienda::urlDe($empresa, $request->getRequestUri()), 301);
+        }
+
         if ($borrador) {
             // solo en memoria: esta petición pinta el borrador, nada de esto se guarda
             $empresa->tienda_slug = $slug;
@@ -60,8 +73,8 @@ class ResolverTienda
 
         $request->attributes->set('tienda', $empresa);
         // los controladores reciben solo sus propios parametros, y route('tienda.*') ya sabe de que tienda se trata
-        $request->route()->forgetParameter('tienda');
-        URL::defaults(['tienda' => $slug]);
+        $request->route()->forgetParameter($porDominio ? 'dominio' : 'tienda');
+        URL::defaults(['tienda' => $slug, 'dominio' => $request->getHost()]);
 
         $respuesta = $next($request);
 

@@ -23,6 +23,7 @@ import {
 import AppLayout from '@/Layouts/AppLayout.vue'
 import BannersTienda from '@/Components/Tienda/BannersTienda.vue'
 import ContenidoTienda from '@/Components/Tienda/ContenidoTienda.vue'
+import DominioTienda from '@/Components/Tienda/DominioTienda.vue'
 import { claseArea, claseAyuda, claseError, claseInput, claseInterruptor, claseLabel, claseTarjeta } from '@/Components/Tienda/clases'
 
 const props = defineProps({
@@ -44,6 +45,7 @@ const SECCIONES = [
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
+    { valor: 'dominio', nombre: 'Dominio', campos: [] },
 ]
 const seccion = ref('general')
 
@@ -382,7 +384,9 @@ function guardarDescripcion() {
                     <p class="font-semibold tracking-tight">
                         {{ tienda.publicada ? 'Tu tienda está publicada' : 'Tu tienda aún no está publicada' }}
                     </p>
-                    <p v-if="tienda.publicada" class="truncate text-sm text-emerald-700 dark:text-emerald-400">{{ tienda.url }}</p>
+                    <p v-if="tienda.publicada" class="truncate text-sm text-emerald-700 dark:text-emerald-400">
+                    {{ tienda.url }}<span v-if="tienda.url !== tienda.url_gratuita" class="text-neutral-400"> · también {{ tienda.url_gratuita }}</span>
+                </p>
                     <p v-else class="text-sm text-neutral-500 dark:text-neutral-400">
                         Un catálogo en internet con tus productos, tu buscador y tus contactos. Complétala abajo y publícala.
                     </p>
@@ -450,7 +454,7 @@ function guardarDescripcion() {
             </div>
         </div>
 
-        <form v-show="seccion !== 'productos'" class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
+        <form v-show="seccion !== 'productos' && seccion !== 'dominio'" class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
             <!-- Dirección y presentación -->
             <section v-show="seccion === 'general'" :class="[claseTarjeta, 'p-5']">
                 <h2 class="font-semibold tracking-tight">Dirección y presentación</h2>
@@ -814,6 +818,9 @@ function guardarDescripcion() {
                 </button>
             </div>
         </form>
+
+        <!-- Dominio propio (fuera del formulario: se guarda por su cuenta) -->
+        <DominioTienda v-if="seccion === 'dominio'" :tienda="tienda" />
 
         <!-- Productos de la tienda -->
         <section v-show="seccion === 'productos'" :class="[claseTarjeta, 'overflow-hidden']" aria-label="Productos de la tienda">

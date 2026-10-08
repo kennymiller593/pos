@@ -15,7 +15,10 @@ class SoloDominioPrincipal
 {
     public function handle(Request $request, Closure $next): Response
     {
-        abort_if(Tienda::esHost($request->getHost()), 404);
+        $host = $request->getHost();
+
+        // con dominios propios, cualquier host ajeno al sistema es (o pretende ser) una tienda
+        abort_if(Tienda::esHost($host) || (Tienda::conDominiosPropios() && ! Tienda::esHostDeLaApp($host)), 404);
 
         return $next($request);
     }

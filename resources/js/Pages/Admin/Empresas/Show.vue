@@ -124,6 +124,21 @@ const formPlan = useForm({ plan: planInicial, meses: 1, nota: '' })
 const formExtender = useForm({ dias: 7 })
 const formActivo = useForm({})
 const formTienda = useForm({})
+const formDominio = useForm({})
+
+// adicional "Dominio propio": al quitarlo, el dominio deja de atender y la tienda vuelve a su dirección gratuita
+async function alternarDominio() {
+    if (props.empresa.dominio.habilitado && props.empresa.dominio.dominio) {
+        const ok = await confirmar({
+            titulo: 'Quitar el dominio propio',
+            mensaje: `${props.empresa.dominio.dominio} dejará de atender la tienda de ${props.empresa.razon_social}. Su configuración se conserva por si lo reactivas.`,
+            textoConfirmar: 'Quitar',
+            peligro: true,
+        })
+        if (!ok) return
+    }
+    formDominio.post(`/admin/empresas/${props.empresa.id}/dominio`, { preserveScroll: true })
+}
 
 // adicional "Tienda en línea": al quitarlo, la tienda publicada deja de verse
 async function alternarTienda() {
@@ -374,6 +389,41 @@ const claseBoton =
                             @click="alternarTienda"
                         >
                             {{ formTienda.processing ? 'Procesando...' : (empresa.tienda.habilitada ? 'Quitar el adicional' : 'Activar tienda en línea') }}
+                        </button>
+                    </section>
+
+                    <!-- Adicional: dominio propio -->
+                    <section :class="claseTarjeta" data-adicional-dominio>
+                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
+                            <Globe class="size-4" :class="empresa.dominio.habilitado ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-400'" />
+                            Dominio propio
+                            <span class="ml-auto inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" :class="empresa.dominio.habilitado ? VERDE : GRIS">
+                                {{ empresa.dominio.habilitado ? 'Activo' : 'No contratado' }}
+                            </span>
+                        </h3>
+                        <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                            <template v-if="!empresa.dominio.disponible">El servicio de dominios propios no está configurado en este entorno.</template>
+                            <template v-else-if="!empresa.dominio.habilitado">Adicional de pago. Al activarlo, el dueño puede registrar su dominio (www.sunegocio.com) en "Tienda en línea".</template>
+                            <template v-else-if="empresa.dominio.dominio">
+                                {{ empresa.dominio.dominio }} ·
+                                <span :class="empresa.dominio.estado === 'activo' ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'">
+                                    {{ { pendiente: 'falta el CNAME', verificando: 'emitiendo certificado', activo: 'activo', error: 'con error' }[empresa.dominio.estado] ?? empresa.dominio.estado }}
+                                </span>
+                            </template>
+                            <template v-else>El dueño ya puede registrar su dominio, pero aún no lo hace.</template>
+                        </p>
+                        <button
+                            v-if="empresa.dominio.disponible"
+                            type="button"
+                            :disabled="formDominio.processing || !empresa.tienda.habilitada"
+                            class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            :class="empresa.dominio.habilitado
+                                ? 'border border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                            :title="empresa.tienda.habilitada ? '' : 'Primero activa la tienda en línea'"
+                            @click="alternarDominio"
+                        >
+                            {{ formDominio.processing ? 'Procesando...' : (empresa.dominio.habilitado ? 'Quitar el adicional' : 'Activar dominio propio') }}
                         </button>
                     </section>
 

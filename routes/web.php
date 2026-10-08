@@ -39,6 +39,7 @@ use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\SuscripcionController;
 use App\Http\Controllers\TiendaConfigController;
 use App\Http\Controllers\TiendaController;
+use App\Http\Controllers\TiendaDominioController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Middleware\CabecerasTienda;
@@ -51,12 +52,7 @@ use Illuminate\Support\Facades\Route;
 // Va primero porque comparte "/" con la app, y fuera del grupo web: es publica, sin sesion ni cookies
 // (un buscador o un pico de visitas no abre sesiones ni toca nada del sistema).
 if (Tienda::dominio()) {
-    Route::domain('{tienda}.'.Tienda::dominio())
-        ->where(['tienda' => Tienda::patronDeRuta()])
-        ->withoutMiddleware('web')
-        ->middleware([CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class])
-        ->name('tienda.')
-        ->group(function () {
+    $rutasDeTienda = function () {
             Route::get('/', [TiendaController::class, 'inicio'])->name('inicio');
             Route::get('/categoria/{categoria}', [TiendaController::class, 'categoria'])->where('categoria', '[a-z0-9-]+')->name('categoria');
             Route::get('/catalogo', [TiendaController::class, 'catalogo'])->name('catalogo');
@@ -70,7 +66,25 @@ if (Tienda::dominio()) {
                 Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
             }
             Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
-        });
+    };
+    $middlewareDeTienda = [CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class];
+
+    Route::domain('{tienda}.'.Tienda::dominio())
+        ->where(['tienda' => Tienda::patronDeRuta()])
+        ->withoutMiddleware('web')
+        ->middleware($middlewareDeTienda)
+        ->name('tienda.')
+        ->group($rutasDeTienda);
+
+    // la misma tienda en su dominio propio (www.agrocampo.com): cualquier host que no sea nuestro
+    if (Tienda::conDominiosPropios()) {
+        Route::domain('{dominio}')
+            ->where(['dominio' => Tienda::patronDeDominioPropio()])
+            ->withoutMiddleware('web')
+            ->middleware($middlewareDeTienda)
+            ->name('tienda-dominio.')
+            ->group($rutasDeTienda);
+    }
 }
 
 // PDF de un comprobante para el cliente final (enlace firmado que se envia por WhatsApp)
@@ -148,6 +162,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/extender', [AdminEmpresaController::class, 'extender'])->name('empresas.extender');
         Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
         Route::post('/empresas/{empresa}/tienda', [AdminEmpresaController::class, 'alternarTienda'])->name('empresas.tienda');
+        Route::post('/empresas/{empresa}/dominio', [AdminEmpresaController::class, 'alternarDominio'])->name('empresas.dominio');
         Route::post('/empresas/{empresa}/entrar', [ImpersonacionController::class, 'entrar'])->name('empresas.entrar');
         Route::get('/empresas/{empresa}/auditoria', [AuditoriaController::class, 'deEmpresa'])->name('empresas.auditoria');
         Route::get('/auditoria/{empresa}', [AuditoriaController::class, 'deEmpresa'])->name('auditoria');
@@ -170,6 +185,10 @@ Route::middleware('auth')->group(function () {
         Route::put('/tienda-en-linea', [TiendaConfigController::class, 'update'])->name('tienda-config.update');
         Route::post('/tienda-en-linea/vista-previa', [TiendaConfigController::class, 'vistaPrevia'])->middleware('throttle:20,1')->name('tienda-config.vista-previa');
         Route::patch('/tienda-en-linea/productos/{producto}', [TiendaConfigController::class, 'producto'])->name('tienda-config.producto');
+        // dominio propio de la tienda
+        Route::post('/tienda-en-linea/dominio', [TiendaDominioController::class, 'guardar'])->middleware('throttle:10,1')->name('tienda-dominio.guardar');
+        Route::post('/tienda-en-linea/dominio/verificar', [TiendaDominioController::class, 'verificar'])->middleware('throttle:10,1')->name('tienda-dominio.verificar');
+        Route::delete('/tienda-en-linea/dominio', [TiendaDominioController::class, 'quitar'])->name('tienda-dominio.quitar');
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
         Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');

@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    // Cloudflare for SaaS: certificados para los dominios propios de las tiendas
+    'cloudflare' => [
+        'token' => env('CLOUDFLARE_API_TOKEN'),
+        'zona' => env('CLOUDFLARE_ZONE_ID'),
+    ],
+
     'decolecta' => [
         'token' => env('API_TOKEN_SUNAT'),
         'url' => env('DECOLECTA_URL', 'https://api.decolecta.com/v1'),

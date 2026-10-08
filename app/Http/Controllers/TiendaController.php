@@ -252,7 +252,7 @@ class TiendaController extends Controller
     public function sitemap(Request $request): Response
     {
         $empresa = $this->empresa($request);
-        $base = rtrim((string) Tienda::url($empresa->tienda_slug), '/');
+        $base = rtrim((string) Tienda::urlDe($empresa), '/');
 
         $urls = collect([['loc' => $base.'/', 'lastmod' => null], ['loc' => $base.'/catalogo', 'lastmod' => null]])
             ->concat(collect($this->paginas(Tienda::config($empresa)))->map(fn ($p) => ['loc' => $base.$p['url'], 'lastmod' => null])->values())
@@ -281,7 +281,7 @@ class TiendaController extends Controller
                 'inicial' => Str::upper(Str::substr($nombre, 0, 1)),
                 'logo' => $empresa->logo_url,
                 'descripcion' => $config['descripcion'],
-                'url' => (string) Tienda::url($empresa->tienda_slug),
+                'url' => (string) Tienda::urlDe($empresa),
                 'colores' => Tienda::colores($config),
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),

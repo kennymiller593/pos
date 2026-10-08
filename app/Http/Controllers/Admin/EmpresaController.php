@@ -9,6 +9,7 @@ use App\Models\Empresa;
 use App\Models\Plan;
 use App\Models\Suscripcion;
 use App\Services\SuscripcionService;
+use App\Services\DominioTiendaService;
 use App\Support\Tienda;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,7 +101,13 @@ class EmpresaController extends Controller
                 'tienda' => [
                     'habilitada' => (bool) $empresa->tienda_habilitada,
                     'publicada' => (bool) $empresa->tienda_publicada,
-                    'url' => Tienda::url($empresa->tienda_slug),
+                    'url' => Tienda::urlDe($empresa),
+                ],
+                'dominio' => [
+                    'habilitado' => (bool) $empresa->tienda_dominio_habilitado,
+                    'disponible' => DominioTiendaService::disponible(),
+                    'dominio' => $empresa->tienda_dominio,
+                    'estado' => $empresa->tienda_dominio_estado,
                 ],
                 'facturacion_electronica' => (bool) $empresa->facturacion_electronica,
                 'entorno_sunat' => $empresa->entorno_sunat,
@@ -187,6 +194,21 @@ class EmpresaController extends Controller
         return back()->with('success', $empresa->tienda_habilitada
             ? "Tienda en línea activada para {$empresa->razon_social}: ya la ve en su menú."
             : "Tienda en línea desactivada para {$empresa->razon_social}: su tienda dejó de mostrarse.");
+    }
+
+    /** Adicional "dominio propio": al quitarlo, el dominio deja de atender (la configuración se conserva). */
+    public function alternarDominio(Request $request, Empresa $empresa): RedirectResponse
+    {
+        $empresa->forceFill(['tienda_dominio_habilitado' => ! $empresa->tienda_dominio_habilitado])->save();
+
+        Auditoria::registrar($request->user(), $empresa->tienda_dominio_habilitado ? 'plataforma.dominio_activado' : 'plataforma.dominio_desactivado', 'empresa', $empresa->id, [
+            'empresa' => $empresa->razon_social,
+            'dominio' => $empresa->tienda_dominio,
+        ]);
+
+        return back()->with('success', $empresa->tienda_dominio_habilitado
+            ? "Dominio propio activado para {$empresa->razon_social}: ya puede registrarlo en su tienda."
+            : "Dominio propio desactivado para {$empresa->razon_social}: su tienda vuelve a su dirección gratuita.");
     }
 
     public function alternarActivo(Request $request, Empresa $empresa): RedirectResponse
