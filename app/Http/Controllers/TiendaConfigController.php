@@ -157,11 +157,10 @@ class TiendaConfigController extends Controller
             'color' => ['required', Rule::in([...array_keys(config('tienda.colores')), 'propio'])],
             'color_propio' => ['nullable', 'required_if:color,propio', 'string', function (string $atributo, mixed $valor, \Closure $falla) {
                 if (! Tienda::esColor((string) $valor)) {
-                    $falla('Elige un color válido.');
-                } elseif (! Tienda::colorLegible((string) $valor)) {
-                    $falla('Ese color es muy claro: los botones llevan texto blanco y no se leerían. Elige uno más oscuro.');
+                    $falla('Elige un color válido, por ejemplo #33CC66.');
                 }
             }],
+            'color_texto' => ['nullable', Rule::in(['claro', 'oscuro'])],
             'mostrar_precios' => ['required', 'boolean'],
             'mostrar_stock' => ['required', 'boolean'],
             'whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s()-]{6,20}$/'],
@@ -288,6 +287,7 @@ class TiendaConfigController extends Controller
         }
 
         $config['color_propio'] = $config['color'] === 'propio' ? strtoupper((string) $config['color_propio']) : null;
+        $config['color_texto'] = $config['color'] === 'propio' ? $config['color_texto'] : null;
 
         if ($request->boolean('con_banners')) {
             $config['banners'] = array_values(array_map(function (array $banner) use ($fotoNueva) {

@@ -43,12 +43,12 @@
 @section('contenido')
     <div class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         <nav class="flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
-            <a href="/" class="hover:text-(--marca)">Inicio</a>
+            <a href="/" class="hover:text-(--marca-texto)">Inicio</a>
             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
-            <a href="/catalogo" class="hover:text-(--marca)">Catálogo</a>
+            <a href="/catalogo" class="hover:text-(--marca-texto)">Catálogo</a>
             @if ($producto['categoria'])
                 @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
-                <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca)">{{ $producto['categoria'] }}</a>
+                <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca-texto)">{{ $producto['categoria'] }}</a>
             @endif
             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
             <span class="truncate text-slate-800" aria-current="page">{{ $producto['nombre'] }}</span>
@@ -75,7 +75,7 @@
             {{-- Detalles --}}
             <div class="min-w-0">
                 @if ($producto['marca'])
-                    <p class="text-sm font-semibold tracking-wider text-(--marca) uppercase">{{ $producto['marca'] }}</p>
+                    <p class="text-sm font-semibold tracking-wider text-(--marca-texto) uppercase">{{ $producto['marca'] }}</p>
                 @endif
                 <h1 class="mt-1.5 text-3xl leading-tight font-semibold tracking-tight text-balance sm:text-4xl">{{ $producto['nombre'] }}</h1>
 
@@ -113,7 +113,7 @@
 
                     <div class="mt-5 flex flex-col gap-2 sm:flex-row">
                         @if ($pedido)
-                            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+                            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
                                 @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5']){{ $textoPedido }}
                             </a>
                         @endif
@@ -123,7 +123,7 @@
                             </a>
                         @endif
                         @if (! $pedido && ! $contactos['telefono'])
-                            <a href="#contacto" class="inline-flex h-13 flex-1 items-center justify-center rounded-xl bg-(--marca) px-6 text-base font-semibold text-white transition-colors hover:bg-(--marca-oscuro)">Ver cómo contactarnos</a>
+                            <a href="#contacto" class="inline-flex h-13 flex-1 items-center justify-center rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) transition-colors hover:bg-(--marca-oscuro)">Ver cómo contactarnos</a>
                         @endif
                     </div>
                 </div>
@@ -154,19 +154,19 @@
                 <ul class="mt-6 space-y-3 text-sm">
                     @if ($pedido)
                         <li class="flex items-start gap-3">
-                            <span class="mt-0.5 text-(--marca)">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])</span>
+                            <span class="mt-0.5 text-(--marca-texto)">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])</span>
                             <span><span class="font-medium">Pide por WhatsApp.</span> <span class="text-slate-500">Te confirmamos precio y disponibilidad al momento.</span></span>
                         </li>
                     @endif
                     @if ($contactos['direccion'])
                         <li class="flex items-start gap-3">
-                            <span class="mt-0.5 text-(--marca)">@include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-4.5'])</span>
+                            <span class="mt-0.5 text-(--marca-texto)">@include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-4.5'])</span>
                             <span><span class="font-medium">Recógelo en tienda.</span> <span class="text-slate-500">{{ implode(' · ', array_column($contactos['direcciones'], 'texto')) }}</span></span>
                         </li>
                     @endif
                     @if ($contactos['horario'])
                         <li class="flex items-start gap-3">
-                            <span class="mt-0.5 text-(--marca)">@include('tienda.icono', ['n' => 'reloj', 'clase' => 'size-4.5'])</span>
+                            <span class="mt-0.5 text-(--marca-texto)">@include('tienda.icono', ['n' => 'reloj', 'clase' => 'size-4.5'])</span>
                             <span><span class="font-medium">Atención.</span> <span class="text-slate-500">{{ $contactos['horario'] }}</span></span>
                         </li>
                     @endif
@@ -189,7 +189,7 @@
                         @if ($producto['categoria'])
                             <div class="flex justify-between gap-4 py-2.5">
                                 <dt class="text-slate-500">Categoría</dt>
-                                <dd class="text-right font-medium"><a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca) hover:underline">{{ $producto['categoria'] }}</a></dd>
+                                <dd class="text-right font-medium"><a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca-texto) hover:underline">{{ $producto['categoria'] }}</a></dd>
                             </div>
                         @endif
                         <div class="flex justify-between gap-4 py-2.5"><dt class="text-slate-500">Código</dt><dd class="text-right font-medium">{{ $producto['codigo'] }}</dd></div>
@@ -206,7 +206,7 @@
                 <div class="flex flex-wrap items-end justify-between gap-3">
                     <h2 id="titulo-relacionados" class="text-2xl font-semibold tracking-tight">También te puede interesar</h2>
                     @if ($producto['categoria'])
-                        <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca) hover:underline">Ver más de {{ $producto['categoria'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
+                        <a href="{{ $categoriaUrl ?? '/catalogo' }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--marca-texto) hover:underline">Ver más de {{ $producto['categoria'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
                     @endif
                 </div>
                 <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-5">
@@ -228,7 +228,7 @@
                 <p class="truncate text-xs text-slate-500">{{ $producto['nombre'] }}</p>
                 <p class="text-lg leading-tight font-semibold tracking-tight">{{ $producto['precio'] !== null ? 'S/ '.number_format($producto['precio'], 2) : 'Consulta el precio' }}</p>
             </div>
-            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-white">
+            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-(--sobre-marca)">
                 @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5'])Pedir
             </a>
         </div>

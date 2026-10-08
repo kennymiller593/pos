@@ -39,7 +39,7 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 // ---- secciones de la pantalla ----
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
-    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'mostrar_precios', 'mostrar_stock'] },
+    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock'] },
     { valor: 'portada', nombre: 'Portada', campos: ['portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas'] },
@@ -86,6 +86,7 @@ const form = useForm({
     descripcion: props.tienda.config.descripcion ?? '',
     color: props.tienda.config.color,
     color_propio: props.tienda.config.color_propio ?? '#0F766E',
+    color_texto: props.tienda.config.color_texto ?? null, // "claro" u "oscuro"; null = el que mejor se lea
     mostrar_precios: props.tienda.config.mostrar_precios,
     mostrar_stock: props.tienda.config.mostrar_stock,
     whatsapp: props.tienda.config.whatsapp ?? '',
@@ -131,6 +132,33 @@ function aFormulario(cuerpo, clave, valor) {
     else if (Array.isArray(valor)) valor.forEach((v, i) => aFormulario(cuerpo, `${clave}[${i}]`, v))
     else if (typeof valor === 'object') Object.entries(valor).forEach(([k, v]) => aFormulario(cuerpo, `${clave}[${k}]`, v))
     else cuerpo.append(clave, typeof valor === 'boolean' ? (valor ? '1' : '0') : valor)
+}
+
+// ---- color propio: qué texto se lee encima ----
+const TEXTOS = { claro: '#FFFFFF', oscuro: '#0F172A' }
+const colorValido = computed(() => /^#[0-9a-f]{6}$/i.test(form.color_propio ?? ''))
+
+function contraste(a, b) {
+    const luminancia = (hex) => {
+        const [r, g, v] = [1, 3, 5].map((i) => {
+            const c = parseInt(hex.slice(i, i + 2), 16) / 255
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+        })
+        return 0.2126 * r + 0.7152 * g + 0.0722 * v
+    }
+    const [clara, oscura] = [luminancia(a), luminancia(b)].sort((x, y) => y - x)
+    return (clara + 0.05) / (oscura + 0.05)
+}
+
+// el que mejor se lee sobre el color elegido
+const textoSugerido = computed(() => (!colorValido.value || contraste(form.color_propio, TEXTOS.claro) >= contraste(form.color_propio, TEXTOS.oscuro) ? 'claro' : 'oscuro'))
+const textoElegido = computed(() => form.color_texto ?? textoSugerido.value)
+const seLeeMal = computed(() => colorValido.value && contraste(form.color_propio, TEXTOS[textoElegido.value]) < 3)
+
+function cambioElColor() {
+    form.clearErrors('color_propio')
+    // con otro color, vuelve a decidirse solo qué texto va encima
+    form.color_texto = null
 }
 
 // secciones que tienen algún aviso de error (para marcarlas y saltar a la primera)
@@ -576,12 +604,38 @@ function guardarDescripcion() {
                 <div v-if="form.color === 'propio'" class="mt-4">
                     <label :class="claseLabel" for="tienda_color_propio">El color de tu marca</label>
                     <div class="flex items-center gap-2">
-                        <input v-model="form.color_propio" type="color" aria-label="Elegir el color" @input="form.clearErrors('color_propio')" class="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" />
-                        <input id="tienda_color_propio" v-model="form.color_propio" type="text" @input="form.clearErrors('color_propio')" maxlength="7" spellcheck="false" autocomplete="off" :class="[claseInput, 'max-w-36 font-mono uppercase']" placeholder="#0F766E" />
-                        <span class="inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold text-white" :style="{ backgroundColor: form.color_propio }">Así se ve un botón</span>
+                        <input v-model="form.color_propio" type="color" aria-label="Elegir el color" @input="cambioElColor" class="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" />
+                        <input id="tienda_color_propio" v-model="form.color_propio" type="text" @input="cambioElColor" maxlength="7" spellcheck="false" autocomplete="off" :class="[claseInput, 'max-w-36 font-mono uppercase']" placeholder="#0F766E" />
                     </div>
                     <p v-if="form.errors.color_propio" :class="claseError">{{ form.errors.color_propio }}</p>
-                    <p v-else :class="claseAyuda">Elige un tono con cuerpo: los botones llevan texto blanco encima.</p>
+                    <p v-else :class="claseAyuda">Toca el cuadro para elegirlo, o escribe su código (por ejemplo #33CC66).</p>
+
+                    <fieldset class="mt-4">
+                        <legend :class="claseLabel">Color del texto sobre tu color</legend>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label
+                                v-for="(hex, nombre) in TEXTOS"
+                                :key="nombre"
+                                class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors"
+                                :class="textoElegido === nombre
+                                    ? 'border-neutral-900 bg-stone-50 dark:border-neutral-100 dark:bg-neutral-800'
+                                    : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
+                            >
+                                <input type="radio" name="color_texto" :value="nombre" :checked="textoElegido === nombre" class="sr-only" @change="form.color_texto = nombre" />
+                                <span class="size-5 rounded-full ring-1 ring-black/15" :style="{ backgroundColor: hex }" />
+                                {{ nombre === 'claro' ? 'Blanco' : 'Oscuro' }}
+                            </label>
+                            <span
+                                class="ml-1 inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold"
+                                :style="{ backgroundColor: colorValido ? form.color_propio : '#e7e5e4', color: TEXTOS[textoElegido] }"
+                                data-muestra-boton
+                            >Así se ve un botón</span>
+                        </div>
+                        <p v-if="seLeeMal" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                            Ese texto casi no se lee sobre tu color. Prueba con el {{ textoElegido === 'claro' ? 'oscuro' : 'blanco' }}.
+                        </p>
+                        <p v-else :class="claseAyuda">Es el texto de los botones y de la franja del anuncio. Se elige solo el que mejor se lee; puedes cambiarlo.</p>
+                    </fieldset>
                 </div>
             </section>
 

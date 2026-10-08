@@ -2,7 +2,7 @@
 @if ($paginator->hasPages())
     @php
         $base = 'inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl border px-3 text-sm font-medium transition-colors';
-        $normal = 'border-slate-200 bg-white text-slate-700 hover:border-(--marca) hover:text-(--marca)';
+        $normal = 'border-slate-200 bg-white text-slate-700 hover:border-(--marca) hover:text-(--marca-texto)';
         $apagado = 'border-slate-100 bg-white text-slate-300';
     @endphp
     <nav class="mt-10 flex flex-wrap items-center justify-center gap-1.5" aria-label="Páginas">
@@ -19,7 +19,7 @@
             @if (is_array($elemento))
                 @foreach ($elemento as $numero => $url)
                     @if ($numero === $paginator->currentPage())
-                        <span class="{{ $base }} border-(--marca) bg-(--marca) text-white" aria-current="page">{{ $numero }}</span>
+                        <span class="{{ $base }} border-(--marca) bg-(--marca) text-(--sobre-marca)" aria-current="page">{{ $numero }}</span>
                     @else
                         <a href="{{ $url }}" class="{{ $base }} {{ $normal }}" aria-label="Página {{ $numero }}">{{ $numero }}</a>
                     @endif

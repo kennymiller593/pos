@@ -862,17 +862,29 @@ class TiendaEnLineaTest extends TestCase
         $guardar(['color' => 'propio'])->assertSessionHasErrors('color_propio');
         $guardar(['color' => 'propio', 'color_propio' => 'morado'])->assertSessionHasErrors('color_propio');
         $guardar(['color' => 'propio', 'color_propio' => '#fff; } body { display:none'])->assertSessionHasErrors('color_propio');
-        // muy claro: el texto blanco de los botones no se leería
-        $guardar(['color' => 'propio', 'color_propio' => '#FDE047'])->assertSessionHasErrors('color_propio');
+        $guardar(['color' => 'propio', 'color_propio' => '#33CC66', 'color_texto' => 'rosado'])->assertSessionHasErrors('color_texto');
 
+        // un color oscuro lleva texto blanco encima
         $guardar(['color' => 'propio', 'color_propio' => '#7c3aed'])->assertSessionHasNoErrors();
         $this->assertSame('#7C3AED', $this->empresa->fresh()->tienda_config['color_propio']);
-        $this->tienda('/')->assertSee('--marca: #7C3AED;', false);
+        $this->tienda('/')->assertSee('--marca: #7C3AED;', false)->assertSee('--sobre-marca: #FFFFFF;', false)->assertSee('--marca-texto: #7C3AED;', false);
+
+        // uno claro se acepta: el texto de encima pasa a oscuro, y como texto sobre blanco se oscurece para leerse
+        $guardar(['color' => 'propio', 'color_propio' => '#33CC66'])->assertSessionHasNoErrors();
+        $html = $this->tienda('/')->assertSee('--marca: #33CC66;', false)->assertSee('--sobre-marca: #0F172A;', false)->getContent();
+        preg_match('/--marca-texto: (#[0-9A-F]{6});/', $html, $texto);
+        $this->assertNotSame('#33CC66', $texto[1]);
+        $this->assertGreaterThanOrEqual(4.5, Tienda::contraste($texto[1], '#FFFFFF'));
+
+        // y el dueño puede elegir el texto él mismo
+        $guardar(['color' => 'propio', 'color_propio' => '#33CC66', 'color_texto' => 'claro'])->assertSessionHasNoErrors();
+        $this->tienda('/')->assertSee('--sobre-marca: #FFFFFF;', false);
 
         // volver a un color de la paleta olvida el propio
         $guardar(['color' => 'rojo'])->assertSessionHasNoErrors();
         $this->assertNull($this->empresa->fresh()->tienda_config['color_propio']);
-        $this->tienda('/')->assertSee('--marca: #DC2626;', false);
+        $this->assertNull($this->empresa->fresh()->tienda_config['color_texto']);
+        $this->tienda('/')->assertSee('--marca: #DC2626;', false)->assertSee('--sobre-marca: #FFFFFF;', false);
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void

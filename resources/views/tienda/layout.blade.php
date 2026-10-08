@@ -34,7 +34,7 @@
     @fonts
     @vite(['resources/css/app.css'])
     {{-- color de marca elegido por la tienda --}}
-    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; }</style>
+    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }</style>
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">
@@ -52,7 +52,7 @@
 
     {{-- Anuncio de la tienda --}}
     @if ($tienda['anuncio'])
-        <p class="bg-(--marca) px-4 py-2 text-center text-sm font-medium text-white">{{ $tienda['anuncio'] }}</p>
+        <p class="bg-(--marca) px-4 py-2 text-center text-sm font-medium text-(--sobre-marca)">{{ $tienda['anuncio'] }}</p>
     @endif
 
     {{-- Franja superior: datos de atención --}}
@@ -92,7 +92,7 @@
                 @if ($tienda['logo'])
                     <img src="{{ $tienda['logo'] }}" alt="" class="size-11 shrink-0 rounded-xl bg-white object-contain ring-1 ring-slate-200">
                 @else
-                    <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-white">{{ $tienda['inicial'] }}</span>
+                    <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
                 @endif
                 <span class="min-w-0">
                     <span class="block truncate text-lg leading-tight font-semibold tracking-tight">{{ $tienda['nombre'] }}</span>
@@ -103,12 +103,12 @@
             <div class="ml-auto flex shrink-0 items-center gap-2 lg:order-3 lg:ml-0">
                 <a href="#contacto" class="hidden h-11 items-center rounded-xl px-4 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 sm:inline-flex">Contacto</a>
                 @if ($whatsapp)
-                    <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl bg-(--marca) px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+                    <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl bg-(--marca) px-4 text-sm font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
                         @include('tienda.icono', ['n' => 'whatsapp'])
                         <span class="hidden sm:inline">Hacer pedido</span><span class="sm:hidden">Pedir</span>
                     </a>
                 @else
-                    <a href="#contacto" class="inline-flex h-11 items-center rounded-xl bg-(--marca) px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-(--marca-oscuro) sm:hidden">Contacto</a>
+                    <a href="#contacto" class="inline-flex h-11 items-center rounded-xl bg-(--marca) px-4 text-sm font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro) sm:hidden">Contacto</a>
                 @endif
             </div>
 
@@ -118,7 +118,7 @@
                 <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-slate-400">@include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4.5'])</span>
                 <input id="buscador" type="search" name="q" value="{{ $buscar ?? '' }}" placeholder="¿Qué producto buscas?" autocomplete="off" maxlength="80"
                     class="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-28 pl-11 text-[15px] placeholder-slate-400 transition-colors focus:border-(--marca) focus:bg-white focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
-                <button type="submit" class="absolute top-1/2 right-1.5 h-9 -translate-y-1/2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-(--marca)">Buscar</button>
+                <button type="submit" class="absolute top-1/2 right-1.5 h-9 -translate-y-1/2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">Buscar</button>
             </form>
         </div>
 
@@ -136,18 +136,18 @@
                 <div class="relative mx-auto flex max-w-7xl items-stretch px-4 text-sm sm:px-6 lg:px-8">
                     @if ($muchas)
                         <details class="group shrink-0">
-                            <summary class="flex h-11 cursor-pointer list-none items-center gap-2 pr-4 font-semibold text-slate-900 transition-colors select-none hover:text-(--marca) group-open:text-(--marca) group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden">
+                            <summary class="flex h-11 cursor-pointer list-none items-center gap-2 pr-4 font-semibold text-slate-900 transition-colors select-none hover:text-(--marca-texto) group-open:text-(--marca-texto) group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden">
                                 @include('tienda.icono', ['n' => 'cuadricula'])Categorías
                                 @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5 rotate-90 text-slate-400 transition-transform group-open:-rotate-90'])
                             </summary>
                             <div class="absolute inset-x-4 top-full z-40 max-h-[70vh] overflow-y-auto overscroll-contain rounded-b-2xl border border-t-0 border-slate-200 bg-white p-3 shadow-xl shadow-slate-900/10 sm:inset-x-6 sm:p-4 lg:inset-x-8">
-                                <a href="/catalogo" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 font-semibold text-slate-900 hover:bg-(--marca-suave) hover:text-(--marca)">
+                                <a href="/catalogo" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 font-semibold text-slate-900 hover:bg-(--marca-suave) hover:text-(--marca-texto)">
                                     <span>Todo el catálogo</span><span class="text-xs font-normal text-slate-400 tabular-nums">{{ number_format($tienda['productos']) }}</span>
                                 </a>
                                 <ul class="mt-1 grid gap-x-4 border-t border-slate-100 pt-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                                     @foreach ($categorias as $cat)
                                         <li>
-                                            <a href="{{ $cat->url }}" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 hover:bg-(--marca-suave) hover:text-(--marca) {{ $categoriaActiva === $cat->id ? 'font-semibold text-(--marca)' : 'text-slate-700' }}">
+                                            <a href="{{ $cat->url }}" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 hover:bg-(--marca-suave) hover:text-(--marca-texto) {{ $categoriaActiva === $cat->id ? 'font-semibold text-(--marca-texto)' : 'text-slate-700' }}">
                                                 <span class="min-w-0 truncate">{{ $cat->nombre }}</span><span class="shrink-0 text-xs font-normal text-slate-400 tabular-nums">{{ $cat->productos }}</span>
                                             </a>
                                         </li>
@@ -159,13 +159,13 @@
                     {{-- en celular la fila se desliza; en pantalla grande solo se ven las que entran completas --}}
                     <div class="flex h-11 min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden {{ $muchas ? 'border-l border-slate-100 pl-1 lg:flex-wrap lg:overflow-hidden' : '' }}">
                         @unless ($muchas)
-                            <a href="/catalogo" class="flex shrink-0 items-center gap-2 border-b-2 pr-3 font-semibold whitespace-nowrap {{ $enCatalogo ? 'border-(--marca) text-(--marca)' : 'border-transparent text-slate-900 hover:text-(--marca)' }}">
+                            <a href="/catalogo" class="flex shrink-0 items-center gap-2 border-b-2 pr-3 font-semibold whitespace-nowrap {{ $enCatalogo ? 'border-(--marca) text-(--marca-texto)' : 'border-transparent text-slate-900 hover:text-(--marca-texto)' }}">
                                 @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
                             </a>
                         @endunless
                         @foreach ($enFila as $cat)
                             <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
-                                class="flex h-11 shrink-0 items-center border-b-2 px-3 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
+                                class="flex h-11 shrink-0 items-center border-b-2 px-3 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca-texto)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
                                 {{ $cat->nombre }}
                             </a>
                         @endforeach
@@ -180,25 +180,25 @@
     </main>
 
     {{-- Llamado a pedir --}}
-    <section class="mt-16 bg-(--marca) text-white">
+    <section class="mt-16 bg-(--marca) text-(--sobre-marca)">
         <div class="mx-auto flex max-w-7xl flex-col items-start gap-5 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
             <div>
                 <h2 class="text-2xl font-semibold tracking-tight">¿No encuentras lo que buscas?</h2>
-                <p class="mt-1 text-white/85">Escríbenos y te ayudamos a encontrarlo, con precio y disponibilidad al momento.</p>
+                <p class="mt-1 opacity-85">Escríbenos y te ayudamos a encontrarlo, con precio y disponibilidad al momento.</p>
             </div>
             <div class="flex flex-wrap gap-2">
                 @if ($whatsapp)
-                    <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-(--marca) shadow-sm transition-colors hover:bg-white/90">
+                    <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-(--marca-texto) shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white/90">
                         @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5'])Escribir por WhatsApp
                     </a>
                 @endif
                 @if ($contactos['telefono'])
-                    <a href="tel:{{ $soloNumero($contactos['telefono']) }}" class="inline-flex h-12 items-center gap-2 rounded-xl border border-white/40 px-6 text-sm font-semibold text-white transition-colors hover:bg-white/10">
+                    <a href="tel:{{ $soloNumero($contactos['telefono']) }}" class="inline-flex h-12 items-center gap-2 rounded-xl border border-(--sobre-marca)/40 px-6 text-sm font-semibold text-(--sobre-marca) transition-colors hover:bg-(--sobre-marca)/10">
                         @include('tienda.icono', ['n' => 'telefono', 'clase' => 'size-5'])Llamar
                     </a>
                 @endif
                 @if (! $whatsapp && ! $contactos['telefono'])
-                    <a href="#contacto" class="inline-flex h-12 items-center rounded-xl bg-white px-6 text-sm font-semibold text-(--marca)">Ver cómo contactarnos</a>
+                    <a href="#contacto" class="inline-flex h-12 items-center rounded-xl bg-white px-6 text-sm font-semibold text-(--marca-texto)">Ver cómo contactarnos</a>
                 @endif
             </div>
         </div>
@@ -212,7 +212,7 @@
                     @if ($tienda['logo'])
                         <img src="{{ $tienda['logo'] }}" alt="" class="size-11 rounded-xl bg-white object-contain">
                     @else
-                        <span class="grid size-11 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-white">{{ $tienda['inicial'] }}</span>
+                        <span class="grid size-11 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
                     @endif
                     <span class="text-lg font-semibold tracking-tight text-white">{{ $tienda['nombre'] }}</span>
                 </div>
@@ -224,7 +224,7 @@
                         @foreach (['facebook' => 'Facebook', 'instagram' => 'Instagram', 'tiktok' => 'TikTok'] as $red => $nombreRed)
                             @if ($contactos[$red])
                                 <a href="{{ $contactos[$red] }}" target="_blank" rel="noopener" aria-label="{{ $nombreRed }}" title="{{ $nombreRed }}"
-                                    class="grid size-10 place-items-center rounded-xl bg-white/5 text-slate-300 transition-colors hover:bg-(--marca) hover:text-white">
+                                    class="grid size-10 place-items-center rounded-xl bg-white/5 text-slate-300 transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">
                                     @include('tienda.icono', ['n' => $red, 'clase' => 'size-4.5'])
                                 </a>
                             @endif

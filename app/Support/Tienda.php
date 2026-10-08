@@ -16,6 +16,7 @@ class Tienda
         'descripcion' => null,
         'color' => 'esmeralda', // uno de la paleta, o "propio"
         'color_propio' => null, // #RRGGBB, cuando color es "propio"
+        'color_texto' => null, // texto encima del color propio: "claro" u "oscuro" (sin elegir, el que mejor se lea)
         'mostrar_precios' => false,
         // apagado: la tienda es un catálogo y no mira el stock (nada sale como "Agotado") salvo que el dueño lo pida
         'mostrar_stock' => false,
@@ -159,7 +160,7 @@ class Tienda
     {
         $config = array_merge(self::CONFIG, array_intersect_key((array) $empresa->tienda_config, self::CONFIG));
 
-        $propio = $config['color'] === 'propio' && self::colorLegible((string) $config['color_propio']);
+        $propio = $config['color'] === 'propio' && self::esColor((string) $config['color_propio']);
 
         if (! $propio && ! isset(config('tienda.colores')[$config['color']])) {
             $config['color'] = self::CONFIG['color'];
@@ -177,16 +178,31 @@ class Tienda
         return $config;
     }
 
-    /** Los tres tonos de la tienda: [principal, al pasar el cursor, tinte suave]. */
+    /** Texto que va encima del color de la tienda: blanco u oscuro. */
+    private const SOBRE = ['claro' => '#FFFFFF', 'oscuro' => '#0F172A'];
+
+    /**
+     * Los tonos de la tienda: [principal, al pasar el cursor, tinte suave,
+     * texto que va encima del principal, el principal usado como texto sobre fondo blanco].
+     */
     public static function colores(array $config): array
     {
-        if ($config['color'] === 'propio' && self::colorLegible((string) $config['color_propio'])) {
+        if ($config['color'] === 'propio' && self::esColor((string) $config['color_propio'])) {
             $color = strtoupper($config['color_propio']);
+            $sobre = self::SOBRE[$config['color_texto'] ?? ''] ?? self::SOBRE[self::textoQueSeLee($color)];
 
-            return [$color, self::mezclar($color, '#000000', 0.18), self::mezclar($color, '#FFFFFF', 0.92)];
+            // un color claro (amarillo, verde limón) no se lee como texto sobre blanco: ahí va más oscuro
+            $comoTexto = $color;
+            for ($i = 0; $i < 12 && self::contraste($comoTexto, '#FFFFFF') < 4.5; $i++) {
+                $comoTexto = self::mezclar($comoTexto, '#000000', 0.1);
+            }
+
+            return [$color, self::mezclar($color, '#000000', 0.14), self::mezclar($color, '#FFFFFF', 0.92), $sobre, $comoTexto];
         }
 
-        return config('tienda.colores')[$config['color']] ?? config('tienda.colores')[self::CONFIG['color']];
+        $paleta = config('tienda.colores')[$config['color']] ?? config('tienda.colores')[self::CONFIG['color']];
+
+        return [...$paleta, self::SOBRE['claro'], $paleta[0]];
     }
 
     public static function esColor(string $color): bool
@@ -194,23 +210,28 @@ class Tienda
         return (bool) preg_match('/^#[0-9a-fA-F]{6}$/', $color);
     }
 
-    /** ¿Se lee el texto blanco encima? Los botones y la franja del anuncio van en blanco sobre este color. */
-    public static function colorLegible(string $color): bool
+    /** "claro" u "oscuro": el texto que mejor se lee encima de ese color. */
+    public static function textoQueSeLee(string $color): string
     {
-        if (! self::esColor($color)) {
-            return false;
-        }
+        return self::contraste($color, self::SOBRE['claro']) >= self::contraste($color, self::SOBRE['oscuro']) ? 'claro' : 'oscuro';
+    }
 
-        $canales = array_map(function (string $par) {
-            $c = hexdec($par) / 255;
+    /** Contraste entre dos colores, de 1 (iguales) a 21 (negro sobre blanco). */
+    public static function contraste(string $a, string $b): float
+    {
+        $luminancia = function (string $color) {
+            [$r, $g, $v] = array_map(function (string $par) {
+                $c = hexdec($par) / 255;
 
-            return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
-        }, str_split(substr($color, 1), 2));
+                return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+            }, str_split(substr($color, 1), 2));
 
-        $luminancia = 0.2126 * $canales[0] + 0.7152 * $canales[1] + 0.0722 * $canales[2];
+            return 0.2126 * $r + 0.7152 * $g + 0.0722 * $v;
+        };
 
-        // contraste con el blanco de al menos 3 a 1
-        return 1.05 / ($luminancia + 0.05) >= 3;
+        [$clara, $oscura] = [max($luminancia($a), $luminancia($b)), min($luminancia($a), $luminancia($b))];
+
+        return ($clara + 0.05) / ($oscura + 0.05);
     }
 
     /** Mezcla dos colores: 0 deja el primero, 1 deja el segundo. */

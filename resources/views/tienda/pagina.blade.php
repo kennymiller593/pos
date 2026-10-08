@@ -30,7 +30,7 @@
 @section('contenido')
     <div class="mx-auto max-w-3xl px-4 pt-8 sm:px-6 lg:px-8">
         <nav class="flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
-            <a href="/" class="hover:text-(--marca)">Inicio</a>
+            <a href="/" class="hover:text-(--marca-texto)">Inicio</a>
             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
             <span class="text-slate-800" aria-current="page">{{ $pagina['titulo'] }}</span>
         </nav>
@@ -54,7 +54,7 @@
             <div class="mt-8 divide-y divide-slate-200 rounded-2xl ring-1 ring-slate-200">
                 @foreach ($pagina['preguntas'] as $i => $p)
                     <details class="group" @if ($i === 0) open @endif>
-                        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold transition-colors hover:text-(--marca) [&::-webkit-details-marker]:hidden">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold transition-colors hover:text-(--marca-texto) [&::-webkit-details-marker]:hidden">
                             {{ $p['pregunta'] }}
                             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-4 shrink-0 rotate-90 text-slate-400 transition-transform group-open:-rotate-90'])
                         </summary>
@@ -67,7 +67,7 @@
         @if ($whatsapp)
             <p class="mt-10 rounded-2xl bg-(--marca-suave) px-5 py-4 text-slate-700">
                 ¿Tienes otra consulta?
-                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="font-semibold text-(--marca) hover:underline">Escríbenos por WhatsApp</a>
+                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="font-semibold text-(--marca-texto) hover:underline">Escríbenos por WhatsApp</a>
             </p>
         @endif
     </div>

@@ -36,7 +36,7 @@
             @else
                 <p class="text-[13px] font-medium whitespace-nowrap text-slate-500 sm:text-sm">Consultar precio</p>
             @endif
-            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition-colors group-hover:bg-(--marca) group-hover:text-white" aria-hidden="true">
+            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600 transition-colors group-hover:bg-(--marca) group-hover:text-(--sobre-marca)" aria-hidden="true">
                 @include('tienda.icono', ['n' => 'flecha'])
             </span>
         </div>
