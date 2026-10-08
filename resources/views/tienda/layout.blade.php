@@ -10,6 +10,16 @@
     $soloNumero = fn (?string $telefono) => preg_replace('/[^0-9+]/', '', (string) $telefono);
     $categoriaActiva = $categoria->id ?? null;
     $enCatalogo = request()->is('catalogo');
+    // se arma aquí, en PHP: escrito en la plantilla, Blade tomaría "@context" por una directiva
+    $sitioEsquema = json_encode([
+        '@context' => 'https://schema.org',
+        '@type' => 'WebSite',
+        '@id' => rtrim($tienda['url'], '/').'/#sitio',
+        'name' => $tienda['nombre'],
+        'url' => $tienda['url'],
+        'inLanguage' => 'es-PE',
+        'potentialAction' => ['@type' => 'SearchAction', 'target' => ['@type' => 'EntryPoint', 'urlTemplate' => rtrim($tienda['url'], '/').'/catalogo?q={termino}'], 'query-input' => 'required name=termino'],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
 @endphp
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
@@ -44,15 +54,7 @@
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }</style>
     <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     {{-- el sitio y su buscador, para que Google entienda la tienda como un todo --}}
-    <script type="application/ld+json">{!! json_encode([
-        '@context' => 'https://schema.org',
-        '@type' => 'WebSite',
-        '@id' => rtrim($tienda['url'], '/').'/#sitio',
-        'name' => $tienda['nombre'],
-        'url' => $tienda['url'],
-        'inLanguage' => 'es-PE',
-        'potentialAction' => ['@type' => 'SearchAction', 'target' => ['@type' => 'EntryPoint', 'urlTemplate' => rtrim($tienda['url'], '/').'/catalogo?q={termino}'], 'query-input' => 'required name=termino'],
-    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
+    <script type="application/ld+json">{!! $sitioEsquema !!}</script>
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">
