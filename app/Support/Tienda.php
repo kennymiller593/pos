@@ -413,7 +413,24 @@ class Tienda
      */
     public static function nombreBonito(string $nombre): string
     {
-        if (! preg_match('/\p{Lu}/u', $nombre) || preg_match('/\p{Ll}/u', $nombre)) {
+        // cómo venía escrito, antes de tocar las unidades (que ya salen en minúsculas)
+        $todoMayusculas = preg_match('/\p{Lu}/u', $nombre) && ! preg_match('/\p{Ll}/u', $nombre);
+        $todoMinusculas = ! preg_match('/\p{Lu}/u', $nombre);
+
+        // "100ML" -> "100 ml", "500GR" -> "500 gr", "5L" -> "5 L"
+        $nombre = preg_replace_callback('/(?<![\p{L}\p{N}])(\d+(?:[.,]\d+)?)(ML|KG|GR|LT|CC|G|L)(?![\p{L}\p{N}])/iu', function ($m) {
+            $unidad = mb_strtoupper($m[2]);
+
+            return $m[1].' '.(self::UNIDADES[$unidad] ?? mb_strtolower($unidad));
+        }, $nombre);
+
+        // todo en minúsculas ("manzate x kilo"): solo la inicial
+        if ($todoMinusculas) {
+            return mb_strtoupper(mb_substr($nombre, 0, 1), 'UTF-8').mb_substr($nombre, 1);
+        }
+
+        // ya mezclaba mayúsculas y minúsculas: se respeta
+        if (! $todoMayusculas) {
             return $nombre;
         }
 

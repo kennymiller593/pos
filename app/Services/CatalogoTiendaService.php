@@ -47,6 +47,15 @@ class CatalogoTiendaService
             ]);
     }
 
+    /** El catálogo de ubigeos viene en mayúsculas y sin tildes: los nombres más comunes, bien escritos. */
+    private const TILDES = [
+        'HUANUCO' => 'Huánuco', 'ANCASH' => 'Áncash', 'APURIMAC' => 'Apurímac', 'JUNIN' => 'Junín', 'SAN MARTIN' => 'San Martín',
+        'CAÑETE' => 'Cañete', 'CANETE' => 'Cañete', 'JAEN' => 'Jaén', 'TARAPOTO' => 'Tarapoto', 'CHACHAPOYAS' => 'Chachapoyas',
+        'HUANCAYO' => 'Huancayo', 'LEONCIO PRADO' => 'Leoncio Prado', 'RUPA-RUPA' => 'Rupa-Rupa', 'SATIPO' => 'Satipo',
+        'CORONEL PORTILLO' => 'Coronel Portillo', 'CALLERIA' => 'Callería', 'MARISCAL NIETO' => 'Mariscal Nieto', 'SANCHEZ CARRION' => 'Sánchez Carrión',
+        'HUAMANGA' => 'Huamanga', 'BAGUA' => 'Bagua', 'ANDAHUAYLAS' => 'Andahuaylas', 'AMARILIS' => 'Amarilis', 'PILLCO MARCA' => 'Pillco Marca',
+    ];
+
     /** Cada palabra buscada debe aparecer en el nombre, la marca, el código o el código de barras. */
     public function buscar(Builder $consulta, string $texto): Builder
     {
@@ -187,10 +196,14 @@ class CatalogoTiendaService
     /** Otros productos de la misma categoría, para seguir mirando. */
     public function relacionados(Empresa $empresa, Producto $producto, int $cuantos = 4): Collection
     {
+        // "Urea ..." junto a otras ureas antes que el vecino alfabético
+        $prefijo = preg_match('/^(\p{L}{3,})/u', trim($producto->nombre), $m) ? addcslashes($m[1], '%_\\').'%' : null;
+
         $relacionados = $producto->categoria_id
             ? $this->productos($empresa)
                 ->where('productos.categoria_id', $producto->categoria_id)
                 ->whereKeyNot($producto->id)
+                ->when($prefijo, fn ($q) => $q->orderByRaw('CASE WHEN productos.nombre ILIKE ? THEN 0 ELSE 1 END', [$prefijo]))
                 ->orderByDesc('productos.destacado')
                 ->orderBy('productos.nombre')
                 ->limit($cuantos)
@@ -198,9 +211,9 @@ class CatalogoTiendaService
             : $this->productos($empresa)->whereRaw('false')->get();
 
         // en una categoría chica se completa con productos de nombre parecido ("Urea ..."), aunque sean de otra
-        if ($relacionados->count() < $cuantos && preg_match('/^(\p{L}{3,})/u', trim($producto->nombre), $m)) {
+        if ($relacionados->count() < $cuantos && $prefijo) {
             $parecidos = $this->productos($empresa)
-                ->where('productos.nombre', 'ilike', addcslashes($m[1], '%_\\').'%')
+                ->where('productos.nombre', 'ilike', $prefijo)
                 ->whereKeyNot($producto->id)
                 ->whereNotIn('productos.id', $relacionados->modelKeys())
                 ->orderBy('productos.nombre')
@@ -300,7 +313,7 @@ class CatalogoTiendaService
 
         // distrito y departamento del local principal (la primera sucursal activa con ubigeo)
         $ubigeo = $empresa->sucursales()->where('activo', true)->whereNotNull('ubigeo')->orderBy('nombre')->first()?->ubigeoInfo;
-        $titulo = fn (?string $t) => $t ? mb_convert_case(mb_strtolower($t), MB_CASE_TITLE, 'UTF-8') : null;
+        $titulo = fn (?string $t) => $t ? (self::TILDES[mb_strtoupper($t)] ?? mb_convert_case(mb_strtolower($t), MB_CASE_TITLE, 'UTF-8')) : null;
 
         return [
             'whatsapp' => Tienda::numeroWhatsapp($config['whatsapp']),

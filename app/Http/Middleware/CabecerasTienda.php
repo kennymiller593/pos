@@ -19,6 +19,21 @@ class CabecerasTienda
     {
         $respuesta = $this->cabeceras->handle($request, $next);
 
+        // la tienda no usa cámara ni nada del sistema: permisos cerrados y una política de contenido propia
+        // (todo es propio del sitio; las fotos pueden venir de la nube; Cloudflare puede inyectar su medición)
+        $respuesta->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        $respuesta->headers->set('Content-Security-Policy', implode('; ', [
+            "default-src 'self'",
+            "script-src 'self' https://static.cloudflareinsights.com",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: https:",
+            "font-src 'self'",
+            "connect-src 'self' https://cloudflareinsights.com",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]));
+
         // La tienda no usa sesión ni cookies: sus páginas pueden guardarse en la caché de borde (Cloudflare)
         // un minuto, y servirse al instante mientras se renuevan. El borrador del dueño (vista previa) y las
         // respuestas JSON del buscador no. Al guardar cambios, además, se purga (CloudflareService).

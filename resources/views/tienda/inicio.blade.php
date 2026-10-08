@@ -81,7 +81,8 @@
     $lugar = $contactos['ciudad'] ? " en {$contactos['ciudad']}" : '';
     $resumenListado = match (true) {
         $buscar !== '' => null,
-        $categoria !== null => ($categoria->texto ?? null) ?: "{$categoria->nombre}{$lugar}: {$productos->total()} ".($productos->total() === 1 ? 'producto' : 'productos')." en {$tienda['nombre']}. ".($tienda['descripcion'] ?: 'Mira el catálogo y haz tu pedido por WhatsApp.'),
+        // sin texto propio, una frase neutra: la presentación general de la tienda puede no venir al caso en esta categoría
+        $categoria !== null => ($categoria->texto ?? null) ?: "{$categoria->nombre}{$lugar}: {$productos->total()} ".($productos->total() === 1 ? 'producto' : 'productos')." en {$tienda['nombre']}. Pide por WhatsApp y te confirmamos disponibilidad y envío.",
         ! $portada => "Catálogo completo de {$tienda['nombre']}{$lugar}: {$productos->total()} productos en {$categorias->count()} categorías. ".($tienda['descripcion'] ?: 'Pide por WhatsApp.'),
         default => null,
     };
@@ -189,7 +190,7 @@
         @php
             $ventajas = array_values(array_filter([
                 $whatsapp ? ['whatsapp', 'Pedidos por WhatsApp', 'Te atendemos y confirmamos tu pedido al momento.'] : null,
-                ['actualizado', 'Catálogo al día', 'Lo que ves aquí es lo que tenemos en tienda.'],
+                ['actualizado', 'Catálogo al día', 'Productos y precios de nuestro sistema; te confirmamos disponibilidad al pedir.'],
                 $contactos['direccion'] ? ['lugar', 'Recojo en tienda', implode(' · ', array_column($contactos['direcciones'], 'texto'))] : null,
                 $contactos['telefono'] ? ['telefono', 'Atención por teléfono', $contactos['telefono']] : null,
             ]));
@@ -295,7 +296,7 @@
                 <form action="{{ $categoria ? $categoria->url : '/catalogo' }}" method="get" class="flex items-center gap-2">
                     @if ($buscar !== '') <input type="hidden" name="q" value="{{ $buscar }}"> @endif
                     <label for="orden" class="text-sm text-slate-500">Ordenar por</label>
-                    <select id="orden" name="orden" onchange="this.form.submit()" class="h-10 rounded-xl border border-slate-200 bg-white pr-8 pl-3 text-sm font-medium focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
+                    <select id="orden" name="orden" class="h-10 rounded-xl border border-slate-200 bg-white pr-8 pl-3 text-sm font-medium focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
                         <option value="nombre" @selected($orden === 'nombre')>Nombre</option>
                         <option value="menor" @selected($orden === 'menor')>Menor precio</option>
                         <option value="mayor" @selected($orden === 'mayor')>Mayor precio</option>

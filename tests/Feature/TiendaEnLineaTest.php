@@ -1001,20 +1001,20 @@ class TiendaEnLineaTest extends TestCase
         // el catálogo y las categorías tienen su H1 y su propia descripción; la portada conserva el suyo
         $this->tienda('/catalogo')->assertOk()
             ->assertSee('<h1 id="titulo-catalogo"', false)
-            ->assertSee('<meta name="description" content="Catálogo completo de Agro Campo en Huanuco: 2 productos en 1 categorías. Insumos para tu campo">', false)
+            ->assertSee('<meta name="description" content="Catálogo completo de Agro Campo en Huánuco: 2 productos en 1 categorías. Insumos para tu campo">', false)
             ->assertSee('"@type":"CollectionPage"', false)
             ->assertSee('"@type":"ItemList"', false)
             ->assertSee('"numberOfItems":2', false)
             ->assertSee('"@type":"BreadcrumbList"', false);
         $this->tienda('/categoria/fertilizantes')->assertOk()
             ->assertSee('<h1 id="titulo-catalogo"', false)
-            ->assertSee('Fertilizantes <span class="font-normal text-slate-500">en Huanuco</span>', false)
-            ->assertSee('content="Fertilizantes en Huanuco: 1 producto en Agro Campo. Insumos para tu campo"', false)
+            ->assertSee('Fertilizantes <span class="font-normal text-slate-500">en Huánuco</span>', false)
+            ->assertSee('content="Fertilizantes en Huánuco: 1 producto en Agro Campo. Pide por WhatsApp y te confirmamos disponibilidad y envío."', false)
             ->assertSee('"name":"Fertilizantes","item":"http://agro.tienda.test/categoria/fertilizantes"', false);
         $this->tienda('/')->assertOk()->assertSee('<h2 id="titulo-catalogo"', false)->assertDontSee('"CollectionPage"', false);
         // el título general lleva la ciudad y la descripción se corta en una palabra completa
         $this->publicar(['descripcion' => str_repeat('Insumos agrícolas de calidad para tu campo y tu ganado. ', 6)]);
-        $html = $this->tienda('/')->assertSee('<title>Agro Campo | Catálogo y pedidos en línea en Huanuco</title>', false)->getContent();
+        $html = $this->tienda('/')->assertSee('<title>Agro Campo | Catálogo y pedidos en línea en Huánuco</title>', false)->getContent();
         preg_match('/<meta name="description" content="([^"]*)"/', $html, $m);
         // termina en el carácter de elipsis y, antes, una palabra entera (no cortada)
         $this->assertMatchesRegularExpression('/[\p{L}.] ?…$/u', $m[1]);
@@ -1041,7 +1041,7 @@ class TiendaEnLineaTest extends TestCase
 
         $negocio = $esquemas['Store'];
         $this->assertSame('http://agro.tienda.test/#negocio', $negocio['@id']);
-        $this->assertSame(['@type' => 'PostalAddress', 'streetAddress' => 'Jr. San Martín 1638', 'addressLocality' => 'Huanuco', 'addressRegion' => 'Huanuco', 'addressCountry' => 'PE'], $negocio['address']);
+        $this->assertSame(['@type' => 'PostalAddress', 'streetAddress' => 'Jr. San Martín 1638', 'addressLocality' => 'Huánuco', 'addressRegion' => 'Huánuco', 'addressCountry' => 'PE'], $negocio['address']);
         $this->assertSame(['@type' => 'GeoCoordinates', 'latitude' => -9.9306, 'longitude' => -76.2422], $negocio['geo']);
         $this->assertSame('https://maps.app.goo.gl/abc', $negocio['hasMap']);
         $this->assertSame([
@@ -1066,7 +1066,7 @@ class TiendaEnLineaTest extends TestCase
         $this->assertSame('http://agro.tienda.test/#negocio', $oferta['seller']['@id']);
         $this->assertSame(['Inicio', 'Catálogo', 'Fertilizantes', 'Urea 46% x 50 kg'], array_column($esquemas['BreadcrumbList']['itemListElement'], 'name'));
         // la descripción automática dice qué es, de quién, cuánto y dónde
-        $this->assertStringContainsString('content="Urea 46% x 50 kg de Farmex, Fertilizantes. Precio S/ 145.00. Pídelo por WhatsApp en Agro Campo, Huanuco."', $html);
+        $this->assertStringContainsString('content="Urea 46% x 50 kg de Farmex, Fertilizantes. Precio S/ 145.00. Pídelo por WhatsApp en Agro Campo, Huánuco."', $html);
         $this->assertStringNotContainsString('Disponible en Agro Campo', $html);
         // con "marcar lo agotado", lo agotado sale como tal
         $this->publicar(['mostrar_stock' => true]);
@@ -1244,7 +1244,10 @@ class TiendaEnLineaTest extends TestCase
         foreach ([
             'UREA 46% X 50 KG' => 'Urea 46% x 50 kg',
             'AZOXYSTROBIN 250 SC X 1 L' => 'Azoxystrobin 250 SC x 1 L',
-            'ACEITE STIHL X 100ML' => 'Aceite stihl x 100ML',
+            'ACEITE STIHL X 100ML' => 'Aceite stihl x 100 ml',
+            'FOLIAR 20-20-20 X 500GR' => 'Foliar 20-20-20 x 500 gr',
+            'manzate x kilo' => 'Manzate x kilo', // todo en minúsculas: solo la inicial
+            'Abamectina 1.8 EC x 250ML' => 'Abamectina 1.8 EC x 250 ml',
             'PLANTINES DE APIO KELVIN X MILLAR' => 'Plantines de apio kelvin x millar',
             'Urea Agrícola x 50 kg' => 'Urea Agrícola x 50 kg', // ya tiene minúsculas: se respeta
             '5x1 dorado (sachet) x 30 ml sf' => '5x1 dorado (sachet) x 30 ml sf',
@@ -1272,6 +1275,28 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()
             ->assertSee('Urea granulada x 25 kg')
             ->assertDontSee('Sulfato de potasio');
+    }
+
+    public function test_una_descripcion_de_una_linea_se_completa_y_la_tienda_cierra_permisos_y_contenido(): void
+    {
+        $this->sucursal->update(['ubigeo' => '100101']);
+        $this->publicar();
+        $this->urea->update(['descripcion' => 'Fertilizante nitrogenado']);
+
+        // la línea del dueño se conserva y se completa con marca, categoría, precio y ciudad
+        $this->tienda('/catalogo/urea-46-x-50-kg')
+            ->assertSee('content="Fertilizante nitrogenado. Urea 46% x 50 kg de Farmex, Fertilizantes. Precio S/ 145.00. Pídelo por WhatsApp en Agro Campo, Huánuco."', false)
+            ->assertSee('Fertilizante nitrogenado'); // y sigue saliendo en la página
+        // una descripción larga va tal cual
+        $this->urea->update(['descripcion' => str_repeat('Fertilizante nitrogenado de alta concentración para maíz y papa. ', 3)]);
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertDontSee('Pídelo por WhatsApp en Agro Campo, Huánuco."', false);
+
+        // cabeceras: sin cámara y con política de contenido propia; el sistema conserva las suyas
+        $respuesta = $this->tienda('/')->assertOk();
+        $respuesta->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        $this->assertStringContainsString("default-src 'self'", (string) $respuesta->headers->get('Content-Security-Policy'));
+        $this->assertStringContainsString("frame-ancestors 'none'", (string) $respuesta->headers->get('Content-Security-Policy'));
+        $this->assertStringNotContainsString('onchange=', $this->tienda('/catalogo')->getContent());
     }
 
     public function test_la_direccion_sugerida_sale_del_nombre_del_negocio(): void

@@ -3,12 +3,18 @@
 @php
     $principal = $producto['presentaciones'][0];
     // sin descripción del dueño, una frase con lo que sí sabemos: qué es, de quién, dónde y cuánto
-    $descripcion = $producto['descripcion'] ?: trim(implode(' ', array_filter([
+    $complemento = trim(implode(' ', array_filter([
         $producto['nombre'].($producto['marca'] ? " de {$producto['marca']}" : '').($producto['categoria'] ? ", {$producto['categoria']}" : '').'.',
         count($producto['presentaciones']) > 1 ? 'Presentaciones: '.implode(', ', array_column($producto['presentaciones'], 'nombre')).'.' : null,
         $producto['precio'] !== null ? 'Precio S/ '.number_format($producto['precio'], 2).'.' : null,
         "Pídelo por WhatsApp en {$tienda['nombre']}".($contactos['ciudad'] ? ", {$contactos['ciudad']}" : '').'.',
     ])));
+    // una descripción de una sola línea ("Foliar en polvo.") se completa con lo que sí sabemos
+    $descripcion = match (true) {
+        blank($producto['descripcion']) => $complemento,
+        mb_strlen(trim($producto['descripcion'])) < 80 => rtrim(trim($producto['descripcion']), '.').'. '.$complemento,
+        default => $producto['descripcion'],
+    };
     $imagen = $producto['imagen'] ? (str_starts_with($producto['imagen'], 'http') ? $producto['imagen'] : rtrim($tienda['url'], '/').$producto['imagen']) : null;
     $variasPresentaciones = count($producto['presentaciones']) > 1;
     $cantidad = fn (float $n) => rtrim(rtrim(number_format($n, 3), '0'), '.');

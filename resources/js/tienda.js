@@ -17,6 +17,9 @@ const TRAZOS = {
     flecha: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 }
 
+// el orden del catálogo se aplica al elegirlo (sin JavaScript queda el botón "Aplicar")
+document.getElementById('orden')?.addEventListener('change', (e) => e.target.form?.submit())
+
 // ---------------------------------------------------------------- buscador
 const buscador = document.getElementById('buscador')
 const sugerencias = document.getElementById('sugerencias')
