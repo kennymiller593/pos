@@ -22,6 +22,11 @@ class UbigeoTest extends TestCase
         $respuesta->assertOk();
         $codigos = collect($respuesta->json())->pluck('codigo');
         $this->assertTrue($codigos->contains('150122')); // Miraflores, Lima
+
+        // el distrito que se llama igual que la búsqueda va primero, aunque el departamento tenga 84 distritos
+        $codigos = collect($this->actingAs($this->admin)->getJson('/consultas/ubigeos?buscar=huanuco')->json())->pluck('codigo');
+        $this->assertSame('100101', $codigos->first()); // Huánuco, Huánuco, Huánuco
+        $this->assertSame('150101', collect($this->actingAs($this->admin)->getJson('/consultas/ubigeos?buscar=lima')->json())->pluck('codigo')->first());
     }
 
     public function test_resuelve_la_etiqueta_por_codigo(): void

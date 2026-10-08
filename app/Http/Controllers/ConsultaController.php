@@ -83,6 +83,12 @@ class ConsultaController extends Controller
                 ->orWhere('provincia', 'ilike', "%{$buscar}%")
                 ->orWhere('departamento', 'ilike', "%{$buscar}%")
                 ->orWhere('codigo', 'like', "{$buscar}%"))
+            // primero el distrito que se llama así, luego los que empiezan así, después provincia y departamento:
+            // buscando "Huanuco" debe salir el distrito Huánuco antes que los 84 distritos del departamento
+            ->orderByRaw(
+                'CASE WHEN distrito ILIKE ? THEN 0 WHEN distrito ILIKE ? THEN 1 WHEN provincia ILIKE ? THEN 2 WHEN distrito ILIKE ? THEN 3 ELSE 4 END',
+                [$buscar, "{$buscar}%", $buscar, "%{$buscar}%"],
+            )
             ->orderBy('departamento')
             ->orderBy('provincia')
             ->orderBy('distrito')
