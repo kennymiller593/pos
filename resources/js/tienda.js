@@ -154,7 +154,7 @@ if (panel && datos.whatsapp) {
 
         const lineas = items.map((i) => {
             const precio = i.precio !== null && i.precio !== undefined ? ` — ${soles(i.cantidad * i.precio)}` : ''
-            return `• ${i.cantidad} x ${i.nombre}${i.unidad ? ` (${i.unidad})` : ''}${i.codigo ? ` [${i.codigo}]` : ''}${precio}`
+            return `• ${i.cantidad} x ${i.nombre}${i.unidad ? ` (${i.unidad})` : ''}${precio}`
         })
 
         return [

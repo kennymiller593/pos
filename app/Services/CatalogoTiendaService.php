@@ -247,12 +247,11 @@ class CatalogoTiendaService
             'precio' => $precio = $config['mostrar_precios'] && $principal ? (float) $principal->precio_venta : null,
             'presentacion' => $presentacion = $principal && $producto->presentaciones->count() > 1 ? $principal->nombre : null,
             // pedir solo este producto por WhatsApp (null si la tienda no tiene WhatsApp)
-            'pedido' => Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, quiero pedir este producto:\n{$producto->nombre} (código {$producto->codigo_interno})"),
+            'pedido' => Tienda::enlaceWhatsapp($config['whatsapp'], "Hola, quiero pedir este producto:\n{$producto->nombre}"),
             // lo que guarda el pedido del cliente al tocar "Añadir"
             'para_pedido' => [
                 'id' => (string) $producto->id,
                 'nombre' => $producto->nombre,
-                'codigo' => $producto->codigo_interno,
                 'unidad' => $presentacion,
                 'precio' => $precio,
                 'imagen' => $producto->imagen_url,

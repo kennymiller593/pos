@@ -423,10 +423,11 @@ class TiendaEnLineaTest extends TestCase
             ->assertSee('<link rel="canonical" href="http://agro.tienda.test/catalogo/urea-46-x-50-kg">', false);
 
         // el mensaje de WhatsApp lleva el producto y su enlace
-        preg_match('/href="(https:\/\/wa\.me\/51987654321\?text=[^"]*P0006[^"]*)"/', $respuesta->getContent(), $coincide);
+        preg_match('/href="(https:\/\/wa\.me\/51987654321\?text=[^"]*me%20interesa[^"]*)"/', $respuesta->getContent(), $coincide);
         $mensaje = rawurldecode(html_entity_decode($coincide[1] ?? ''));
-        $this->assertStringContainsString('Urea 46% x 50 kg (código P0006)', $mensaje);
-        $this->assertStringContainsString('http://agro.tienda.test/catalogo/urea-46-x-50-kg', $mensaje);
+        $this->assertStringContainsString("Hola, me interesa este producto de Agro Campo:\nUrea 46% x 50 kg\nhttp://agro.tienda.test/catalogo/urea-46-x-50-kg", $mensaje);
+        // el código interno es del negocio: no viaja en el mensaje
+        $this->assertStringNotContainsString('P0006', $mensaje);
 
         // la página enlaza a su categoría por su dirección amigable
         $respuesta->assertSee('href="/categoria/fertilizantes"', false);
@@ -927,11 +928,13 @@ class TiendaEnLineaTest extends TestCase
             ->getContent();
 
         // "Pedir" lleva al WhatsApp de la tienda con el producto ya escrito
-        $this->assertStringContainsString('https://wa.me/51987654321?text='.rawurlencode("Hola, quiero pedir este producto:\nUrea 46% x 50 kg (código P0006)"), $html);
+        $this->assertStringContainsString('https://wa.me/51987654321?text='.rawurlencode("Hola, quiero pedir este producto:\nUrea 46% x 50 kg").'"', $html);
         // "Añadir" lleva lo que el pedido necesita de ese producto
         preg_match_all('/data-anadir="([^"]+)"/', $html, $botones);
-        $urea = collect($botones[1])->map(fn ($b) => json_decode(html_entity_decode($b), true))->firstWhere('codigo', 'P0006');
-        $this->assertSame(['Urea 46% x 50 kg', 145, '/catalogo/urea-46-x-50-kg'], [$urea['nombre'], $urea['precio'], $urea['url']]);
+        $urea = collect($botones[1])->map(fn ($b) => json_decode(html_entity_decode($b), true))->firstWhere('nombre', 'Urea 46% x 50 kg');
+        $this->assertSame([145, '/catalogo/urea-46-x-50-kg'], [$urea['precio'], $urea['url']]);
+        $this->assertArrayNotHasKey('codigo', $urea);
+        $this->assertStringNotContainsString('P0006', implode(' ', $botones[1]));
         $this->assertSame((string) $this->urea->id, $urea['id']);
 
         $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('Añadir al pedido')->assertSee('data-cantidad-elegida', false);
@@ -939,7 +942,7 @@ class TiendaEnLineaTest extends TestCase
         // lo agotado se consulta, no se añade
         $agotado = $this->crearProducto(precio: 68, atributos: ['nombre' => 'Mancozeb 80 WP', 'codigo_interno' => 'P0050']);
         $this->tienda('/catalogo/mancozeb-80-wp')->assertSee('Agotado por ahora')->assertDontSee('Añadir al pedido');
-        $this->assertStringNotContainsString('P0050', implode(' ', array_map('html_entity_decode', (function () {
+        $this->assertStringNotContainsString('Mancozeb', implode(' ', array_map('html_entity_decode', (function () {
             preg_match_all('/data-anadir="([^"]+)"/', $this->tienda('/catalogo')->getContent(), $b);
 
             return $b[1];

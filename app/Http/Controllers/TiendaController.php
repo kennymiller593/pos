@@ -187,7 +187,7 @@ class TiendaController extends Controller
             'enlace' => $enlace,
             'pedido' => Tienda::enlaceWhatsapp(
                 $config['whatsapp'],
-                "Hola, me interesa este producto de {$contexto['tienda']['nombre']}:\n{$producto->nombre} (código {$producto->codigo_interno})\n{$enlace}",
+                "Hola, me interesa este producto de {$contexto['tienda']['nombre']}:\n{$producto->nombre}\n{$enlace}",
             ),
             'relacionados' => $this->catalogo->relacionados($empresa, $producto)->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
         ]);
