@@ -105,9 +105,16 @@
         </div>
     @endif
 
-    {{-- fija solo en pantallas grandes: en el celular ocuparía un cuarto de la pantalla --}}
-    <header class="z-30 border-b border-slate-200 bg-white lg:sticky {{ $previa ? 'lg:top-9' : 'lg:top-0' }}">
-        <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-6 lg:flex-nowrap lg:px-8">
+    {{--
+        En pantallas grandes la cabecera entera queda fija. En el celular entera ocuparía un cuarto de la pantalla:
+        ahí se quedan fijas solo la franja de la marca (con el pedido) y la de categorías, y el buscador se va al bajar.
+        Para eso, en pantallas chicas la cabecera y su contenedor "no existen" (display: contents) y cada franja
+        se fija por su cuenta. En la vista previa del dueño no se fija nada en el celular (ya está su aviso arriba).
+    --}}
+    @php $fijaMovil = $previa ? '' : 'max-lg:sticky max-lg:z-30'; @endphp
+    <header class="z-30 border-b border-slate-200 bg-white max-lg:contents lg:sticky {{ $previa ? 'lg:top-9' : 'lg:top-0' }}">
+        <div class="max-lg:contents lg:mx-auto lg:flex lg:max-w-7xl lg:items-center lg:gap-x-6 lg:px-8 lg:py-3.5">
+          <div class="flex h-18 items-center gap-x-4 bg-white px-4 sm:px-6 lg:contents {{ $fijaMovil }} max-lg:top-0">
             <a href="/" class="flex min-w-0 items-center gap-3" aria-label="{{ $tienda['nombre'] }}: inicio">
                 @if ($tienda['logo'])
                     <img src="{{ $tienda['logo'] }}" alt="" class="size-11 shrink-0 rounded-xl bg-white object-contain ring-1 ring-slate-200">
@@ -136,8 +143,10 @@
                     <a href="#contacto" class="inline-flex h-11 items-center rounded-xl bg-(--marca) px-4 text-sm font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro) sm:hidden">Contacto</a>
                 @endif
             </div>
+          </div>
 
-            {{-- buscador: en pantallas chicas ocupa su propia fila --}}
+          {{-- buscador: en pantallas chicas ocupa su propia fila (y no se queda fija) --}}
+          <div class="bg-white px-4 pb-3.5 sm:px-6 lg:contents {{ $categorias->isEmpty() ? 'max-lg:border-b max-lg:border-slate-200' : '' }}">
             <form action="/catalogo" method="get" role="search" class="relative w-full lg:order-2 lg:mx-auto lg:max-w-2xl lg:flex-1">
                 <label for="buscador" class="sr-only">Buscar productos</label>
                 <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-slate-400">@include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4.5'])</span>
@@ -147,6 +156,7 @@
                 {{-- sugerencias mientras se escribe (las llena tienda.js) --}}
                 <div id="sugerencias" class="absolute inset-x-0 top-full z-40 mt-2 hidden overflow-hidden rounded-2xl bg-white text-left shadow-2xl ring-1 shadow-slate-900/15 ring-slate-200" aria-live="polite"></div>
             </form>
+          </div>
         </div>
 
         {{-- categorías: siempre a la mano --}}
@@ -159,7 +169,7 @@
                     ? $categorias->sortByDesc('productos')->sortByDesc(fn ($c) => $c->id === $categoriaActiva)->values()
                     : $categorias;
             @endphp
-            <nav class="border-t border-slate-100" aria-label="Categorías">
+            <nav class="border-t border-slate-100 bg-white max-lg:border-b max-lg:border-b-slate-200 {{ $fijaMovil }} max-lg:top-18" aria-label="Categorías">
                 <div class="relative mx-auto flex max-w-7xl items-stretch px-4 text-sm sm:px-6 lg:px-8">
                     @if ($muchas)
                         <details class="group shrink-0">

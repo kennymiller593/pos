@@ -249,7 +249,7 @@
     @endif
 
     {{-- Catálogo --}}
-    <section id="catalogo" class="mx-auto max-w-7xl scroll-mt-4 px-4 pt-14 sm:px-6 lg:scroll-mt-36 lg:px-8" aria-labelledby="titulo-catalogo">
+    <section id="catalogo" class="mx-auto max-w-7xl scroll-mt-32 px-4 pt-14 sm:px-6 lg:scroll-mt-36 lg:px-8" aria-labelledby="titulo-catalogo">
         @unless ($portada)
             <nav class="mb-3 flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
                 <a href="/" class="hover:text-(--marca-texto)">Inicio</a>

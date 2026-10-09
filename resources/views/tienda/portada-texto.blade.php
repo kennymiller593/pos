@@ -28,26 +28,14 @@
         @endif
     </div>
 
-    <dl class="mt-9 flex flex-wrap gap-x-10 gap-y-4 {{ $centrado ? 'justify-center' : '' }} {{ $sobreFoto ? 'text-white' : '' }}">
-        <div>
-            <dt class="text-sm {{ $tenue }}">Productos</dt>
-            <dd class="text-2xl font-semibold tracking-tight">{{ number_format($tienda['productos']) }}</dd>
-        </div>
-        @if ($categorias->count() > 1)
-            <div>
-                <dt class="text-sm {{ $tenue }}">Categorías</dt>
-                <dd class="text-2xl font-semibold tracking-tight">{{ $categorias->count() }}</dd>
-            </div>
-        @endif
-        @if ($contactos['horario'])
-            <div class="min-w-0">
-                <dt class="text-sm {{ $tenue }}">Atención</dt>
-                <dd class="font-semibold tracking-tight {{ count($contactos['horarios']) > 1 ? 'pt-1 text-sm leading-6' : 'text-base leading-8' }}">
-                    @foreach ($contactos['horarios'] as $linea)
-                        <span class="block">{{ $linea }}</span>
-                    @endforeach
-                </dd>
-            </div>
-        @endif
-    </dl>
+    @if ($contactos['horario'])
+        <dl class="mt-9 {{ $centrado ? 'text-center' : '' }} {{ $sobreFoto ? 'text-white' : '' }}">
+            <dt class="text-sm {{ $tenue }}">Atención</dt>
+            <dd class="pt-1 font-semibold tracking-tight {{ count($contactos['horarios']) > 1 ? 'text-sm leading-6' : 'text-base' }}">
+                @foreach ($contactos['horarios'] as $linea)
+                    <span class="block">{{ $linea }}</span>
+                @endforeach
+            </dd>
+        </dl>
+    @endif
 </div>
