@@ -410,7 +410,8 @@ class TiendaEnLineaTest extends TestCase
             ->assertSee('Fertilizante nitrogenado de alta concentración.')
             ->assertSee('Farmex')
             ->assertSee('Fertilizantes')
-            ->assertSee('Código P0006')
+            ->assertDontSee('Código') // el código interno no se muestra al cliente
+            ->assertSee('"sku":"P0006"', false) // pero sigue en los datos del producto
             ->assertSee('Presentaciones')
             ->assertSee('Saco x 50 kg')
             ->assertSee('S/ 140.00')
@@ -446,8 +447,8 @@ class TiendaEnLineaTest extends TestCase
         // mismo nombre en la misma empresa: el segundo se numera
         $gemelo = $this->crearProducto(atributos: ['nombre' => 'UREA 46% X 50 KG']);
         $this->assertSame('urea-46-x-50-kg-2', $gemelo->fresh()->slug);
-        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('Código P0006');
-        $this->tienda('/catalogo/urea-46-x-50-kg-2')->assertOk()->assertSee("Código {$gemelo->codigo_interno}");
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('"sku":"P0006"', false);
+        $this->tienda('/catalogo/urea-46-x-50-kg-2')->assertOk()->assertSee("\"sku\":\"{$gemelo->codigo_interno}\"", false);
 
         // tildes, eñes y símbolos
         $this->assertSame('nandu-fosforo-1-2-litro', $this->crearProducto(atributos: ['nombre' => 'ÑANDÚ Fósforo 1/2 litro'])->slug);

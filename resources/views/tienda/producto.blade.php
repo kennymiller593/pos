@@ -106,6 +106,7 @@
                 @endif
                 <h1 class="mt-1.5 text-3xl leading-tight font-semibold tracking-tight text-balance sm:text-4xl">{{ $producto['nombre'] }}</h1>
 
+                @if ($producto['disponible'] !== null)
                 <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
                     @if ($producto['disponible'] === true)
                         <span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
@@ -116,8 +117,8 @@
                             <span class="size-1.5 rounded-full bg-slate-400"></span>Agotado por ahora
                         </span>
                     @endif
-                    <span class="text-slate-500">Código {{ $producto['codigo'] }}</span>
                 </div>
+                @endif
 
                 {{-- Precio y pedido --}}
                 <div class="mt-6 rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-100 sm:p-6">
@@ -212,7 +213,6 @@
                                 <dd class="text-right font-medium"><a href="{{ $categoriaUrl ?? '/catalogo' }}" class="hover:text-(--marca-texto) hover:underline">{{ $producto['categoria'] }}</a></dd>
                             </div>
                         @endif
-                        <div class="flex justify-between gap-4 py-2.5"><dt class="text-slate-500">Código</dt><dd class="text-right font-medium">{{ $producto['codigo'] }}</dd></div>
                         @if (! $variasPresentaciones)
                             <div class="flex justify-between gap-4 py-2.5"><dt class="text-slate-500">Presentación</dt><dd class="text-right font-medium">{{ $principal['nombre'] }}</dd></div>
                         @endif
