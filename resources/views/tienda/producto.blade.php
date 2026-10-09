@@ -155,17 +155,17 @@
 
                     <div class="{{ $pedido && $producto['disponible'] !== false ? 'mt-2' : 'mt-5' }} flex flex-col gap-2 sm:flex-row">
                         @if ($pedido)
-                            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-13 flex-1 items-center justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+                            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-13 shrink-0 items-center sm:flex-1 justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
                                 @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5']){{ $textoPedido }}
                             </a>
                         @endif
                         @if ($contactos['telefono'])
-                            <a href="tel:{{ $soloNumero($contactos['telefono']) }}" class="inline-flex h-13 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-semibold ring-1 ring-slate-200 transition-colors hover:ring-slate-300 {{ $pedido ? '' : 'flex-1' }}">
+                            <a href="tel:{{ $soloNumero($contactos['telefono']) }}" class="inline-flex h-13 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-semibold ring-1 ring-slate-200 transition-colors hover:ring-slate-300 shrink-0 {{ $pedido ? '' : 'sm:flex-1' }}">
                                 @include('tienda.icono', ['n' => 'telefono', 'clase' => 'size-5'])Llamar
                             </a>
                         @endif
                         @if (! $pedido && ! $contactos['telefono'])
-                            <a href="#contacto" class="inline-flex h-13 flex-1 items-center justify-center rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) transition-colors hover:bg-(--marca-oscuro)">Ver cómo contactarnos</a>
+                            <a href="#contacto" class="inline-flex h-13 shrink-0 items-center sm:flex-1 justify-center rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) transition-colors hover:bg-(--marca-oscuro)">Ver cómo contactarnos</a>
                         @endif
                     </div>
                 </div>
