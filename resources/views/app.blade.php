@@ -4,7 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title inertia>{{ config('app.name') }}</title>
-    <link rel="icon" href="/favicon.ico?v=5" sizes="any" />
+    <link rel="icon" href="/favicon.ico?v=6" sizes="any" />
+    {{-- Íconos grandes para cuando se agrega la página a la pantalla de inicio del celular --}}
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
     {{-- Aplica .dark antes de pintar para evitar flash blanco; usa la misma clave que useDark --}}
     <script>
         (function () {
