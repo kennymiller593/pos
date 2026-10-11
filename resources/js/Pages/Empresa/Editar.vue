@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { router, useForm } from '@inertiajs/vue3'
-import { Building2, Check, FileKey, ImageIcon, Trash2, Upload, X, Zap, ZapOff } from '@lucide/vue'
+import { Link, router, useForm } from '@inertiajs/vue3'
+import { Building2, Check, ChevronRight, FileKey, ImageIcon, QrCode, Trash2, Upload, X, Zap, ZapOff } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 
@@ -186,6 +186,21 @@ const certificadoVencimiento = computed(() => {
                         />
                         <p class="mt-1 text-xs text-neutral-400 dark:text-neutral-500">Se imprimen al pie de tus cotizaciones para que el cliente sepa dónde pagar. Una cuenta por línea.</p>
                         <p v-if="form.errors.cuentas_bancarias" :class="claseError">{{ form.errors.cuentas_bancarias }}</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <Link
+                            href="/empresa/cobros-qr"
+                            class="group flex items-center gap-3 rounded-xl border border-stone-200 p-3 transition-colors hover:border-emerald-500 hover:bg-emerald-50/50 dark:border-neutral-800 dark:hover:border-emerald-600 dark:hover:bg-emerald-950/20"
+                        >
+                            <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                <QrCode class="size-5" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-semibold">Cobros con QR · Yape y Plin</span>
+                                <span class="block text-xs text-neutral-500 dark:text-neutral-400">Sube tu QR para mostrarlo al cliente cuando cobras en el punto de venta.</span>
+                            </span>
+                            <ChevronRight class="size-5 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600" />
+                        </Link>
                     </div>
                     <div class="sm:col-span-2">
                         <label :class="claseLabel">Logo</label>

@@ -14,6 +14,7 @@ use App\Models\MovimientoPuntos;
 use App\Models\Producto;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
+use App\Services\CobroQrService;
 use App\Services\CotizacionService;
 use App\Services\PuntosService;
 use App\Services\VentaService;
@@ -81,6 +82,8 @@ class PosController extends Controller
             ]),
             'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            // QR de Yape/Plin para mostrar al cliente: el de la sucursal de la caja o, si no tiene, el de la empresa
+            'cobrosQr' => app(CobroQrService::class)->de($request->user()->empresa, $apertura->caja->sucursal),
             'tiposDocumento' => TipoDocumentoIdentidad::orderBy('codigo')->get(['codigo', 'nombre']),
             'cotizacion' => $this->cotizacionParaCarrito($request),
             // reglas del programa de puntos, o null si la empresa no lo usa

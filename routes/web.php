@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Http\Controllers\CajaController;
+use App\Http\Controllers\CobroQrController;
 use App\Http\Controllers\CatalogoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ClienteController;
@@ -193,6 +194,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
         Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');
+        // QR de cobro (Yape, Plin) que el POS muestra al cliente
+        Route::get('/empresa/cobros-qr', [CobroQrController::class, 'edit'])->name('cobros-qr.edit');
+        Route::post('/empresa/cobros-qr', [CobroQrController::class, 'guardar'])->name('cobros-qr.guardar');
     });
 
     Route::get('/auditoria', [AuditoriaController::class, 'index'])->middleware('can:auditoria.ver')->name('auditoria.index');

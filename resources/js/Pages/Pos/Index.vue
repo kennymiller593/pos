@@ -9,8 +9,10 @@ import {
     ChevronLeft,
     ChevronRight,
     CircleHelp,
+    CreditCard,
     ExternalLink,
     History,
+    Landmark,
     LoaderCircle,
     LockOpen,
     Mail,
@@ -21,6 +23,8 @@ import {
     Printer,
     Search,
     ShoppingCart,
+    Smartphone,
+    Split,
     Tag,
     RotateCcw,
     ScanBarcode,
@@ -36,6 +40,7 @@ import EscanerCamara from '@/Components/EscanerCamara.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
+import PanelBilletera from '@/Components/Pos/PanelBilletera.vue'
 import { useImpresion } from '@/composables/impresion'
 import { useSonido } from '@/composables/sonido'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
@@ -45,6 +50,8 @@ const props = defineProps({
     productos: { type: Array, default: () => [] },
     categorias: { type: Array, default: () => [] },
     mediosPago: { type: Array, default: () => [] },
+    // QR de cobro por billetera: { yape: { qr_url, numero, titular } | null, plin: ... }
+    cobrosQr: { type: Object, default: () => ({}) },
     tiposDocumento: { type: Array, default: () => [] },
     facturacionElectronica: { type: Boolean, default: false },
     // /pos?cotizacion={id}: cotización aceptada por el cliente, lista para cargar en el carrito
@@ -642,11 +649,58 @@ const procesando = ref(false)
 const pagos = ref([])
 
 const medioDe = (codigo) => props.mediosPago.find((m) => m.codigo === codigo)
+
+// fichas de método de pago, en el orden en que más se usan
+const ORDEN_MEDIOS = ['efectivo', 'yape', 'plin', 'tarjeta', 'transferencia']
+const ICONO_MEDIO = { efectivo: Banknote, yape: Smartphone, plin: Smartphone, tarjeta: CreditCard, transferencia: Landmark }
+const NOMBRE_CORTO = { transferencia: 'Transferencia' }
+const BILLETERAS = ['yape', 'plin']
+const mediosOrdenados = computed(() =>
+    [...props.mediosPago].sort((a, b) => {
+        const [ia, ib] = [ORDEN_MEDIOS.indexOf(a.codigo), ORDEN_MEDIOS.indexOf(b.codigo)]
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    }),
+)
+
+// pago mixto: varias líneas ("20 en efectivo y 15 por Yape"); si no, un solo medio por el total
+const modoMixto = ref(false)
+const medioUnico = computed(() => (!modoMixto.value && pagos.value.length === 1 ? pagos.value[0].medio_pago_codigo : null))
+const esBilletera = computed(() => BILLETERAS.includes(medioUnico.value))
+// con billetera el cliente paga escaneando el QR: el número de operación es opcional
+const referenciaObligatoria = (codigo) => !!medioDe(codigo)?.requiere_referencia && !BILLETERAS.includes(codigo)
+
+function elegirMedio(codigo) {
+    modoMixto.value = false
+    pagos.value = [{ medio_pago_codigo: codigo, monto: Number(total.value.toFixed(2)), referencia: '' }]
+    if (codigo === 'efectivo') {
+        recibido.value = total.value.toFixed(2)
+        if (window.matchMedia('(pointer: fine)').matches) {
+            nextTick(() => {
+                inputRecibido.value?.focus()
+                inputRecibido.value?.select()
+            })
+        }
+    }
+}
+
+function activarMixto() {
+    if (modoMixto.value) return
+    modoMixto.value = true
+    if (pagos.value.length < 2) agregarPago()
+}
+
+// con dos medios, al escribir el monto de uno el otro se completa solo con lo que falta
+function completarResto(indice) {
+    if (pagos.value.length !== 2) return
+    const escrito = Number(pagos.value[indice].monto || 0)
+    const resto = Math.round((total.value - escrito) * 100) / 100
+    pagos.value[1 - indice].monto = resto > 0 ? resto : ''
+}
 const totalPagado = computed(() => pagos.value.reduce((suma, p) => suma + Number(p.monto || 0), 0))
 const restante = computed(() => Math.round((total.value - totalPagado.value) * 100) / 100)
 
 // modo rapido: un solo pago en efectivo -> recibido + vuelto
-const esEfectivoSimple = computed(() => pagos.value.length === 1 && pagos.value[0].medio_pago_codigo === 'efectivo')
+const esEfectivoSimple = computed(() => !modoMixto.value && pagos.value.length === 1 && pagos.value[0].medio_pago_codigo === 'efectivo')
 
 const vuelto = computed(() => {
     if (!esEfectivoSimple.value || recibido.value === '') return null
@@ -665,15 +719,13 @@ function agregarPago() {
 
 function quitarPago(indice) {
     pagos.value.splice(indice, 1)
-    if (esEfectivoSimple.value) {
-        pagos.value[0].monto = Number(total.value.toFixed(2))
-        recibido.value = total.value.toFixed(2)
-    }
+    // con una sola línea deja de ser mixto: ese medio cobra el total
+    if (pagos.value.length === 1) elegirMedio(pagos.value[0].medio_pago_codigo)
 }
 
 function lineaValida(pago) {
     if (!(Number(pago.monto) > 0)) return false
-    if (medioDe(pago.medio_pago_codigo)?.requiere_referencia && !pago.referencia.trim()) return false
+    if (referenciaObligatoria(pago.medio_pago_codigo) && !pago.referencia.trim()) return false
     return true
 }
 
@@ -709,6 +761,7 @@ function abrirCobro() {
     // Queda seleccionado, asi que si pagan con mas se escribe encima sin borrar nada.
     recibido.value = total.value.toFixed(2)
     condicion.value = 'contado'
+    modoMixto.value = false
     pagos.value = [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: '' }]
     modalCobro.value = true
     // en el celular no se enfoca: abriria el teclado y taparia el boton de confirmar
@@ -2137,8 +2190,75 @@ const claseInput =
 
                     <!-- Pagos (solo contado) -->
                     <template v-if="condicion === 'contado'">
-                        <div class="mt-4 flex items-center justify-between">
-                            <p class="text-sm font-medium">{{ esEfectivoSimple ? 'Medio de pago' : 'Pagos' }}</p>
+                        <p class="mt-4 mb-1.5 text-sm font-medium">Método de pago</p>
+                        <div class="grid grid-cols-3 gap-2" data-medios-pago>
+                            <button
+                                v-for="m in mediosOrdenados"
+                                :key="m.codigo"
+                                type="button"
+                                class="flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-medium transition-colors"
+                                :class="medioUnico === m.codigo
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                :data-medio="m.codigo"
+                                @click="elegirMedio(m.codigo)"
+                            >
+                                <component :is="ICONO_MEDIO[m.codigo] ?? Banknote" class="size-5" />
+                                <span class="w-full truncate text-center">{{ NOMBRE_CORTO[m.codigo] ?? m.nombre }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-medium transition-colors"
+                                :class="modoMixto
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                data-medio="mixto"
+                                @click="activarMixto"
+                            >
+                                <Split class="size-5" />
+                                <span class="w-full truncate text-center">Pago mixto</span>
+                            </button>
+                        </div>
+
+                        <!-- Billetera: el QR del negocio para que el cliente escanee -->
+                        <div v-if="esBilletera" class="mt-3">
+                            <PanelBilletera
+                                :codigo="medioUnico"
+                                :nombre="medioDe(medioUnico)?.nombre ?? ''"
+                                :datos="cobrosQr[medioUnico] ?? null"
+                                :monto="total"
+                            >
+                                <template #vacio>
+                                    Confirma el pago en tu celular y registra la venta.
+                                    <Link v-if="puede('empresa.gestionar')" href="/empresa/cobros-qr" class="font-semibold text-emerald-700 underline dark:text-emerald-400">Sube tu QR</Link>
+                                    <template v-else>Pide al administrador que suba el QR.</template>
+                                </template>
+                            </PanelBilletera>
+                            <input
+                                v-model="pagos[0].referencia"
+                                type="text"
+                                placeholder="N° de operación (opcional)"
+                                class="mt-2 h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                            />
+                        </div>
+
+                        <!-- Tarjeta, transferencia: solo la referencia -->
+                        <div v-else-if="medioUnico && !esEfectivoSimple" class="mt-3">
+                            <label class="mb-1 block text-sm font-medium" for="referencia_pago">
+                                N° de operación
+                                <span v-if="!referenciaObligatoria(medioUnico)" class="font-normal text-neutral-400">(opcional)</span>
+                            </label>
+                            <input
+                                id="referencia_pago"
+                                v-model="pagos[0].referencia"
+                                type="text"
+                                placeholder="N° de operación / referencia"
+                                :class="claseInput"
+                            />
+                        </div>
+
+                        <div v-if="modoMixto" class="mt-3 flex items-center justify-between">
+                            <p class="text-sm font-medium">Pagos</p>
                             <button
                                 v-if="pagos.length < 4"
                                 class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
@@ -2149,7 +2269,7 @@ const claseInput =
                             </button>
                         </div>
 
-                        <div class="mt-2 space-y-2">
+                        <div v-if="modoMixto" class="mt-2 space-y-2">
                             <div
                                 v-for="(p, i) in pagos"
                                 :key="i"
@@ -2168,8 +2288,8 @@ const claseInput =
                                         step="0.01"
                                         min="0"
                                         placeholder="0.00"
-                                        :disabled="esEfectivoSimple"
-                                        class="h-10 w-24 shrink-0 rounded-xl sm:w-28 border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:disabled:bg-neutral-800"
+                                        @input="completarResto(i)"
+                                        class="h-10 w-24 shrink-0 rounded-xl sm:w-28 border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                     />
                                     <button
                                         v-if="pagos.length > 1"
@@ -2184,7 +2304,7 @@ const claseInput =
                                     v-if="medioDe(p.medio_pago_codigo)?.requiere_referencia"
                                     v-model="p.referencia"
                                     type="text"
-                                    placeholder="N° de operación / referencia"
+                                    :placeholder="referenciaObligatoria(p.medio_pago_codigo) ? 'N° de operación / referencia' : 'N° de operación (opcional)'"
                                     class="mt-2 h-9 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                 />
                             </div>
@@ -2192,13 +2312,13 @@ const claseInput =
 
                         <!-- descuadre (solo en modo mixto) -->
                         <p
-                            v-if="!esEfectivoSimple && Math.abs(restante) >= 0.005"
+                            v-if="modoMixto && Math.abs(restante) >= 0.005"
                             class="mt-2 rounded-xl bg-red-100 px-4 py-2.5 text-sm font-semibold text-red-800 dark:bg-red-500/15 dark:text-red-300"
                         >
                             {{ restante > 0 ? `Falta asignar ${soles(restante)}` : `Sobran ${soles(-restante)}` }}
                         </p>
                         <p
-                            v-else-if="!esEfectivoSimple && pagos.length > 1"
+                            v-else-if="modoMixto && pagos.length > 1"
                             class="mt-2 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
                         >
                             ✓ Pagos completos
@@ -2240,18 +2360,22 @@ const claseInput =
                         </p>
                     </div>
 
-                    <button
-                        class="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                        :class="condicion === 'credito' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'"
-                        :disabled="!puedeCobrar"
-                        @click="cobrar"
-                    >
-                        {{ procesando
-                            ? 'Registrando venta...'
-                            : condicion === 'credito'
-                                ? `Fiar · ${soles(total)}`
-                                : `Confirmar venta · ${soles(total)}` }}
-                    </button>
+                    <div class="sticky -bottom-5 z-10 -mx-5 mt-2 -mb-5 bg-white px-5 pt-3 pb-5 sm:-bottom-6 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6 dark:bg-neutral-900">
+                        <button
+                            class="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            :class="condicion === 'credito' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'"
+                            :disabled="!puedeCobrar"
+                            @click="cobrar"
+                        >
+                            {{ procesando
+                                ? 'Registrando venta...'
+                                : condicion === 'credito'
+                                    ? `Fiar · ${soles(total)}`
+                                    : esBilletera
+                                        ? `Ya pagó · Confirmar ${soles(total)}`
+                                        : `Confirmar venta · ${soles(total)}` }}
+                        </button>
+                    </div>
                 </div>
             </div>
         </Teleport>

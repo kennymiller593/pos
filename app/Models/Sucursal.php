@@ -22,6 +22,7 @@ class Sucursal extends Model
         'direccion',
         'ubigeo',
         'telefono',
+        'cobros_qr',
         'activo',
     ];
 
@@ -29,6 +30,7 @@ class Sucursal extends Model
     {
         return [
             'activo' => 'boolean',
+            'cobros_qr' => 'array',
         ];
     }
 
