@@ -29,7 +29,7 @@ const PASOS = [
 
 <template>
     <AppLayout titulo="Cobros con QR">
-        <div class="mx-auto max-w-5xl space-y-4">
+        <div class="space-y-4">
             <Link href="/empresa" class="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
                 <ArrowLeft class="size-4" />
                 Volver a Empresa
@@ -103,14 +103,16 @@ const PASOS = [
                 </p>
             </div>
 
-            <TarjetaCobroQr
-                v-for="b in billeteras"
-                :key="`${ambito}-${b.codigo}`"
-                :ambito="ambito"
-                :billetera="b"
-                :propio="propios[b.codigo]"
-                :heredado="sucursal ? empresa[b.codigo] : null"
-            />
+            <div class="grid items-start gap-4 xl:grid-cols-2">
+                <TarjetaCobroQr
+                    v-for="b in billeteras"
+                    :key="`${ambito}-${b.codigo}`"
+                    :ambito="ambito"
+                    :billetera="b"
+                    :propio="propios[b.codigo]"
+                    :heredado="sucursal ? empresa[b.codigo] : null"
+                />
+            </div>
 
             <p class="px-1 text-xs text-neutral-400 dark:text-neutral-500">
                 El QR es el de tu cuenta: el cliente escribe el monto en su app y tú confirmas el pago en tu celular antes de registrar la venta.

@@ -104,7 +104,7 @@ const punto = { yape: 'bg-[#742284]', plin: 'bg-[#0891b2]' }
             </span>
         </div>
 
-        <div class="grid gap-5 lg:grid-cols-2">
+        <div class="grid gap-5 lg:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             <div class="space-y-4">
                 <!-- imagen del QR -->
                 <div>
