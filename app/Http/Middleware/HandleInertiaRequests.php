@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Models\AperturaCaja;
 use App\Models\Sucursal;
+use App\Services\IA\AsistenteIaService;
 use App\Services\ImpersonacionService;
 use App\Services\SuscripcionService;
 use Illuminate\Http\Request;
@@ -101,6 +102,8 @@ class HandleInertiaRequests extends Middleware
                             'entorno_sunat' => $usuario->empresa->entorno_sunat,
                             // adicional de pago: decide si el menu muestra "Tienda en linea"
                             'tienda_habilitada' => (bool) $usuario->empresa->tienda_habilitada,
+                            // adicional de pago: decide si el menu muestra "Asistente"
+                            'ia_habilitada' => app(AsistenteIaService::class)->tieneAgentes($usuario->empresa),
                         ],
                         'sucursal' => $usuario->sucursal ? [
                             'id' => $usuario->sucursal->id,

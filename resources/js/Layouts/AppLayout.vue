@@ -19,6 +19,8 @@ import {
     CirclePlay,
     Compass,
     FileText,
+    Bot,
+    BrainCircuit,
     Globe,
     HandCoins,
     LayoutDashboard,
@@ -78,6 +80,8 @@ const menuBase = [
         seccion: 'General',
         items: [
             { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
+            // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
+            { label: 'Asistente', href: '/asistente', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
         ],
     },
     {
@@ -147,6 +151,8 @@ const menuPlataforma = [
             { label: 'Planes', href: '/admin/planes', icon: CreditCard },
             { label: 'Unidades de medida', href: '/admin/unidades', icon: Ruler },
             { label: 'Rubros', href: '/admin/rubros', icon: Tags },
+            { label: 'Agentes de IA', href: '/admin/ia/agentes', icon: Bot },
+            { label: 'Proveedores de IA', href: '/admin/ia/proveedores', icon: BrainCircuit },
             { label: 'Mi cuenta', href: '/admin/cuenta', icon: UserCog },
         ],
     },

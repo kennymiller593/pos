@@ -1,8 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import {
     ArrowLeft,
+    Bot,
     Boxes,
     CalendarClock,
     CalendarPlus,
@@ -27,7 +28,25 @@ const props = defineProps({
     historial: { type: Array, default: () => [] },
     usuarios: { type: Array, default: () => [] },
     planes: { type: Array, default: () => [] },
+    agentes: { type: Array, default: () => [] },
 })
+
+// adicional "Agente de IA": activar o quitar cada agente de la plataforma en esta empresa
+const formAgente = useForm({ limite_mensual: null })
+const agenteEnCurso = ref(null)
+async function alternarAgente(a) {
+    if (a.activo) {
+        const ok = await confirmar({
+            titulo: `Quitar "${a.nombre}"`,
+            mensaje: `${props.empresa.razon_social} dejará de ver este asistente. Sus conversaciones se conservan por si lo reactivas.`,
+            textoConfirmar: 'Quitar',
+            peligro: true,
+        })
+        if (!ok) return
+    }
+    agenteEnCurso.value = a.id
+    formAgente.post(`/admin/empresas/${props.empresa.id}/agentes/${a.id}`, { preserveScroll: true, onFinish: () => (agenteEnCurso.value = null) })
+}
 
 const { confirmar } = useConfirmar()
 
@@ -425,6 +444,48 @@ const claseBoton =
                         >
                             {{ formDominio.processing ? 'Procesando...' : (empresa.dominio.habilitado ? 'Quitar el adicional' : 'Activar dominio propio') }}
                         </button>
+                    </section>
+
+                    <!-- Adicional: agentes de IA -->
+                    <section :class="claseTarjeta" data-adicional-agentes>
+                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
+                            <Bot class="size-4" :class="agentes.some((a) => a.activo) ? 'text-emerald-600 dark:text-emerald-400' : 'text-neutral-400'" />
+                            Asistente de IA
+                            <span class="ml-auto inline-flex rounded-full px-2.5 py-1 text-xs font-semibold" :class="agentes.some((a) => a.activo) ? VERDE : GRIS">
+                                {{ agentes.some((a) => a.activo) ? `${agentes.filter((a) => a.activo).length} activo(s)` : 'No contratado' }}
+                            </span>
+                        </h3>
+                        <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                            Adicional de pago. Cada agente responde con el catálogo de esta empresa; al activarlo, el dueño ve "Asistente" en su menú.
+                        </p>
+                        <p v-if="!agentes.length" class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">
+                            Aún no hay agentes creados. Créalos en <Link href="/admin/ia/agentes" class="font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400">Agentes de IA</Link>.
+                        </p>
+                        <ul v-else class="mt-3 divide-y divide-stone-100 dark:divide-neutral-800">
+                            <li v-for="a in agentes" :key="a.id" class="flex items-center gap-3 py-2.5" :data-agente="a.id">
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-sm font-medium">
+                                        {{ a.nombre }}
+                                        <span v-if="a.rubro" class="ml-1 text-xs font-normal text-neutral-400" :class="a.rubro_codigo && a.rubro_codigo === empresa.rubro_codigo ? 'text-emerald-600 dark:text-emerald-400' : ''">· {{ a.rubro }}</span>
+                                    </p>
+                                    <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                                        <template v-if="a.activo">{{ a.consultas_mes }} de {{ a.limite_mensual }} consultas este mes · desde {{ fechaCorta(a.activado_en) }}</template>
+                                        <template v-else>{{ a.descripcion || 'Sin descripción' }}</template>
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    :disabled="formAgente.processing"
+                                    class="inline-flex h-9 shrink-0 items-center justify-center rounded-xl px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                    :class="a.activo
+                                        ? 'border border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                                    @click="alternarAgente(a)"
+                                >
+                                    {{ agenteEnCurso === a.id ? 'Procesando...' : (a.activo ? 'Quitar' : 'Activar') }}
+                                </button>
+                            </li>
+                        </ul>
                     </section>
 
                     <!-- Activar / desactivar -->

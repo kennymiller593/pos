@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AgenteEmpresa;
+use App\Models\AgenteIa;
 use App\Models\Auditoria;
 use App\Models\Comprobante;
 use App\Models\Empresa;
 use App\Models\Plan;
 use App\Models\Suscripcion;
+use App\Services\IA\AsistenteIaService;
 use App\Services\SuscripcionService;
 use App\Services\DominioTiendaService;
 use App\Support\Tienda;
@@ -96,6 +99,7 @@ class EmpresaController extends Controller
                 'razon_social' => $empresa->razon_social,
                 'nombre_comercial' => $empresa->nombre_comercial,
                 'rubro' => $empresa->rubro?->nombre,
+                'rubro_codigo' => $empresa->rubro_codigo,
                 'regimen_tributario' => $empresa->regimen_tributario,
                 'activo' => (bool) $empresa->activo,
                 'tienda' => [
@@ -132,7 +136,52 @@ class EmpresaController extends Controller
                 ->get(['id', 'nombre_completo', 'email', 'rol_id', 'activo', 'email_verificado_en', 'creado_en']),
             'planes' => Plan::where('activo', true)->where('codigo', '!=', 'prueba')->orderBy('orden')
                 ->get(['codigo', 'nombre', 'precio_mensual', 'max_sucursales', 'max_usuarios', 'max_comprobantes_mes']),
+            'agentes' => $this->agentesDe($empresa),
         ]);
+    }
+
+    /** Agentes de IA de la plataforma con su estado en esta empresa (adicional de pago). */
+    private function agentesDe(Empresa $empresa): array
+    {
+        $asistente = app(AsistenteIaService::class);
+        $activaciones = AgenteEmpresa::where('empresa_id', $empresa->id)->get()->keyBy('agente_id');
+
+        return AgenteIa::with('rubro:codigo,nombre')->where('activo', true)->orderBy('nombre')->get()->map(function (AgenteIa $a) use ($empresa, $activaciones, $asistente) {
+            $activacion = $activaciones->get($a->id);
+            $activo = (bool) $activacion?->activo;
+
+            return [
+                'id' => $a->id,
+                'nombre' => $a->nombre,
+                'rubro' => $a->rubro?->nombre,
+                'rubro_codigo' => $a->rubro_codigo,
+                'descripcion' => $a->descripcion,
+                'activo' => $activo,
+                'activado_en' => $activacion?->activado_en?->toDateTimeString(),
+                'limite_mensual' => $activacion?->limite_mensual ?: $a->limite_mensual,
+                'consultas_mes' => $activo ? $asistente->consultasDelMes($empresa, $a) : 0,
+            ];
+        })->values()->all();
+    }
+
+    /** Activa o quita un agente de IA en la empresa (adicional de pago). */
+    public function alternarAgente(Request $request, Empresa $empresa, AgenteIa $agente): RedirectResponse
+    {
+        $datos = $request->validate(['limite_mensual' => ['nullable', 'integer', 'min:1', 'max:1000000']]);
+
+        $activacion = AgenteEmpresa::firstOrNew(['empresa_id' => $empresa->id, 'agente_id' => $agente->id]);
+        $activar = ! ($activacion->exists && $activacion->activo);
+        $activacion->fill($activar
+            ? ['activo' => true, 'activado_en' => now(), 'desactivado_en' => null, 'limite_mensual' => $datos['limite_mensual'] ?? null]
+            : ['activo' => false, 'desactivado_en' => now()])->save();
+
+        Auditoria::registrar($request->user(), $activar ? 'plataforma.ia_agente_activado' : 'plataforma.ia_agente_desactivado', 'empresa', $empresa->id, [
+            'empresa' => $empresa->razon_social, 'agente' => $agente->nombre,
+        ]);
+
+        return back()->with('success', $activar
+            ? "\"{$agente->nombre}\" activado para {$empresa->razon_social}: ya ve \"Asistente\" en su menú."
+            : "\"{$agente->nombre}\" desactivado para {$empresa->razon_social}.");
     }
 
     /** Activa o renueva un plan (tras recibir el pago). */

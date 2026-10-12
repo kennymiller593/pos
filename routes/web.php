@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\Admin\AgenteIaController as AdminAgenteIaController;
 use App\Http\Controllers\Admin\CuentaController as AdminCuentaController;
 use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
 use App\Http\Controllers\Admin\ImpersonacionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
+use App\Http\Controllers\Admin\ProveedorIaController as AdminProveedorIaController;
 use App\Http\Controllers\Admin\RubroController as AdminRubroController;
 use App\Http\Controllers\Admin\UnidadMedidaController as AdminUnidadMedidaController;
+use App\Http\Controllers\AsistenteController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RecuperacionPasswordController;
@@ -165,9 +168,21 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/activo', [AdminEmpresaController::class, 'alternarActivo'])->name('empresas.activo');
         Route::post('/empresas/{empresa}/tienda', [AdminEmpresaController::class, 'alternarTienda'])->name('empresas.tienda');
         Route::post('/empresas/{empresa}/dominio', [AdminEmpresaController::class, 'alternarDominio'])->name('empresas.dominio');
+        Route::post('/empresas/{empresa}/agentes/{agente}', [AdminEmpresaController::class, 'alternarAgente'])->name('empresas.agente');
         Route::post('/empresas/{empresa}/entrar', [ImpersonacionController::class, 'entrar'])->name('empresas.entrar');
         Route::get('/empresas/{empresa}/auditoria', [AuditoriaController::class, 'deEmpresa'])->name('empresas.auditoria');
         Route::get('/auditoria/{empresa}', [AuditoriaController::class, 'deEmpresa'])->name('auditoria');
+        // inteligencia artificial: proveedores (claves, precios) y agentes por rubro
+        Route::get('/ia/proveedores', [AdminProveedorIaController::class, 'index'])->name('ia.proveedores');
+        Route::put('/ia/proveedores/{proveedor}', [AdminProveedorIaController::class, 'update'])->name('ia.proveedores.update');
+        Route::post('/ia/proveedores/{proveedor}/probar', [AdminProveedorIaController::class, 'probar'])->middleware('throttle:20,1')->name('ia.proveedores.probar');
+        Route::post('/ia/proveedores/{proveedor}/modelos', [AdminProveedorIaController::class, 'guardarModelo'])->name('ia.modelos.guardar');
+        Route::delete('/ia/modelos/{modelo}', [AdminProveedorIaController::class, 'eliminarModelo'])->name('ia.modelos.eliminar');
+        Route::get('/ia/agentes', [AdminAgenteIaController::class, 'index'])->name('ia.agentes');
+        Route::post('/ia/agentes', [AdminAgenteIaController::class, 'store'])->name('ia.agentes.store');
+        Route::put('/ia/agentes/{agente}', [AdminAgenteIaController::class, 'update'])->name('ia.agentes.update');
+        Route::post('/ia/agentes/{agente}/activar-rubro', [AdminAgenteIaController::class, 'activarRubro'])->name('ia.agentes.rubro');
+        Route::post('/ia/agentes/{agente}/probar', [AdminAgenteIaController::class, 'probar'])->middleware('throttle:20,1')->name('ia.agentes.probar');
         Route::get('/planes', [AdminPlanController::class, 'index'])->name('planes.index');
         Route::post('/planes', [AdminPlanController::class, 'store'])->name('planes.store');
         Route::put('/planes/{plan}', [AdminPlanController::class, 'update'])->name('planes.update');
@@ -251,6 +266,11 @@ Route::middleware('auth')->group(function () {
     // ---- POS y caja ----
     Route::middleware('can:pos.vender')->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
+
+    // asistente de IA (adicional: solo si la plataforma activó un agente para la empresa)
+    Route::get('/asistente', [AsistenteController::class, 'index'])->name('asistente.index');
+    Route::post('/asistente/mensajes', [AsistenteController::class, 'enviar'])->middleware('throttle:30,1')->name('asistente.enviar');
+    Route::delete('/asistente/conversaciones/{conversacion}', [AsistenteController::class, 'eliminar'])->name('asistente.eliminar');
         Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
         Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
         Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
