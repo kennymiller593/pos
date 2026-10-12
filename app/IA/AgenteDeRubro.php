@@ -12,7 +12,9 @@ use App\Services\CatalogoTiendaService;
 use App\Support\Tienda;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 /**
@@ -22,7 +24,7 @@ use Laravel\Ai\Promptable;
  * Trabaja en dos modos: "app" (atiende al trabajador en el mostrador) y "tienda" (atiende al cliente
  * en la tienda en línea, con nombre propio y sin datos internos).
  */
-class AgenteDeRubro implements Agent, HasTools
+class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
 {
     use Promptable;
 
@@ -128,9 +130,33 @@ class AgenteDeRubro implements Agent, HasTools
         return 0.3;
     }
 
+    /**
+     * Tope de la respuesta. La brevedad la piden las instrucciones, no este número: cuando el agente
+     * razona, el razonamiento también gasta de aquí (con un tope justo la respuesta llegaba vacía).
+     */
     public function maxTokens(): int
     {
-        return $this->modo === 'tienda' ? 400 : 1200;
+        return match (true) {
+            (bool) $this->agente->razonar => $this->modo === 'tienda' ? 3000 : 4000,
+            default => $this->modo === 'tienda' ? 900 : 1500,
+        };
+    }
+
+    /**
+     * Razonamiento profundo: lo decide cada agente. Encendido, el modelo piensa antes de responder (mejor
+     * en casos difíciles, más lento y con más tokens); apagado, cada proveedor lo desactiva a su manera.
+     */
+    public function providerOptions(Lab|string $provider): array
+    {
+        if ($this->agente->razonar) {
+            return [];
+        }
+
+        return match ($provider instanceof Lab ? $provider : Lab::tryFrom($provider)) {
+            Lab::OpenRouter => ['reasoning' => ['enabled' => false]],
+            Lab::DeepSeek => ['thinking' => ['type' => 'disabled']],
+            default => [],
+        };
     }
 
     private function fecha(): string

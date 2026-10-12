@@ -50,6 +50,7 @@ class AgenteIaController extends Controller
                     'max_pasos' => $a->max_pasos,
                     'sugerencias' => $a->sugerencias ?? [],
                     'activo' => $a->activo,
+                    'razonar' => (bool) $a->razonar,
                     'empresas_activas' => (int) $a->empresas_activas,
                     'empresas_del_rubro' => $a->rubro_codigo ? Empresa::where('rubro_codigo', $a->rubro_codigo)->where('activo', true)->count() : 0,
                     'consultas_mes' => (int) ($usoMes[$a->id]->consultas ?? 0),
@@ -146,6 +147,7 @@ class AgenteIaController extends Controller
             'sugerencias' => ['nullable', 'array', 'max:6'],
             'sugerencias.*' => ['nullable', 'string', 'max:120'],
             'activo' => ['required', 'boolean'],
+            'razonar' => ['sometimes', 'boolean'],
         ], [
             'instrucciones.required' => 'Escribe las instrucciones del agente.',
             'cadena.required' => 'Agrega al menos un modelo a la cadena.',

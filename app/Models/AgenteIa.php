@@ -20,7 +20,7 @@ class AgenteIa extends Model
 
     protected $fillable = [
         'codigo', 'nombre', 'rubro_codigo', 'descripcion', 'instrucciones', 'cadena',
-        'limite_mensual', 'max_pasos', 'sugerencias', 'activo',
+        'limite_mensual', 'max_pasos', 'sugerencias', 'activo', 'razonar',
     ];
 
     protected function casts(): array
@@ -31,6 +31,7 @@ class AgenteIa extends Model
             'limite_mensual' => 'integer',
             'max_pasos' => 'integer',
             'activo' => 'boolean',
+            'razonar' => 'boolean',
             'creado_en' => 'datetime',
             'actualizado_en' => 'datetime',
         ];

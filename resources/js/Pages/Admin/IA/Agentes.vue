@@ -21,7 +21,7 @@ const modal = ref(false)
 const editando = ref(null)
 const form = useForm({
     nombre: '', rubro_codigo: '', descripcion: '', instrucciones: '',
-    cadena: [], limite_mensual: 1000, max_pasos: 6, sugerencias: [], activo: true,
+    cadena: [], limite_mensual: 1000, max_pasos: 6, sugerencias: [], activo: true, razonar: false,
 })
 
 const cadenaInicial = () => {
@@ -42,6 +42,7 @@ function abrir(a = null) {
     form.max_pasos = a?.max_pasos ?? 6
     form.sugerencias = a ? [...a.sugerencias] : []
     form.activo = a?.activo ?? true
+    form.razonar = a?.razonar ?? false
     modal.value = true
 }
 
@@ -52,6 +53,8 @@ function usarPlantilla() {
     if (!form.descripcion) form.descripcion = p.descripcion
     form.instrucciones = p.instrucciones
     form.sugerencias = [...p.sugerencias]
+    // los rubros de asesoría técnica (agro, botica) arrancan razonando
+    form.razonar = ['agro', 'botica'].includes(form.rubro_codigo)
 }
 
 function agregarEslabon() {
@@ -164,6 +167,7 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                         <h2 class="flex flex-wrap items-center gap-2 font-semibold tracking-tight">
                             {{ a.nombre }}
                             <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold" :class="a.activo ? VERDE : GRIS">{{ a.activo ? 'Activo' : 'Inactivo' }}</span>
+                            <span v-if="a.razonar" class="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300" title="Razonamiento profundo encendido">Razona</span>
                         </h2>
                         <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ a.rubro ? `Rubro ${a.rubro}` : 'Sin rubro (general)' }}<template v-if="a.descripcion"> · {{ a.descripcion }}</template></p>
                     </div>
@@ -294,6 +298,14 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                                     </div>
                                 </div>
                             </div>
+
+                            <label class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 sm:col-span-2" :class="form.razonar ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30' : 'border-stone-200 dark:border-neutral-700'" data-razonar>
+                                <input v-model="form.razonar" type="checkbox" class="mt-0.5 size-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500" />
+                                <span>
+                                    <span class="block text-sm font-semibold">Razonamiento profundo</span>
+                                    <span class="block text-xs text-neutral-500 dark:text-neutral-400">El modelo piensa antes de responder: mejor en casos difíciles (qué combinar, qué conviene según el problema), pero cada respuesta tarda unas 3 veces más y gasta más tokens. Apágalo para consultas de precio y stock. Compáralo con "Probar".</span>
+                                </span>
+                            </label>
 
                             <label class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium sm:col-span-2">
                                 <input v-model="form.activo" type="checkbox" class="size-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500" />

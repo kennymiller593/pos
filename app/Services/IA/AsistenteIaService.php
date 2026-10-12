@@ -192,7 +192,22 @@ class AsistenteIaService
 
             $this->proveedores->registrarExito($proveedor);
 
+            // respondió pero sin texto (se quedó sin tokens o solo razonó): se prueba con el siguiente modelo
+            if (trim(self::separarProductos($respuesta->text)[0]) === '') {
+                $intentos[] = ['proveedor' => $proveedor->codigo, 'modelo' => $eslabon['modelo'], 'error' => 'respuesta vacía', 'ms' => (int) ((hrtime(true) - $inicio) / 1_000_000)];
+                $vacia = [$respuesta, $proveedor, $eslabon['modelo']];
+
+                continue;
+            }
+
             return $this->armar($respuesta, $proveedor, $eslabon['modelo'], (int) ((hrtime(true) - $inicioTotal) / 1_000_000), $intentos);
+        }
+
+        // nadie dio texto, pero alguno sí contestó: se guarda esa respuesta (con el aviso de reformular) y su consumo
+        if (isset($vacia)) {
+            report(new \RuntimeException('Asistente IA con respuesta vacía: '.json_encode($intentos, JSON_UNESCAPED_UNICODE)));
+
+            return $this->armar($vacia[0], $vacia[1], $vacia[2], (int) ((hrtime(true) - $inicioTotal) / 1_000_000), $intentos);
         }
 
         report(new \RuntimeException('Asistente IA sin respuesta: '.json_encode($intentos, JSON_UNESCAPED_UNICODE)));

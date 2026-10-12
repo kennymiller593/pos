@@ -18,6 +18,7 @@ use App\Services\IA\ProveedorIaService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Tools\Request as ToolRequest;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
@@ -291,6 +292,39 @@ class AgentesIaTest extends TestCase
         $this->assertSame(['deepseek', 'anthropic'], array_column($respuesta->intentos, 'proveedor'));
         $this->assertSame('sin clave o desactivado', $respuesta->intentos[0]['error']);
         $this->assertSame('en pausa por fallos', $respuesta->intentos[1]['error']);
+    }
+
+    public function test_una_respuesta_vacia_pasa_al_siguiente_modelo_y_el_razonamiento_va_apagado(): void
+    {
+        $this->proveedorListo();
+        $this->proveedorListo('openrouter');
+        $agente = $this->crearAgente([['proveedor' => 'openrouter', 'modelo' => 'deepseek/deepseek-v4-pro'], ['proveedor' => 'deepseek', 'modelo' => 'deepseek-flash']]);
+        $this->activar($agente);
+        // el primero contesta vacío (se le acabaron los tokens razonando); el segundo responde
+        AgenteDeRubro::fake(['', 'Para la rancha te sirve un fungicida.']);
+
+        $this->actingAs($this->admin)->postJson('/asistente/mensajes', ['agente_id' => $agente->id, 'texto' => '¿qué me recomiendas para rancha en papa?'])
+            ->assertOk()->assertJsonPath('mensaje.proveedor', 'deepseek')->assertJsonPath('mensaje.contenido', 'Para la rancha te sirve un fungicida.');
+        $respuesta = MensajeIa::where('empresa_id', $this->empresa->id)->where('rol', 'assistant')->latest('creado_en')->firstOrFail();
+        $this->assertSame([['openrouter', 'respuesta vacía']], array_map(fn ($i) => [$i['proveedor'], $i['error']], $respuesta->intentos));
+
+        // sin razonamiento profundo (lo normal): cada proveedor lo apaga a su manera
+        $a = new AgenteDeRubro($agente, $this->empresa, null, 'tienda');
+        $this->assertSame(['reasoning' => ['enabled' => false]], $a->providerOptions('openrouter'));
+        $this->assertSame(['thinking' => ['type' => 'disabled']], $a->providerOptions(Lab::DeepSeek));
+        $this->assertSame([], $a->providerOptions('anthropic'));
+        $this->assertSame(900, $a->maxTokens());
+
+        // con razonamiento profundo: el modelo piensa (sin opciones que lo apaguen) y el tope le deja espacio
+        $this->superadmin()->put("/admin/ia/agentes/{$agente->id}", [
+            'nombre' => $agente->nombre, 'rubro_codigo' => $agente->rubro_codigo, 'instrucciones' => $agente->instrucciones,
+            'cadena' => $agente->eslabones(), 'limite_mensual' => 1000, 'max_pasos' => 4, 'activo' => true, 'razonar' => true,
+        ])->assertSessionHasNoErrors();
+        $razona = new AgenteDeRubro($agente->fresh(), $this->empresa, null, 'tienda');
+        $this->assertTrue($agente->fresh()->razonar);
+        $this->assertSame([], $razona->providerOptions('openrouter'));
+        $this->assertSame([], $razona->providerOptions('deepseek'));
+        $this->assertSame(3000, $razona->maxTokens());
     }
 
     public function test_sin_proveedor_disponible_el_asistente_avisa_sin_guardar_nada(): void
