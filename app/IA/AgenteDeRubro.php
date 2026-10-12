@@ -8,6 +8,9 @@ use App\IA\Herramientas\ListarCategorias;
 use App\Models\AgenteIa;
 use App\Models\Empresa;
 use App\Models\Sucursal;
+use App\Services\CatalogoTiendaService;
+use App\Support\Tienda;
+use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
@@ -53,6 +56,10 @@ class AgenteDeRubro implements Agent, HasTools
         6. No respondes temas ajenos al negocio; si te lo piden, declina amablemente y vuelve al tema.
         7. Responde en español, de forma clara y breve, con Markdown sencillo: negritas para los nombres de producto, listas cortas; sin tablas. Fecha de hoy: {$this->fecha()}.
         8. Si recomiendas productos del catálogo, termina tu respuesta con una última línea exactamente así: "{$marca} código1, código2" con los códigos que devolvió la herramienta (máximo 4). Esa línea no se muestra: sirve para enseñar las tarjetas de esos productos con foto y botones. Si no recomiendas ninguno, no la pongas.
+        9. Si preguntan por el negocio (RUC, dirección, sucursales, horarios, teléfono, WhatsApp, envíos, formas de pago, cambios o devoluciones), responde con los DATOS DEL NEGOCIO de abajo. Si un dato no figura ahí, di que no lo tienes y remite al contacto; nunca inventes direcciones, horarios ni condiciones.
+
+        DATOS DEL NEGOCIO:
+        {$this->datosDelNegocio()}
         TXT;
 
         if ($this->modo === 'tienda') {
@@ -129,5 +136,50 @@ class AgenteDeRubro implements Agent, HasTools
     private function fecha(): string
     {
         return now()->locale('es')->translatedFormat('d \d\e F \d\e Y');
+    }
+
+    /** Lo que el agente sabe de la empresa: datos fiscales, locales, contacto y políticas de la tienda. */
+    private function datosDelNegocio(): string
+    {
+        $e = $this->empresa;
+        $lineas = ["- Razón social: {$e->razon_social} · RUC {$e->ruc}"];
+        if ($e->nombre_comercial) {
+            $lineas[] = "- Nombre comercial: {$e->nombre_comercial}";
+        }
+
+        $titulo = fn (?string $t) => $t ? mb_convert_case(mb_strtolower($t), MB_CASE_TITLE, 'UTF-8') : null;
+        foreach ($e->sucursales()->where('activo', true)->with('ubigeoInfo')->orderBy('nombre')->get() as $s) {
+            $lugar = $s->ubigeoInfo ? ' ('.implode(', ', array_filter([$titulo($s->ubigeoInfo->distrito), $titulo($s->ubigeoInfo->provincia)])).')' : '';
+            $lineas[] = "- Sucursal {$s->nombre}: ".($s->direccion ?: 'sin dirección registrada').$lugar.($s->telefono ? " · teléfono {$s->telefono}" : '');
+        }
+
+        // lo que el dueño escribió para su tienda en línea (contacto, horarios, políticas) vale en los dos modos
+        if ($e->tienda_habilitada || $this->modo === 'tienda') {
+            $config = Tienda::config($e);
+            $contactos = app(CatalogoTiendaService::class)->contactos($e, $config);
+            $corto = fn (?string $t, int $max = 700) => filled($t) ? Str::limit(trim(preg_replace('/\s+/', ' ', strip_tags((string) $t))), $max, '…') : null;
+
+            foreach ([
+                'WhatsApp' => $contactos['whatsapp_texto'], 'Teléfono' => $contactos['telefono'], 'Correo' => $contactos['email'],
+                'Dirección de la tienda' => $contactos['direcciones'] ? implode(' | ', array_column($contactos['direcciones'], 'texto')) : null,
+                'Horario de atención' => $contactos['horarios'] ? implode(' | ', $contactos['horarios']) : null,
+                'Envíos y entregas' => $corto($config['envios']), 'Formas de pago' => $corto($config['pagos']),
+                'Cambios y devoluciones' => $corto($config['devoluciones']), 'Sobre el negocio' => $corto($config['nosotros']),
+            ] as $etiqueta => $valor) {
+                if (filled($valor)) {
+                    $lineas[] = "- {$etiqueta}: {$valor}";
+                }
+            }
+            foreach (array_slice((array) $config['preguntas'], 0, 12) as $p) {
+                if (filled($p['pregunta'] ?? null) && filled($p['respuesta'] ?? null)) {
+                    $lineas[] = '- Pregunta frecuente: '.trim($p['pregunta']).' → '.$corto($p['respuesta'], 400);
+                }
+            }
+            if ($this->modo === 'tienda') {
+                $lineas[] = '- Esta tienda en línea: '.Tienda::urlDe($e);
+            }
+        }
+
+        return implode("\n", $lineas);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CapaCosto;
 use App\Models\Comprobante;
+use App\Models\ConversacionIa;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
 use App\Models\Producto;
@@ -50,6 +51,25 @@ class NotificacionController extends Controller
             ->first();
 
         $items = [];
+
+        // chats de la tienda en línea con mensajes del cliente que nadie del negocio ha leído
+        $chats = ConversacionIa::query()
+            ->where('empresa_id', $empresaId)->where('canal', 'tienda')
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('ia_mensajes')
+                ->whereColumn('ia_mensajes.conversacion_id', 'ia_conversaciones.id')
+                ->where('ia_mensajes.rol', 'user')
+                ->where(fn ($w) => $w->whereNull('ia_conversaciones.leida_en')->orWhereColumn('ia_mensajes.creado_en', '>', 'ia_conversaciones.leida_en')))
+            ->count();
+
+        if ($chats > 0) {
+            $items[] = [
+                'clave' => 'chats_tienda',
+                'titulo' => 'Chats de la tienda',
+                'detalle' => $chats === 1 ? '1 cliente te escribió en la tienda y nadie le ha respondido.' : "{$chats} clientes te escribieron en la tienda.",
+                'cantidad' => $chats,
+                'url' => '/asistente/tienda',
+            ];
+        }
 
         if ($stockBajo > 0) {
             $items[] = [

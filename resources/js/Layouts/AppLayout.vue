@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, onBeforeUnmount } from 'vue'
 import { Head, Link, router, usePage } from '@inertiajs/vue3'
 import { onClickOutside, useDark, useStorage, useToggle } from '@vueuse/core'
 import DialogoConfirmacion from '@/Components/DialogoConfirmacion.vue'
 import RecorridoGuiado from '@/Components/RecorridoGuiado.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSonido } from '@/composables/sonido'
 import {
     ArrowLeftRight,
     Banknote,
@@ -222,6 +223,7 @@ function cambiarSucursal(id) {
 
 // ---- notificaciones (campanita) ----
 const ICONOS_NOTIFICACION = {
+    chats_tienda: MessageCircle,
     stock_bajo: Boxes,
     lotes_por_vencer: CalendarClock,
     por_cobrar: HandCoins,
@@ -233,14 +235,29 @@ const notiAbierto = ref(false)
 const notiRef = ref(null)
 onClickOutside(notiRef, () => (notiAbierto.value = false))
 
+// cuántos chats de la tienda esperaban la última vez: si suben, suena un aviso
+let chatsVistos = null
+const { pitido } = useSonido()
+
 async function cargarNotificaciones() {
     try {
         const r = await fetch('/notificaciones', { headers: { Accept: 'application/json' } })
-        if (r.ok) notificaciones.value = await r.json()
+        if (!r.ok) return
+        notificaciones.value = await r.json()
+        const chats = notificaciones.value.items.find((i) => i.clave === 'chats_tienda')?.cantidad ?? 0
+        if (chatsVistos !== null && chats > chatsVistos) {
+            pitido('ok')
+            setTimeout(() => pitido('ok'), 180)
+        }
+        chatsVistos = chats
     } catch {
         // sin red no pasa nada: la campanita simplemente no marca alertas
     }
 }
+
+// con el asistente de la tienda activo, la campanita se revisa sola cada medio minuto
+let vigilanteChats = null
+onBeforeUnmount(() => clearInterval(vigilanteChats))
 
 function alternarNotificaciones() {
     notiAbierto.value = !notiAbierto.value
@@ -248,7 +265,12 @@ function alternarNotificaciones() {
 }
 
 onMounted(() => {
-    if (usuario.value && !esPlataforma.value) cargarNotificaciones()
+    if (usuario.value && !esPlataforma.value) {
+        cargarNotificaciones()
+        if (empresa.value?.ia_habilitada && empresa.value?.tienda_habilitada) {
+            vigilanteChats = setInterval(() => { if (!document.hidden) cargarNotificaciones() }, 30000)
+        }
+    }
 })
 
 // ---- recorrido guiado de bienvenida (globos que señalan cada parte de la pantalla) ----

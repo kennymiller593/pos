@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { Bot, ChevronLeft, Hand, MessageCircle, SendHorizontal, Sparkles, Undo2, UserRound } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -103,11 +103,16 @@ function cuando(iso) {
 }
 const quien = (rol) => ({ user: 'Cliente', assistant: 'Asistente', humano: 'Tú' }[rol] ?? rol)
 
+// la lista también se renueva sola: llegan chats nuevos sin recargar
+let sondeoLista = null
+watch(() => props.conversaciones, (v) => { lista.value = [...v] })
+
 onMounted(() => {
     bajar()
     sondeo = setInterval(refrescar, 4000)
+    sondeoLista = setInterval(() => { if (!document.hidden) router.reload({ only: ['conversaciones'], preserveScroll: true, preserveState: true }) }, 20000)
 })
-onBeforeUnmount(() => clearInterval(sondeo))
+onBeforeUnmount(() => { clearInterval(sondeo); clearInterval(sondeoLista) })
 </script>
 
 <template>
