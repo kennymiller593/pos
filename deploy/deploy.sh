@@ -19,8 +19,9 @@ cd "$PROYECTO"
 
 leer() { grep "^$1=" .env | cut -d= -f2- | tr -d '"' | sed 's/[[:space:]]*#.*$//'; }
 
-echo "→ Mantenimiento"
-$PHP artisan down --retry=15 || true
+# Sin modo mantenimiento: ningún paso lo necesita (los scripts SQL son idempotentes y las cachés
+# se regeneran en un segundo) y apagar la app dejaba a los clientes viendo un 503 en cada subida.
+# Lo rápido que deja la app lista va primero; las tareas largas e idempotentes corren al final, ya en línea.
 
 echo "→ Dependencias PHP"
 export COMPOSER_ALLOW_SUPERUSER=1
@@ -42,15 +43,6 @@ $PHP artisan route:cache
 $PHP artisan view:cache
 $PHP artisan event:cache
 
-echo "→ Certificados guardados en claro (si los hubiera)"
-$PHP artisan empresa:cifrar-certificados
-
-echo "→ Fotos de productos sin optimizar (idempotente; si falla no detiene el despliegue)"
-$PHP artisan productos:optimizar-imagenes || true
-
-echo "→ Presentaciones que repetían el nombre del producto (idempotente)"
-$PHP artisan productos:normalizar-presentaciones || true
-
 echo "→ Permisos (el deploy corre como root; PHP-FPM y el worker corren como www-data)"
 chown -R www-data:www-data storage bootstrap/cache public/build
 chown www-data:www-data .env
@@ -61,7 +53,16 @@ if command -v supervisorctl >/dev/null && supervisorctl status "$PROGRAMA_SUPERV
     supervisorctl restart "$PROGRAMA_SUPERVISOR"
 fi
 
-echo "→ Fin de mantenimiento"
-$PHP artisan up
+echo "✔ Aplicación actualizada y en línea: $(leer APP_URL)/up"
 
-echo "✔ Despliegue completo: $(leer APP_URL)/up"
+# ---- tareas de mantenimiento de datos: idempotentes y a veces largas; la app ya está sirviendo ----
+echo "→ Certificados guardados en claro (si los hubiera)"
+$PHP artisan empresa:cifrar-certificados || true
+
+echo "→ Fotos de productos sin optimizar (si falla no detiene el despliegue)"
+$PHP artisan productos:optimizar-imagenes || true
+
+echo "→ Presentaciones que repetían el nombre del producto"
+$PHP artisan productos:normalizar-presentaciones || true
+
+echo "✔ Despliegue completo"
