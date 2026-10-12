@@ -146,24 +146,34 @@ class ChatbotTiendaTest extends TestCase
     {
         $this->publicar();
         $datos = [
-            'slug' => 'agro', 'publicada' => true, 'color' => 'azul', 'mostrar_precios' => true, 'mostrar_stock' => true, 'whatsapp' => '987 654 321',
             'chatbot_activo' => true, 'chatbot_agente' => $this->agente->id, 'chatbot_nombre' => 'Dania', 'chatbot_saludo' => 'Hola, soy Dania.',
             'chatbot_color' => '#7c3aed', 'chatbot_avatar' => UploadedFile::fake()->image('dania.png', 400, 400),
         ];
 
-        $this->actingAs($this->admin)->get('/tienda-en-linea')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
-            ->where('agentes.0.id', $this->agente->id)->where('tienda.config.chatbot_activo', true));
+        // la página del asistente: accesos, uso del mes y la configuración del chatbot
+        $this->actingAs($this->admin)->get('/asistente')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+            ->component('Asistente/Configurar')
+            ->where('agentes.0.id', $this->agente->id)->where('chatbot.activo', true)->where('chatbot.nombre', 'Dania')->where('tienda.habilitada', true));
 
-        $this->actingAs($this->admin)->put('/tienda-en-linea', $datos)->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->put('/asistente', $datos)->assertSessionHasNoErrors();
         $config = Tienda::config($this->empresa->fresh());
         $this->assertSame([true, $this->agente->id, 'Dania', 'Hola, soy Dania.', '#7C3AED'], [$config['chatbot_activo'], $config['chatbot_agente'], $config['chatbot_nombre'], $config['chatbot_saludo'], $config['chatbot_color']]);
         $this->assertNotNull($config['chatbot_avatar']);
         $this->assertStringContainsString('--bot: #7C3AED', $this->tienda()->getContent());
 
         // color inválido y agente ajeno se rechazan; quitar la imagen la borra
-        $this->actingAs($this->admin)->put('/tienda-en-linea', ['chatbot_color' => 'morado'] + $datos)->assertSessionHasErrors('chatbot_color');
-        $this->actingAs($this->admin)->put('/tienda-en-linea', ['chatbot_agente' => (string) Str::uuid()] + $datos)->assertSessionHasErrors('chatbot_agente');
-        $this->actingAs($this->admin)->put('/tienda-en-linea', ['chatbot_avatar' => null, 'chatbot_avatar_quitar' => true] + $datos)->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->put('/asistente', ['chatbot_color' => 'morado'] + $datos)->assertSessionHasErrors('chatbot_color');
+        $this->actingAs($this->admin)->put('/asistente', ['chatbot_agente' => (string) Str::uuid()] + $datos)->assertSessionHasErrors('chatbot_agente');
+        $this->actingAs($this->admin)->put('/asistente', ['chatbot_avatar' => null, 'chatbot_avatar_quitar' => true] + $datos)->assertSessionHasNoErrors();
+
+        // guardar la tienda en línea no toca lo del chatbot
+        $this->actingAs($this->admin)->put('/tienda-en-linea', ['slug' => 'agro', 'publicada' => true, 'color' => 'azul', 'mostrar_precios' => true, 'mostrar_stock' => true, 'whatsapp' => '987 654 321', 'chatbot_nombre' => 'Otra'])->assertSessionHasNoErrors();
+        $this->assertSame('Dania', Tienda::config($this->empresa->fresh())['chatbot_nombre']);
+
+        // el vendedor no configura el chatbot, pero sí consulta al asistente
+        $vendedor = $this->crearUsuario('vendedor', 'vend'.random_int(1000, 999999).'@test.local');
+        $this->actingAs($vendedor)->get('/asistente')->assertForbidden();
+        $this->actingAs($vendedor)->get('/asistente/consultas')->assertOk();
         $this->assertNull(Tienda::config($this->empresa->fresh())['chatbot_avatar']);
     }
 

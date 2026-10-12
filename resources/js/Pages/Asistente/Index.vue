@@ -42,12 +42,12 @@ function nueva(a = null) {
     mensajes.value = []
     error.value = null
     panelLista.value = false
-    history.replaceState({}, '', '/asistente')
+    history.replaceState({}, '', '/asistente/consultas')
     nextTick(() => entrada.value?.focus())
 }
 
 function abrir(c) {
-    router.get('/asistente', { c: c.id }, { preserveState: false })
+    router.get('/asistente/consultas', { c: c.id }, { preserveState: false })
 }
 
 function xsrf() {
@@ -81,7 +81,7 @@ async function enviar(pregunta = null) {
         if (!conversacionId.value) {
             conversacionId.value = datos.conversacion.id
             lista.value.unshift(datos.conversacion)
-            history.replaceState({}, '', `/asistente?c=${datos.conversacion.id}`)
+            history.replaceState({}, '', `/asistente/consultas?c=${datos.conversacion.id}`)
         } else {
             const i = lista.value.findIndex((c) => c.id === conversacionId.value)
             if (i >= 0) lista.value.splice(i, 1, { ...lista.value[i], ...datos.conversacion })

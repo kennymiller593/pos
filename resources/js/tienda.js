@@ -347,6 +347,37 @@ if (bot && datos.asistente) {
     let estado = leerBot()
     let enviando = false
     let sondeo = null // cuando atiende una persona, se consulta cada pocos segundos si respondió
+    let sinLeer = 0 // respuestas de una persona llegadas con el chat cerrado (se marcan en el botón)
+    const globo = bot.querySelector('[data-bot-globo]')
+
+    // un "tin" corto cuando una persona del negocio responde (el navegador solo deja sonar tras una interacción)
+    let audio = null
+    function sonar() {
+        try {
+            const Clase = window.AudioContext || window.webkitAudioContext
+            if (!Clase) return
+            audio ??= new Clase()
+            if (audio.state === 'suspended') audio.resume()
+            const t = audio.currentTime
+            for (const [f, d] of [[880, 0], [1320, 0.12]]) {
+                const o = audio.createOscillator()
+                const g = audio.createGain()
+                o.type = 'sine'
+                o.frequency.value = f
+                g.gain.setValueAtTime(0.0001, t + d)
+                g.gain.exponentialRampToValueAtTime(0.25, t + d + 0.01)
+                g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.16)
+                o.connect(g).connect(audio.destination)
+                o.start(t + d)
+                o.stop(t + d + 0.2)
+            }
+        } catch { /* sin audio no pasa nada */ }
+    }
+    function marcarGlobo() {
+        if (!globo) return
+        globo.textContent = sinLeer > 9 ? '9+' : String(sinLeer)
+        globo.classList.toggle('hidden', sinLeer === 0)
+    }
 
     function leerBot() {
         try {
@@ -356,9 +387,10 @@ if (bot && datos.asistente) {
                 conversacion: typeof g.conversacion === 'string' ? g.conversacion : null,
                 mensajes: Array.isArray(g.mensajes) ? g.mensajes.filter((m) => m && ['user', 'assistant', 'humano'].includes(m.rol) && typeof m.contenido === 'string').slice(-40) : [],
                 modo: g.modo === 'humano' ? 'humano' : 'bot',
+                ultimo: Number(g.ultimo) || 0, // cuándo escribió por última vez
             }
         } catch {
-            return { visitante: idVisitante(), conversacion: null, mensajes: [], modo: 'bot' }
+            return { visitante: idVisitante(), conversacion: null, mensajes: [], modo: 'bot', ultimo: 0 }
         }
     }
     function idVisitante() {
@@ -445,6 +477,10 @@ if (bot && datos.asistente) {
             const cambioModo = respuesta.modo !== estado.modo
             estado.modo = respuesta.modo === 'humano' ? 'humano' : 'bot'
             if (nuevos.length) estado.mensajes.push(...nuevos.map((m) => ({ id: m.id, rol: m.rol, contenido: m.contenido, productos: m.productos ?? [], creado_en: m.creado_en })))
+            if (nuevos.some((m) => m.rol === 'humano')) {
+                sonar()
+                if (panelBot.classList.contains('hidden')) { sinLeer += nuevos.filter((m) => m.rol === 'humano').length; marcarGlobo() }
+            }
             if (nuevos.length || cambioModo) { guardarBot(); pintar() }
             vigilar()
         } catch { /* se reintenta en el siguiente ciclo */ }
@@ -453,8 +489,12 @@ if (bot && datos.asistente) {
     // (así el cliente se entera cuando el negocio toma la conversación aunque no haya vuelto a escribir)
     let ritmo = 0
     function vigilar() {
-        const hace = !!estado.conversacion && !panelBot.classList.contains('hidden')
-        const nuevoRitmo = !hace ? 0 : estado.modo === 'humano' ? 4000 : 10000
+        // con el chat cerrado se sigue vigilando un rato (y siempre mientras atiende una persona):
+        // si el negocio toma la conversación y responde, el botón lo avisa aunque el cliente siga navegando
+        const abierto = !panelBot.classList.contains('hidden')
+        const reciente = estado.ultimo && Date.now() - estado.ultimo < 30 * 60 * 1000
+        const hace = !!estado.conversacion && (abierto || estado.modo === 'humano' || reciente)
+        const nuevoRitmo = !hace ? 0 : estado.modo === 'humano' ? (abierto ? 4000 : 8000) : (abierto ? 10000 : 20000)
         if (nuevoRitmo === ritmo) return
         if (sondeo) { clearInterval(sondeo); sondeo = null }
         ritmo = nuevoRitmo
@@ -464,6 +504,8 @@ if (bot && datos.asistente) {
 
     function abrirBot() {
         panelBot.classList.remove('hidden')
+        sinLeer = 0
+        marcarGlobo()
         pintar()
         if (estado.conversacion) revisar()
         vigilar()
@@ -479,6 +521,7 @@ if (bot && datos.asistente) {
         entrada.value = ''
         entrada.style.height = ''
         estado.mensajes.push({ rol: 'user', contenido })
+        estado.ultimo = Date.now()
         guardarBot()
         pintar(pensando())
         try {
@@ -491,7 +534,7 @@ if (bot && datos.asistente) {
             if (!r.ok) {
                 estado.mensajes.pop()
                 entrada.value = contenido
-                pintar(aviso(respuesta.mensaje ?? respuesta.message ?? 'No se pudo enviar la consulta. Inténtalo de nuevo.'))
+                pintar(aviso(r.status === 429 ? 'Muchos mensajes seguidos: espera un momento y vuelve a intentarlo.' : (respuesta.mensaje ?? respuesta.message ?? 'No se pudo enviar la consulta. Inténtalo de nuevo.')))
                 return
             }
             estado.conversacion = respuesta.conversacion_id ?? estado.conversacion
@@ -513,7 +556,7 @@ if (bot && datos.asistente) {
     bot.querySelector('[data-bot-abrir]')?.addEventListener('click', abrirBot)
     bot.querySelector('[data-bot-cerrar]')?.addEventListener('click', cerrarBot)
     bot.querySelector('[data-bot-nueva]')?.addEventListener('click', () => {
-        estado = { visitante: estado.visitante, conversacion: null, mensajes: [], modo: 'bot' }
+        estado = { visitante: estado.visitante, conversacion: null, mensajes: [], modo: 'bot', ultimo: 0 }
         guardarBot()
         pintar()
         vigilar()
@@ -541,4 +584,5 @@ if (bot && datos.asistente) {
     })
 
     document.documentElement.classList.add('con-bot')
+    vigilar()
 }

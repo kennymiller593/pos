@@ -9,7 +9,6 @@ use App\Models\Producto;
 use App\Services\CatalogoTiendaService;
 use App\Services\CloudflareService;
 use App\Services\DominioTiendaService;
-use App\Services\IA\AsistenteIaService;
 use App\Services\PortadaTiendaService;
 use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
@@ -94,8 +93,6 @@ class TiendaConfigController extends Controller
             'maxDestacados' => CatalogoTiendaService::DESTACADOS,
             'productos' => $productos,
             'filtros' => $filtros,
-            // agentes de IA que la plataforma activó para la empresa (el chatbot usa uno de ellos)
-            'agentes' => app(AsistenteIaService::class)->agentesDe($empresa)->map(fn ($a) => ['id' => $a->id, 'nombre' => $a->nombre, 'descripcion' => $a->descripcion])->values(),
         ]);
     }
 
@@ -223,25 +220,6 @@ class TiendaConfigController extends Controller
             // ícono de la pestaña
             'favicon' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'favicon_quitar' => ['nullable', 'boolean'],
-            // chatbot de la tienda (opcionales: quien no los manda conserva lo que tenía)
-            'chatbot_activo' => ['sometimes', 'boolean'],
-            'chatbot_agente' => ['nullable', 'string', function (string $atributo, mixed $valor, \Closure $falla) use ($request, $empresa) {
-                $agentes = app(AsistenteIaService::class)->agentesDe($empresa);
-                if ($request->boolean('chatbot_activo') && $agentes->isEmpty()) {
-                    $falla('Tu empresa aún no tiene un agente de IA activo: pídelo a la plataforma.');
-                } elseif (filled($valor) && ! $agentes->contains('id', $valor)) {
-                    $falla('Ese agente no está activo para tu empresa.');
-                }
-            }],
-            'chatbot_nombre' => ['nullable', 'string', 'max:40'],
-            'chatbot_saludo' => ['nullable', 'string', 'max:200'],
-            'chatbot_color' => ['nullable', 'string', function (string $atributo, mixed $valor, \Closure $falla) {
-                if (filled($valor) && ! Tienda::esColor((string) $valor)) {
-                    $falla('Elige un color válido, por ejemplo #7C3AED.');
-                }
-            }],
-            'chatbot_avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
-            'chatbot_avatar_quitar' => ['nullable', 'boolean'],
             // para los buscadores
             'seo_titulo' => ['nullable', 'string', 'max:70'],
             'seo_descripcion' => ['nullable', 'string', 'max:170'],
@@ -411,14 +389,6 @@ class TiendaConfigController extends Controller
             $request->boolean('favicon_quitar') => null,
             default => $actual['favicon'],
         };
-        $config['chatbot_avatar'] = match (true) {
-            $request->hasFile('chatbot_avatar') => $iconoNuevo($request->file('chatbot_avatar')),
-            $request->boolean('chatbot_avatar_quitar') => null,
-            default => $actual['chatbot_avatar'],
-        };
-        if (array_key_exists('chatbot_color', $datos)) {
-            $config['chatbot_color'] = filled($datos['chatbot_color']) ? strtoupper(trim($datos['chatbot_color'])) : null;
-        }
 
         return $config;
     }

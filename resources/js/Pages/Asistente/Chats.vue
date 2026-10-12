@@ -1,9 +1,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { Bot, ChevronLeft, Hand, MessageCircle, SendHorizontal, Sparkles, Undo2, UserRound } from '@lucide/vue'
+import { Bot, ChevronLeft, Hand, MessageCircle, SendHorizontal, Sparkles, Trash2, Undo2, UserRound } from '@lucide/vue'
+import { useConfirmar } from '@/composables/confirmar'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { markdownSencillo as html } from '@/utils/markdown'
+import { useSonido } from '@/composables/sonido'
 
 const props = defineProps({
     negocio: { type: String, default: '' },
@@ -11,6 +13,13 @@ const props = defineProps({
     actual: { type: Object, default: null },
 })
 
+const { pitido } = useSonido()
+const { confirmar } = useConfirmar()
+
+async function eliminar(c) {
+    const ok = await confirmar({ titulo: 'Eliminar conversación', mensaje: `Se borrará "${c.titulo}" con todos sus mensajes. Si el cliente vuelve a escribir, empezará una conversación nueva.`, textoConfirmar: 'Eliminar', peligro: true })
+    if (ok) router.delete(`/asistente/tienda/${c.id}`)
+}
 const lista = ref([...props.conversaciones])
 const actual = ref(props.actual ? { ...props.actual, mensajes: [...props.actual.mensajes] } : null)
 const texto = ref('')
@@ -49,6 +58,7 @@ async function refrescar() {
         actual.value.atendida_por = datos.atendida_por
         const nuevos = datos.mensajes.filter((m) => !actual.value.mensajes.some((x) => x.id === m.id))
         if (nuevos.length) {
+            if (nuevos.some((m) => m.rol === 'user')) pitido('ok')
             actual.value.mensajes.push(...nuevos)
             const i = lista.value.findIndex((c) => c.id === actual.value.id)
             if (i >= 0) lista.value[i] = { ...lista.value[i], ultimo: { rol: nuevos.at(-1).rol, texto: nuevos.at(-1).contenido.slice(0, 70) }, mensajes: lista.value[i].mensajes + nuevos.length }
@@ -160,9 +170,9 @@ onBeforeUnmount(() => { clearInterval(sondeo); clearInterval(sondeoLista) })
                     </button>
                 </div>
                 <div class="border-t border-stone-200 p-2 dark:border-neutral-800">
-                    <Link href="/asistente" class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-stone-50 dark:text-neutral-300 dark:hover:bg-neutral-800">
+                    <Link href="/asistente/consultas" class="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-neutral-600 hover:bg-stone-50 dark:text-neutral-300 dark:hover:bg-neutral-800">
                         <Sparkles class="size-4 text-emerald-600" />
-                        Mi asistente (uso interno)
+                        Consultar al asistente
                     </Link>
                 </div>
             </aside>
@@ -187,6 +197,15 @@ onBeforeUnmount(() => { clearInterval(sondeo); clearInterval(sondeoLista) })
                                 <span v-else class="font-medium text-emerald-700 dark:text-emerald-400">responde el asistente</span>
                             </p>
                         </div>
+                        <button
+                            type="button"
+                            class="grid size-9 shrink-0 place-items-center rounded-xl text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                            title="Eliminar conversación"
+                            data-eliminar
+                            @click="eliminar(actual)"
+                        >
+                            <Trash2 class="size-4" />
+                        </button>
                         <button
                             v-if="!humano"
                             type="button"

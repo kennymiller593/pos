@@ -15,6 +15,8 @@
             @endif
         </span>
         <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-56 group-hover:pr-5 group-focus-visible:max-w-56 group-focus-visible:pr-5 lg:block">Pregúntale a {{ $asistente['nombre'] }}</span>
+        {{-- respuestas de una persona del negocio que llegaron con el chat cerrado --}}
+        <span data-bot-globo class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-red-500 px-1.5 text-center text-xs leading-6 font-bold text-white ring-2 ring-white"></span>
     </button>
 
     <section data-bot-panel class="fixed inset-0 z-50 hidden flex-col bg-white shadow-2xl sm:inset-auto sm:right-6 sm:bottom-6 sm:h-[min(42rem,calc(100vh-3rem))] sm:w-[24rem] sm:rounded-3xl sm:ring-1 sm:ring-black/10 [&:not(.hidden)]:flex" role="dialog" aria-modal="true" aria-label="Asistente virtual">

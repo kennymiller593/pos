@@ -104,7 +104,7 @@ class AsistenteController extends Controller
         abort_unless($conversacion->usuario_id === $request->user()->id, 403);
         $conversacion->delete();
 
-        return redirect()->route('asistente.index')->with('success', 'Conversación eliminada.');
+        return redirect()->route('asistente.consultas')->with('success', 'Conversación eliminada.');
     }
 
     private function conversacion(ConversacionIa $c): array

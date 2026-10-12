@@ -47,7 +47,7 @@ class ChatsTiendaController extends Controller
         if ($id = $request->query('c')) {
             $conversacion = $conversaciones->firstWhere('id', $id);
             if ($conversacion) {
-                $conversacion->forceFill(['leida_en' => now()])->saveQuietly();
+                ConversacionIa::whereKey($conversacion->id)->toBase()->update(['leida_en' => now()]); // toBase: sin tocar actualizado_en
                 $actual = $this->conversacion($conversacion);
             }
         }
@@ -75,7 +75,7 @@ class ChatsTiendaController extends Controller
         $this->autorizar($request, $conversacion);
         $desde = $request->query('desde');
         $desde = is_string($desde) && Str::isUuid($desde) ? $desde : null;
-        $conversacion->forceFill(['leida_en' => now()])->saveQuietly();
+        ConversacionIa::whereKey($conversacion->id)->toBase()->update(['leida_en' => now()]); // toBase: sin tocar actualizado_en
 
         return response()->json([
             'modo' => $conversacion->modo,
@@ -118,6 +118,15 @@ class ChatsTiendaController extends Controller
         $conversacion->touch();
 
         return response()->json(['modo' => 'humano', 'atendida_por' => $conversacion->atendidaPor?->nombre_completo ?? $request->user()->nombre_completo, 'mensaje' => $this->mensaje($mensaje)]);
+    }
+
+    /** Borra la conversación con sus mensajes (el cliente, si vuelve a escribir, empieza una nueva). */
+    public function eliminar(Request $request, ConversacionIa $conversacion): RedirectResponse
+    {
+        $this->autorizar($request, $conversacion);
+        $conversacion->delete();
+
+        return redirect()->route('asistente.tienda')->with('success', 'Conversación eliminada.');
     }
 
     private function autorizar(Request $request, ConversacionIa $conversacion): void

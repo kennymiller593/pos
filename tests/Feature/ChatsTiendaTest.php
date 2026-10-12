@@ -75,8 +75,12 @@ class ChatsTiendaTest extends TestCase
             ->where('conversaciones.0.sin_leer', true)
             ->where('conversaciones.0.modo', 'bot')
             ->where('actual', null));
+        $antes = ConversacionIa::findOrFail($id)->actualizado_en;
+        $this->travel(2)->minutes();
         $this->actingAs($this->admin)->get("/asistente/tienda?c={$id}")->assertInertia(fn (AssertableInertia $p) => $p
             ->where('actual.id', $id)->has('actual.mensajes', 2)->where('conversaciones.0.sin_leer', false));
+        // leerla no es actividad: no cambia el orden de la lista
+        $this->assertEquals($antes, ConversacionIa::findOrFail($id)->actualizado_en);
 
         // toma la conversación: el bot calla, lo que escribe el cliente queda esperando
         $this->actingAs($this->admin)->postJson("/asistente/tienda/{$id}/tomar")->assertOk()->assertJsonPath('modo', 'humano');
@@ -91,6 +95,12 @@ class ChatsTiendaTest extends TestCase
         $this->assertSame(['assistant', 'humano'], array_column($nuevos->json('mensajes'), 'rol'));
         $this->assertSame('Sí, hacemos delivery en Huaral.', $nuevos->json('mensajes.1.contenido'));
 
+        // el sondeo del cliente (cada 4 s) no debe gastar el cupo de envío de mensajes de su IP
+        foreach (range(1, 20) as $i) {
+            $this->cliente('GET', "/asistente/mensajes?conversacion_id={$id}&visitante=visitante-prueba-01")->assertOk();
+        }
+        $this->cliente('POST', '/asistente', ['visitante' => 'visitante-prueba-01', 'texto' => 'sigo aquí', 'conversacion_id' => $id])->assertOk();
+
         // solo lo posterior a "desde"
         $desde = $nuevos->json('mensajes.0.id');
         $this->assertCount(1, $this->cliente('GET', "/asistente/mensajes?conversacion_id={$id}&visitante=visitante-prueba-01&desde=".urlencode($desde))->json('mensajes'));
@@ -103,7 +113,7 @@ class ChatsTiendaTest extends TestCase
         AgenteDeRubro::fake(['De vuelta: sí, tenemos urea.']);
         $this->cliente('POST', '/asistente', ['visitante' => 'visitante-prueba-01', 'texto' => 'gracias', 'conversacion_id' => $id])
             ->assertOk()->assertJsonPath('modo', 'bot')->assertJsonPath('mensaje.contenido', 'De vuelta: sí, tenemos urea.');
-        $this->assertSame(['user', 'assistant', 'user', 'humano', 'user', 'assistant'], ConversacionIa::findOrFail($id)->mensajes->pluck('rol')->all());
+        $this->assertSame(['user', 'assistant', 'user', 'humano', 'user', 'user', 'assistant'], ConversacionIa::findOrFail($id)->mensajes->pluck('rol')->all());
     }
 
     public function test_otra_empresa_o_visitante_no_ven_la_conversacion(): void
@@ -118,8 +128,14 @@ class ChatsTiendaTest extends TestCase
             $this->actingAs($ajeno)->postJson("/asistente/tienda/{$conversacion->id}/tomar")->assertNotFound();
         }
 
+        // eliminar: solo la propia empresa; se borra con sus mensajes
+        $this->actingAs($this->admin)->delete("/asistente/tienda/{$conversacion->id}")->assertRedirect('/asistente/tienda');
+        $this->assertDatabaseMissing('ia_conversaciones', ['id' => $conversacion->id]);
+
         // una conversación de la app (no de la tienda) tampoco se atiende por aquí
         $interna = ConversacionIa::create(['empresa_id' => $this->empresa->id, 'usuario_id' => $this->admin->id, 'agente_id' => $this->agente->id, 'canal' => 'app']);
         $this->actingAs($this->admin)->postJson("/asistente/tienda/{$interna->id}/tomar")->assertNotFound();
+        $this->actingAs($this->admin)->delete("/asistente/tienda/{$interna->id}")->assertNotFound();
+        $this->assertDatabaseHas('ia_conversaciones', ['id' => $interna->id]);
     }
 }

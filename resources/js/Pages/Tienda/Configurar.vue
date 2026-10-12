@@ -32,7 +32,6 @@ const props = defineProps({
     resumen: { type: Object, required: true },
     maxDestacados: { type: Number, default: 8 },
     productos: { type: Object, required: true },
-    agentes: { type: Array, default: () => [] },
     filtros: { type: Object, default: () => ({ buscar: '', ver: 'todos' }) },
 })
 
@@ -46,7 +45,6 @@ const SECCIONES = [
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
-    { valor: 'asistente', nombre: 'Asistente', campos: ['chatbot_activo', 'chatbot_agente', 'chatbot_nombre', 'chatbot_saludo', 'chatbot_color', 'chatbot_avatar'] },
     { valor: 'dominio', nombre: 'Dominio', campos: [] },
 ]
 const seccion = ref('general')
@@ -112,14 +110,6 @@ const form = useForm({
     portada_imagen_quitar: false,
     favicon: null, // ícono de la pestaña nuevo, si se elige uno
     favicon_quitar: false,
-    // chatbot de la tienda
-    chatbot_activo: props.tienda.config.chatbot_activo ?? false,
-    chatbot_agente: props.tienda.config.chatbot_agente ?? (props.agentes[0]?.id ?? ''),
-    chatbot_nombre: props.tienda.config.chatbot_nombre ?? '',
-    chatbot_saludo: props.tienda.config.chatbot_saludo ?? '',
-    chatbot_color: props.tienda.config.chatbot_color ?? '',
-    chatbot_avatar: null,
-    chatbot_avatar_quitar: false,
     banners: bannersGuardados(),
     // contenido: páginas de texto
     nosotros: props.tienda.config.nosotros ?? '',
@@ -228,38 +218,6 @@ function quitarFoto() {
     if (inputPortada.value) inputPortada.value.value = ''
     if (form.portada_estilo === 'foto') form.portada_estilo = 'vitrina'
 }
-
-// ---- chatbot de la tienda: avatar y vista previa ----
-const inputAvatar = ref(null)
-const avatarNuevo = ref(null)
-const avatar = computed(() => avatarNuevo.value ?? (form.chatbot_avatar_quitar ? null : props.tienda.config.chatbot_avatar))
-function elegirAvatar(evento) {
-    const archivo = evento.target.files?.[0]
-    if (!archivo) return
-    form.clearErrors('chatbot_avatar')
-    if (archivo.size > 2 * 1024 * 1024) {
-        form.setError('chatbot_avatar', 'La imagen no debe pesar más de 2 MB.')
-        evento.target.value = ''
-        return
-    }
-    if (avatarNuevo.value) URL.revokeObjectURL(avatarNuevo.value)
-    avatarNuevo.value = URL.createObjectURL(archivo)
-    form.chatbot_avatar = archivo
-    form.chatbot_avatar_quitar = false
-}
-function quitarAvatar() {
-    if (avatarNuevo.value) URL.revokeObjectURL(avatarNuevo.value)
-    avatarNuevo.value = null
-    form.chatbot_avatar = null
-    form.chatbot_avatar_quitar = true
-    if (inputAvatar.value) inputAvatar.value.value = ''
-}
-const colorBotValido = computed(() => /^#[0-9a-f]{6}$/i.test(form.chatbot_color ?? ''))
-// color del chatbot: el elegido o, si no, el de la tienda
-const colorBot = computed(() => (colorBotValido.value ? form.chatbot_color : (form.color === 'propio' && colorValido.value ? form.color_propio : (props.tienda.colores[form.color] ?? '#0F766E'))))
-const sobreBot = computed(() => (contraste(colorBot.value, TEXTOS.claro) >= contraste(colorBot.value, TEXTOS.oscuro) ? TEXTOS.claro : TEXTOS.oscuro))
-const nombreBot = computed(() => form.chatbot_nombre.trim() || 'Asistente virtual')
-const saludoBot = computed(() => form.chatbot_saludo.trim() || `¡Hola! Soy ${nombreBot.value}, asistente virtual de ${props.tienda.nombre_tienda}. Cuéntame qué buscas y te ayudo a encontrarlo.`)
 
 // ---- ícono de la pestaña (favicon) ----
 const inputIcono = ref(null)
@@ -925,103 +883,6 @@ function guardarDescripcion() {
                 :max-preguntas="tienda.limites.preguntas"
                 :nombre="tienda.nombre_tienda"
             />
-
-            <!-- Asistente (chatbot) -->
-            <section v-show="seccion === 'asistente'" :class="[claseTarjeta, 'p-5 xl:col-span-2']" aria-labelledby="titulo-asistente" data-seccion-asistente>
-                <h2 id="titulo-asistente" class="font-semibold tracking-tight">Asistente virtual de tu tienda</h2>
-                <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                    Un chat flotante en tu tienda, como el de WhatsApp: tus clientes le preguntan y él recomienda productos de tu catálogo con foto, precio y botón para comprar.
-                </p>
-
-                <div v-if="!agentes.length" class="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                    Tu empresa aún no tiene un agente de IA activo. Es un adicional que activa la plataforma: pídelo y aquí podrás encender el chat.
-                </div>
-
-                <div v-else class="mt-5 grid gap-6 lg:grid-cols-[1fr_20rem]">
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors sm:col-span-2" :class="form.chatbot_activo ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30' : 'border-stone-200 dark:border-neutral-800'">
-                            <input v-model="form.chatbot_activo" type="checkbox" class="size-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500" />
-                            <span>
-                                <span class="block text-sm font-semibold">Mostrar el asistente en mi tienda</span>
-                                <span class="block text-xs text-neutral-500 dark:text-neutral-400">Aparece como botón flotante en todas las páginas de la tienda.</span>
-                            </span>
-                        </label>
-                        <div v-if="agentes.length > 1" class="sm:col-span-2">
-                            <label :class="claseLabel" for="chatbot_agente">Agente que atiende</label>
-                            <select id="chatbot_agente" v-model="form.chatbot_agente" :class="claseInput">
-                                <option v-for="a in agentes" :key="a.id" :value="a.id">{{ a.nombre }}<template v-if="a.descripcion"> · {{ a.descripcion }}</template></option>
-                            </select>
-                            <p v-if="form.errors.chatbot_agente" :class="claseError">{{ form.errors.chatbot_agente }}</p>
-                        </div>
-                        <p v-else-if="form.errors.chatbot_agente" :class="[claseError, 'sm:col-span-2']">{{ form.errors.chatbot_agente }}</p>
-                        <div>
-                            <label :class="claseLabel" for="chatbot_nombre">Nombre del asistente</label>
-                            <input id="chatbot_nombre" v-model="form.chatbot_nombre" type="text" maxlength="40" :class="claseInput" placeholder="Dania" />
-                            <p v-if="form.errors.chatbot_nombre" :class="claseError">{{ form.errors.chatbot_nombre }}</p>
-                            <p v-else :class="claseAyuda">Se presenta como "Soy {{ nombreBot }}, asistente virtual de {{ tienda.nombre_tienda }}".</p>
-                        </div>
-                        <div>
-                            <label :class="claseLabel" for="chatbot_color">Color del chat <span class="font-normal text-neutral-400">(opcional)</span></label>
-                            <div class="flex items-center gap-2">
-                                <input :value="colorBot" type="color" class="size-10 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700" aria-label="Elegir color" @input="form.chatbot_color = $event.target.value.toUpperCase()" />
-                                <input id="chatbot_color" v-model="form.chatbot_color" type="text" maxlength="7" :class="claseInput" placeholder="El de tu tienda" @input="form.clearErrors('chatbot_color')" />
-                                <button v-if="form.chatbot_color" type="button" class="h-10 shrink-0 rounded-xl border border-stone-300 px-3 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="form.chatbot_color = ''">Usar el de la tienda</button>
-                            </div>
-                            <p v-if="form.errors.chatbot_color" :class="claseError">{{ form.errors.chatbot_color }}</p>
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label :class="claseLabel" for="chatbot_saludo">Primer mensaje <span class="font-normal text-neutral-400">(opcional)</span></label>
-                            <textarea id="chatbot_saludo" v-model="form.chatbot_saludo" rows="2" maxlength="200" :class="[claseInput, 'h-auto py-2']" :placeholder="`¡Hola! Soy ${nombreBot}, asistente virtual de ${tienda.nombre_tienda}. Cuéntame qué buscas y te ayudo a encontrarlo.`" />
-                            <p v-if="form.errors.chatbot_saludo" :class="claseError">{{ form.errors.chatbot_saludo }}</p>
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label :class="claseLabel">Imagen del asistente</label>
-                            <div class="flex flex-wrap items-center gap-4">
-                                <div class="grid size-16 place-items-center overflow-hidden rounded-full border border-stone-200 bg-white dark:border-neutral-700 dark:bg-neutral-950">
-                                    <img v-if="avatar" :src="avatar" alt="Imagen actual" class="size-16 object-cover" />
-                                    <span v-else class="text-xl font-bold text-neutral-300">{{ nombreBot.charAt(0).toUpperCase() }}</span>
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <button type="button" class="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-semibold hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="inputAvatar.click()">
-                                        <ImagePlus class="size-4" />
-                                        {{ avatar ? 'Cambiar imagen' : 'Subir imagen' }}
-                                    </button>
-                                    <button v-if="avatar" type="button" class="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10" @click="quitarAvatar">
-                                        <Trash2 class="size-4" />
-                                        Quitar
-                                    </button>
-                                </div>
-                                <input ref="inputAvatar" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" aria-label="Imagen del asistente" @change="elegirAvatar" />
-                            </div>
-                            <p v-if="form.errors.chatbot_avatar" :class="claseError">{{ form.errors.chatbot_avatar }}</p>
-                            <p v-else :class="claseAyuda">Una foto o ilustración cuadrada (se recorta en círculo). Sin imagen se muestra la inicial del nombre.</p>
-                        </div>
-                    </div>
-
-                    <!-- vista previa del chat -->
-                    <div>
-                        <p :class="claseLabel">Así lo verá tu cliente</p>
-                        <div class="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm dark:border-neutral-700" :style="{ '--bot': colorBot, '--sobre-bot': sobreBot }">
-                            <div class="flex items-center gap-3 px-4 py-3" :style="{ background: colorBot, color: sobreBot }">
-                                <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-white/20 ring-2 ring-white/60">
-                                    <img v-if="avatar" :src="avatar" alt="" class="size-10 object-cover" />
-                                    <span v-else class="font-bold">{{ nombreBot.charAt(0).toUpperCase() }}</span>
-                                </span>
-                                <div class="min-w-0">
-                                    <p class="truncate font-semibold leading-tight">{{ nombreBot }}</p>
-                                    <p class="flex items-center gap-1.5 text-xs opacity-90"><span class="size-2 rounded-full bg-emerald-300" /> En línea</p>
-                                </div>
-                            </div>
-                            <div class="space-y-2 bg-slate-50 p-3 text-sm">
-                                <div class="max-w-[90%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2 text-slate-800">{{ saludoBot }}</div>
-                                <div class="ml-auto max-w-[80%] rounded-2xl rounded-br-md px-3 py-2" :style="{ background: colorBot, color: sobreBot }">¿Qué tienen para…?</div>
-                                <div class="max-w-[90%] rounded-2xl border border-slate-200 bg-white p-2 text-xs text-slate-500">Recomendación con foto, precio y botones <b>Comprar</b> / <b>Detalles</b></div>
-                            </div>
-                        </div>
-                        <p :class="claseAyuda">El asistente responde solo con tu catálogo y respeta lo que muestras: precios y stock según tus ajustes de Apariencia.</p>
-                    </div>
-                </div>
-            </section>
 
             <!-- Guardar y vista previa: siempre a la mano, en cualquier sección -->
             <div

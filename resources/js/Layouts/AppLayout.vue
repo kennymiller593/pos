@@ -139,7 +139,8 @@ const menuBase = [
                     { label: 'Datos de la empresa', href: '/empresa', icon: Settings, exact: true, permiso: 'empresa.gestionar' },
                     { label: 'Cobros con QR', href: '/empresa/cobros-qr', icon: QrCode, permiso: 'empresa.gestionar' },
                     // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
-                    { label: 'Asistente de IA', href: '/asistente', icon: Sparkles, exact: true, si: () => !!empresa.value?.ia_habilitada },
+                    { label: 'Asistente de IA', href: '/asistente', icon: Bot, exact: true, permiso: 'empresa.gestionar', si: () => !!empresa.value?.ia_habilitada },
+                    { label: 'Consultar al asistente', href: '/asistente/consultas', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
                     { label: 'Chats de la tienda', href: '/asistente/tienda', icon: MessageCircle, si: () => !!empresa.value?.ia_habilitada && !!empresa.value?.tienda_habilitada },
                 ],
             },

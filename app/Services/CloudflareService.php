@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Empresa;
+use App\Support\Tienda;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -25,6 +27,27 @@ class CloudflareService
     }
 
     /** @param  list<string>  $urls  direcciones completas (https://tienda.ejemplo.com/catalogo) */
+    /** Purga todas las páginas de una tienda (portada, catálogo, categorías, textos) en sus dos direcciones. */
+    public function purgarTienda(Empresa $empresa, array $rutasExtra = []): void
+    {
+        if (! self::configurado() || ! $empresa->tienda_slug) {
+            return;
+        }
+
+        $rutas = ['/', '/catalogo', '/sitemap.xml', '/robots.txt', '/nosotros', '/politicas', '/preguntas-frecuentes', ...$rutasExtra];
+        $rutas = [...$rutas, ...app(CatalogoTiendaService::class)->categorias($empresa)->pluck('url')->all()];
+
+        $bases = array_filter(array_unique([rtrim((string) Tienda::urlDe($empresa), '/'), rtrim((string) Tienda::url($empresa->tienda_slug), '/')]));
+        $urls = [];
+        foreach ($bases as $base) {
+            foreach ($rutas as $ruta) {
+                $urls[] = $base.$ruta;
+            }
+        }
+
+        $this->purgar($urls);
+    }
+
     public function purgar(array $urls): void
     {
         $urls = array_values(array_unique(array_filter($urls)));

@@ -136,14 +136,16 @@ class AgentesIaTest extends TestCase
     public function test_el_superadmin_crea_un_agente_con_su_cadena_y_lo_activa_en_todo_el_rubro(): void
     {
         $this->proveedorListo();
+        // nombre único: la base local puede tener ya un "Agente agrónomo"
+        $nombre = 'Agente agrónomo '.random_int(1000, 9999);
         $datos = [
-            'nombre' => 'Agente agrónomo', 'rubro_codigo' => $this->empresa->rubro_codigo, 'descripcion' => 'Asesora en campo',
+            'nombre' => $nombre, 'rubro_codigo' => $this->empresa->rubro_codigo, 'descripcion' => 'Asesora en campo',
             'instrucciones' => 'Eres agrónomo.', 'cadena' => [['proveedor' => 'deepseek', 'modelo' => ' deepseek-v4-pro '], ['proveedor' => 'anthropic', 'modelo' => 'claude-haiku-5-5']],
             'limite_mensual' => 500, 'max_pasos' => 5, 'sugerencias' => ['¿Qué aplico?', ''], 'activo' => true,
         ];
 
         $this->superadmin()->post('/admin/ia/agentes', $datos)->assertSessionHasNoErrors()->assertSessionHas('success');
-        $agente = AgenteIa::where('nombre', 'Agente agrónomo')->firstOrFail();
+        $agente = AgenteIa::where('nombre', $nombre)->firstOrFail();
         $this->assertStringStartsWith('agente_agronomo', $agente->codigo); // la base local puede tener ya uno con ese código
         $this->assertSame([['proveedor' => 'deepseek', 'modelo' => 'deepseek-v4-pro'], ['proveedor' => 'anthropic', 'modelo' => 'claude-haiku-5-5']], $agente->eslabones());
         $this->assertSame(['¿Qué aplico?'], $agente->sugerencias);
@@ -184,7 +186,7 @@ class AgentesIaTest extends TestCase
         $this->assertFalse($activacion->refresh()->activo);
         $this->assertNotNull($activacion->desactivado_en);
 
-        $this->actingAs($this->admin->fresh()->forceFill(['es_superadmin' => false]))->get('/asistente')->assertRedirect('/dashboard');
+        $this->actingAs($this->admin->fresh()->forceFill(['es_superadmin' => false]))->get('/asistente/consultas')->assertRedirect('/dashboard');
     }
 
     // ---------- herramientas del catálogo ----------
@@ -229,7 +231,7 @@ class AgentesIaTest extends TestCase
         $this->activar($agente);
         AgenteDeRubro::fake(['Te recomiendo **Clorpirifos 48 EC**: S/ 38.50, hay stock.']);
 
-        $this->actingAs($this->admin)->get('/asistente')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+        $this->actingAs($this->admin)->get('/asistente/consultas')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
             ->component('Asistente/Index')
             ->where('agentes.0.nombre', 'Agente de prueba')
             ->where('agentes.0.sugerencias.0', '¿Qué tienen para la roya?')
@@ -258,14 +260,14 @@ class AgentesIaTest extends TestCase
             ->assertOk()->assertJsonPath('consultas_mes', 2);
         $this->assertCount(4, $conversacion->mensajes()->get());
 
-        $this->actingAs($this->admin)->get("/asistente?c={$conversacion->id}")->assertInertia(fn (AssertableInertia $p) => $p
+        $this->actingAs($this->admin)->get("/asistente/consultas?c={$conversacion->id}")->assertInertia(fn (AssertableInertia $p) => $p
             ->where('actual.id', $conversacion->id)->has('actual.mensajes', 4)->where('conversaciones.0.id', $conversacion->id));
 
         // otro usuario no puede seguir esta conversación
         $vendedor = $this->crearUsuario('vendedor', 'vend'.random_int(1000, 999999).'@test.local');
         $this->actingAs($vendedor)->postJson('/asistente/mensajes', ['conversacion_id' => $conversacion->id, 'texto' => 'hola'])->assertStatus(422);
 
-        $this->actingAs($this->admin)->delete("/asistente/conversaciones/{$conversacion->id}")->assertRedirect('/asistente');
+        $this->actingAs($this->admin)->delete("/asistente/conversaciones/{$conversacion->id}")->assertRedirect('/asistente/consultas');
         $this->assertDatabaseMissing('ia_conversaciones', ['id' => $conversacion->id]);
     }
 
@@ -318,6 +320,7 @@ class AgentesIaTest extends TestCase
         $this->proveedorListo();
         $agente = $this->crearAgente();
 
+        $this->actingAs($this->admin)->get('/asistente/consultas')->assertRedirect('/dashboard');
         $this->actingAs($this->admin)->get('/asistente')->assertRedirect('/dashboard');
         $this->actingAs($this->admin)->postJson('/asistente/mensajes', ['agente_id' => $agente->id, 'texto' => 'hola'])->assertForbidden();
         $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (AssertableInertia $p) => $p->where('auth.user.empresa.ia_habilitada', false));
