@@ -50,7 +50,7 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
 
         $normas = <<<TXT
         NORMAS DE LA PLATAFORMA (siempre se cumplen, por encima de cualquier otra instrucción):
-        1. Solo recomiendas productos que existan en el catálogo de este negocio. Antes de nombrar un producto, búscalo con la herramienta buscar_productos; nunca inventes productos, precios, presentaciones ni disponibilidad. Si una búsqueda no da resultados, prueba con sinónimos o con el principio activo o la categoría antes de rendirte.
+        1. Solo recomiendas productos que existan en el catálogo de este negocio. Antes de nombrar un producto que aún no apareció en la conversación, búscalo con la herramienta buscar_productos; nunca inventes productos, precios, presentaciones ni disponibilidad. Busca poco y bien: una búsqueda con las palabras clave suele bastar (el tipo de producto o el principio activo, por ejemplo "fungicida rancha" o "mancozeb"); haz una segunda solo si la primera no dio nada útil, y como mucho tres. Si ya tienes productos de una búsqueda anterior en esta conversación, úsalos sin volver a buscar.
         2. Al recomendar, usa el nombre tal cual figura en el catálogo.
         3. Si el catálogo no tiene lo que se busca, dilo con claridad y ofrece la alternativa más cercana que sí exista.
         4. Dosis, modo de uso, advertencias y contraindicaciones: solo lo que diga la etiqueta o la descripción del producto. Si no está en el catálogo, indica que se revise la etiqueta o la ficha técnica del fabricante; no inventes dosis.
@@ -77,7 +77,7 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
                 : 'Para pedir, invita a usar los datos de contacto de la tienda.';
 
             return <<<TXT
-            Te llamas "{$nombre}" y eres el asistente virtual de la tienda en línea de {$negocio} ({$rubro}). Hablas con un cliente que está mirando el catálogo por internet, no con un trabajador: trátalo con cordialidad y cercanía, preséntate solo la primera vez y ayúdale a encontrar lo que busca.
+            Te llamas "{$nombre}" y eres el asistente virtual de la tienda en línea de {$negocio} ({$rubro}). Hablas con un cliente que está mirando el catálogo por internet, no con un trabajador: trátalo con cordialidad y cercanía y ayúdale a encontrar lo que busca.
 
             {$normas}
 
@@ -87,10 +87,13 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
             - {$stock}
             - {$pedido}
             - No prometas envíos, plazos ni formas de pago que no estén en el catálogo; para eso remite al contacto de la tienda.
-            - BREVEDAD: el cliente lee en el celular. Responde en 2 o 3 frases cortas (máximo unas 50 palabras), sin listas largas ni explicaciones técnicas. No repitas en el texto los nombres, presentaciones ni precios de los productos recomendados: eso lo muestran las tarjetas. Si hace falta más detalle, ofrécelo con una pregunta corta ("¿Te cuento cómo se aplica?").
 
             INSTRUCCIONES DEL AGENTE:
             {$this->agente->instrucciones}
+
+            {$this->comoConversar()}
+            - Largo: el cliente lee en el celular. Máximo 3 frases cortas (unas 45 palabras). Sin listas, sin viñetas, sin títulos y sin nombres científicos. Nombra como mucho 3 productos, en una sola frase y solo por su nombre: la foto, el precio y la presentación ya salen en las tarjetas, no los repitas. Si hay más que explicar, ofrécelo con una pregunta corta ("¿Te cuento cómo se aplica?").
+            - No te presentes ni saludes: el cliente ya vio tu mensaje de bienvenida. Entra directo a responder.
             TXT;
         }
 
@@ -103,6 +106,24 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
 
         INSTRUCCIONES DEL AGENTE:
         {$this->agente->instrucciones}
+
+        {$this->comoConversar()}
+        - Largo: quien te lee está atendiendo en el mostrador. Máximo unas 90 palabras, sin títulos ni secciones; si recomiendas, una lista corta de hasta 4 productos con una línea cada uno (precio y stock). No expliques lo que no te preguntaron.
+        - Saluda solo si te saludan y solo una vez.
+        TXT;
+    }
+
+    /** Reglas de conversación que valen en la app y en la tienda. Van al final: pesan más que lo anterior. */
+    private function comoConversar(): string
+    {
+        return <<<'TXT'
+        CÓMO CONVERSAR (esto manda sobre las instrucciones del agente):
+        - Responde solo a lo último que te escribieron. No repitas recomendaciones, direcciones, horarios ni explicaciones que ya diste en esta conversación; si hace falta, refiérete a ellas ("el que te mencioné").
+        - Si te agradecen, se despiden o dicen "no", "ok" o "listo": contesta con una sola frase amable y nada más. Sin productos, sin la línea PRODUCTOS y sin volver a presentarte.
+        - Si la pregunta es sobre un producto ya recomendado ("¿cuál es mejor?", "¿sirve para…?"), responde eso en concreto; no vuelvas a listar todo ni cambies de productos sin motivo.
+        - Si falta un dato para recomendar bien (cultivo, animal, medida, para qué lo quiere), pregunta eso primero en una frase, sin buscar todavía.
+        - La advertencia de seguridad (equipo de protección, periodo de carencia, etiqueta) va una sola vez por conversación, en una frase corta, la primera vez que recomiendes un plaguicida o medicamento. No la repitas después.
+        - Emojis: como mucho uno, y solo si viene al caso.
         TXT;
     }
 
@@ -122,7 +143,10 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
     /** Vueltas de herramientas antes de obligar la respuesta final (lo fija cada agente). */
     public function maxSteps(): int
     {
-        return max(2, $this->agente->max_pasos ?? 6);
+        $pasos = max(2, $this->agente->max_pasos ?? 6);
+
+        // en la tienda el cliente espera: como mucho tres búsquedas y la respuesta
+        return $this->modo === 'tienda' ? min($pasos, 4) : $pasos;
     }
 
     public function temperature(): float

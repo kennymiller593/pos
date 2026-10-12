@@ -58,7 +58,13 @@ class DatosNegocioIaTest extends TestCase
         $publico = (new AgenteDeRubro($this->agente, $this->empresa->fresh(), null, 'tienda', ['nombre' => 'Dania']))->instructions();
         $this->assertStringContainsString('Te llamas "Dania"', $publico);
         $this->assertStringContainsString('Esta tienda en línea: http://agro.tienda.test', $publico);
-        $this->assertStringContainsString('BREVEDAD', $publico);
+        $this->assertStringContainsString('Máximo 3 frases cortas', $publico);
+        $this->assertStringContainsString('No te presentes ni saludes', $publico);
+        $this->assertStringContainsString('Si te agradecen, se despiden', $publico);
+        // en la tienda, como mucho tres búsquedas y la respuesta
+        $this->assertSame(4, (new AgenteDeRubro($this->agente->forceFill(['max_pasos' => 8]), $this->empresa->fresh(), null, 'tienda'))->maxSteps());
+        $this->assertSame(8, (new AgenteDeRubro($this->agente, $this->empresa->fresh(), $this->sucursal))->maxSteps());
+        $this->assertStringContainsString('Si te agradecen, se despiden', $instrucciones);
     }
 
     public function test_la_campanita_avisa_de_los_chats_de_la_tienda_sin_leer(): void

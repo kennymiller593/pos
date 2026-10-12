@@ -10,7 +10,7 @@ use Laravel\Ai\Tools\Request;
 /** Busca en el catálogo de la empresa por nombre, descripción, categoría o marca. */
 class BuscarProductos extends CatalogoDeLaEmpresa implements Tool
 {
-    public const MAXIMO = 8;
+    public const MAXIMO = 5;
 
     public function name(): string
     {

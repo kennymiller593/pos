@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 abstract class CatalogoDeLaEmpresa
 {
     /** Largo máximo de la descripción que se le pasa al modelo en una búsqueda. */
-    protected const DESCRIPCION_CORTA = 500;
+    protected const DESCRIPCION_CORTA = 260;
 
     public function __construct(
         protected readonly Empresa $empresa,
