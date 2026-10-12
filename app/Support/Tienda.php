@@ -53,6 +53,13 @@ class Tienda
         'categorias_texto' => [], // id de categoría => texto que presenta la categoría
         // "UREA 46% X 50 KG" se muestra como "Urea 46% x 50 kg"
         'nombres_bonitos' => true,
+        // chatbot: el agente de IA de la empresa atendiendo a los clientes en la tienda
+        'chatbot_activo' => false,
+        'chatbot_agente' => null, // id del agente (si la empresa tiene varios)
+        'chatbot_nombre' => null, // "Dania"
+        'chatbot_saludo' => null, // primer mensaje; sin él, uno estándar
+        'chatbot_color' => null, // #RRGGBB; sin él, el color de la tienda
+        'chatbot_avatar' => null, // foto o ilustración del asistente (PNG cuadrado)
     ];
 
     public const MAX_BANNERS = 5;
@@ -338,7 +345,7 @@ class Tienda
     }
 
     /** Texto que va encima del color de la tienda: blanco u oscuro. */
-    private const SOBRE = ['claro' => '#FFFFFF', 'oscuro' => '#0F172A'];
+    public const SOBRE = ['claro' => '#FFFFFF', 'oscuro' => '#0F172A'];
 
     /**
      * Los tonos de la tienda: [principal, al pasar el cursor, tinte suave,

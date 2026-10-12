@@ -23,6 +23,7 @@ use Throwable;
 /**
  * Atiende las consultas al asistente: comprueba la activación y el tope mensual, recorre la cadena de
  * modelos del agente (si uno falla pasa al siguiente) y guarda cada respuesta con su proveedor, tokens y costo.
+ * Sirve tanto al trabajador dentro de la app como al cliente en la tienda en línea (modo "tienda").
  */
 class AsistenteIaService
 {
@@ -34,6 +35,9 @@ class AsistenteIaService
 
     /** Largo máximo de una pregunta. */
     public const MAX_CARACTERES = 2000;
+
+    /** Tarjetas de producto que se muestran como máximo por respuesta. */
+    public const MAX_PRODUCTOS = 4;
 
     public function __construct(private readonly ProveedorIaService $proveedores) {}
 
@@ -53,7 +57,18 @@ class AsistenteIaService
             ->whereHas('agente', fn ($q) => $q->where('activo', true))->exists();
     }
 
-    /** Consultas respondidas este mes (lo que descuenta del tope). */
+    /** El agente que atiende la tienda en línea, si el dueño encendió el chatbot y el agente sigue activo. */
+    public function agenteDeTienda(Empresa $empresa, array $config): ?AgenteIa
+    {
+        if (! ($config['chatbot_activo'] ?? false)) {
+            return null;
+        }
+        $agentes = $this->agentesDe($empresa);
+
+        return $agentes->firstWhere('id', $config['chatbot_agente'] ?? null) ?? ($agentes->count() === 1 ? $agentes->first() : null);
+    }
+
+    /** Consultas respondidas este mes (lo que descuenta del tope), en la app y en la tienda. */
     public function consultasDelMes(Empresa $empresa, ?AgenteIa $agente = null): int
     {
         return MensajeIa::query()
@@ -82,13 +97,24 @@ class AsistenteIaService
     }
 
     /**
-     * Responde una pregunta dentro de una conversación y guarda ambos mensajes.
+     * Responde a un trabajador dentro de la app y guarda ambos mensajes.
      *
      * @throws ErrorDeNegocio
      */
     public function responder(ConversacionIa $conversacion, Usuario $usuario, string $texto): MensajeIa
     {
-        $empresa = $usuario->empresa;
+        return $this->atender($conversacion, $usuario->empresa, $usuario->sucursal, $texto);
+    }
+
+    /**
+     * Responde dentro de una conversación (de la app o de la tienda) y guarda ambos mensajes.
+     *
+     * @param  array{nombre?: ?string, mostrar_precios?: bool, mostrar_stock?: bool, whatsapp?: bool}  $persona  solo en modo tienda
+     *
+     * @throws ErrorDeNegocio
+     */
+    public function atender(ConversacionIa $conversacion, Empresa $empresa, ?Sucursal $sucursal, string $texto, string $modo = 'app', array $persona = []): MensajeIa
+    {
         $agente = $conversacion->agente;
         $texto = trim($texto);
 
@@ -96,19 +122,21 @@ class AsistenteIaService
             throw new ErrorDeNegocio('Escribe una consulta de hasta '.self::MAX_CARACTERES.' caracteres.');
         }
         if (! $agente->activo || ! AgenteEmpresa::where('empresa_id', $empresa->id)->where('agente_id', $agente->id)->where('activo', true)->exists()) {
-            throw new ErrorDeNegocio('Este agente ya no está activo para tu empresa.');
+            throw new ErrorDeNegocio($modo === 'tienda' ? 'El asistente no está disponible por ahora.' : 'Este agente ya no está activo para tu empresa.');
         }
 
         $limite = $this->limiteDe($empresa, $agente);
         if ($this->consultasDelMes($empresa, $agente) >= $limite) {
-            throw new ErrorDeNegocio("Se alcanzó el tope de {$limite} consultas de este mes para \"{$agente->nombre}\". Vuelve a intentarlo el próximo mes o pide a la plataforma ampliarlo.");
+            throw new ErrorDeNegocio($modo === 'tienda'
+                ? 'El asistente alcanzó su límite de consultas de este mes. Escríbenos por WhatsApp y te atendemos.'
+                : "Se alcanzó el tope de {$limite} consultas de este mes para \"{$agente->nombre}\". Vuelve a intentarlo el próximo mes o pide a la plataforma ampliarlo.");
         }
 
         $historial = $conversacion->mensajes()->latest('creado_en')->limit(self::HISTORIAL)->get()->reverse()->values()
             ->map(fn (MensajeIa $m) => $m->rol === 'user' ? new UserMessage($m->contenido) : new AssistantMessage($m->contenido))
             ->all();
 
-        $resultado = $this->consultar($agente, $empresa, $usuario->sucursal, $texto, $historial);
+        $resultado = $this->consultar($agente, $empresa, $sucursal, $texto, $historial, $modo, $persona);
 
         return DB::transaction(function () use ($conversacion, $empresa, $texto, $resultado) {
             MensajeIa::create(['conversacion_id' => $conversacion->id, 'empresa_id' => $empresa->id, 'rol' => 'user', 'contenido' => $texto]);
@@ -127,11 +155,11 @@ class AsistenteIaService
      * Recorre la cadena de modelos del agente hasta que uno responda. Devuelve los datos listos para guardar.
      *
      * @param  list<UserMessage|AssistantMessage>  $historial
-     * @return array{contenido: string, proveedor_codigo: string, modelo: string, tokens_entrada: int, tokens_salida: int, costo_usd: ?float, duracion_ms: int, herramientas: array, intentos: array}
+     * @return array{contenido: string, productos: list<string>, proveedor_codigo: string, modelo: string, tokens_entrada: int, tokens_salida: int, costo_usd: ?float, duracion_ms: int, herramientas: array, intentos: array}
      *
      * @throws ErrorDeNegocio
      */
-    public function consultar(AgenteIa $agente, Empresa $empresa, ?Sucursal $sucursal, string $texto, array $historial = []): array
+    public function consultar(AgenteIa $agente, Empresa $empresa, ?Sucursal $sucursal, string $texto, array $historial = [], string $modo = 'app', array $persona = []): array
     {
         $eslabones = $agente->eslabones();
         if ($eslabones === []) {
@@ -152,7 +180,7 @@ class AsistenteIaService
 
             $inicio = hrtime(true);
             try {
-                $respuesta = (new AgenteDeRubro($agente, $empresa, $sucursal))
+                $respuesta = (new AgenteDeRubro($agente, $empresa, $sucursal, $modo, $persona))
                     ->withMessages($historial)
                     ->prompt($texto, provider: $this->proveedores->construir($proveedor), model: $eslabon['modelo'], timeout: self::TIMEOUT_POR_PROVEEDOR);
             } catch (Throwable $e) {
@@ -179,13 +207,14 @@ class AsistenteIaService
         $entrada = (int) $respuesta->usage->inputTokens;
         $salida = (int) $respuesta->usage->outputTokens;
 
-        $texto = trim($respuesta->text);
+        [$texto, $productos] = self::separarProductos($respuesta->text);
         if ($texto === '') {
             $texto = 'No pude preparar una respuesta. ¿Puedes reformular la consulta?';
         }
 
         return [
             'contenido' => $texto,
+            'productos' => $productos,
             'proveedor_codigo' => $proveedor->codigo,
             'modelo' => $modelo,
             'tokens_entrada' => $entrada,
@@ -195,5 +224,29 @@ class AsistenteIaService
             'herramientas' => $respuesta->toolCalls->map(fn ($t) => ['nombre' => $t->name, 'argumentos' => $t->arguments])->values()->all(),
             'intentos' => $intentos,
         ];
+    }
+
+    /**
+     * Saca la línea final "PRODUCTOS: cod1, cod2" del texto y devuelve [texto limpio, códigos].
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    public static function separarProductos(string $texto): array
+    {
+        $texto = trim($texto);
+        $marca = preg_quote(AgenteDeRubro::MARCA_PRODUCTOS, '/');
+        if (! preg_match('/(?:^|\n)[\s*_]*'.$marca.'[\s*_]*([^\n]*)$/iu', $texto, $m, PREG_OFFSET_CAPTURE)) {
+            return [$texto, []];
+        }
+
+        $codigos = collect(preg_split('/[\s,;]+/', trim(str_replace(['*', '_', '`'], '', $m[1][0]))))
+            ->map(fn ($c) => trim($c, ' .:-'))
+            ->filter()
+            ->unique()
+            ->take(self::MAX_PRODUCTOS)
+            ->values()
+            ->all();
+
+        return [trim(substr($texto, 0, $m[0][1])), $codigos];
     }
 }

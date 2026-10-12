@@ -332,3 +332,174 @@ if (panel && datos.whatsapp) {
     document.documentElement.classList.add('con-pedido')
     pintar()
 }
+
+// ---------------------------------------------------------------- asistente (chatbot de la tienda)
+const bot = document.getElementById('asistente')
+
+if (bot && datos.asistente) {
+    const CLAVE_BOT = 'asistente:v1'
+    const conf = datos.asistente
+    const panelBot = bot.querySelector('[data-bot-panel]')
+    const mensajes = bot.querySelector('[data-bot-mensajes]')
+    const formBot = bot.querySelector('[data-bot-form]')
+    const entrada = bot.querySelector('[data-bot-texto]')
+    const botonEnviar = bot.querySelector('[data-bot-enviar]')
+    let estado = leerBot()
+    let enviando = false
+
+    function leerBot() {
+        try {
+            const g = JSON.parse(localStorage.getItem(CLAVE_BOT) || '{}')
+            return {
+                visitante: typeof g.visitante === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(g.visitante) ? g.visitante : idVisitante(),
+                conversacion: typeof g.conversacion === 'string' ? g.conversacion : null,
+                mensajes: Array.isArray(g.mensajes) ? g.mensajes.filter((m) => m && (m.rol === 'user' || m.rol === 'assistant') && typeof m.contenido === 'string').slice(-40) : [],
+            }
+        } catch {
+            return { visitante: idVisitante(), conversacion: null, mensajes: [] }
+        }
+    }
+    function idVisitante() {
+        const bytes = new Uint8Array(16)
+        crypto.getRandomValues(bytes)
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    }
+    const guardarBot = () => {
+        try { localStorage.setItem(CLAVE_BOT, JSON.stringify(estado)) } catch { /* sin almacenamiento: la charla dura lo que dure la página */ }
+    }
+
+    // Markdown mínimo y seguro: negritas, cursivas, listas (el texto se escapa primero)
+    const enLinea = (t) => texto(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    function markdown(t) {
+        let salida = ''
+        let lista = null
+        const cerrar = () => { if (lista) { salida += `</${lista}>`; lista = null } }
+        for (const l of String(t).split(/\r?\n/)) {
+            const vineta = l.match(/^\s*[-*•]\s+(.*)$/)
+            const numerada = l.match(/^\s*\d+[.)]\s+(.*)$/)
+            if (vineta || numerada) {
+                const tipo = vineta ? 'ul' : 'ol'
+                if (lista !== tipo) { cerrar(); salida += `<${tipo} class="${tipo === 'ul' ? 'list-disc' : 'list-decimal'} space-y-0.5 pl-5">`; lista = tipo }
+                salida += `<li>${enLinea((vineta ?? numerada)[1])}</li>`
+            } else if (l.trim() === '') {
+                cerrar(); salida += '<div class="h-1.5"></div>'
+            } else {
+                cerrar(); salida += `<p>${enLinea(l.replace(/^\s*#{1,4}\s+/, ''))}</p>`
+            }
+        }
+        cerrar()
+        return salida
+    }
+
+    const tarjeta = (p) => `
+        <article class="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
+            <div class="flex gap-3">
+                <a href="${texto(p.url)}" class="grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-50 text-slate-300 ring-1 ring-slate-100">
+                    ${p.imagen ? `<img src="${texto(p.imagen)}" alt="" loading="lazy" class="size-full object-contain mix-blend-multiply">` : icono(TRAZOS.paquete, 'size-6')}
+                </a>
+                <div class="min-w-0 flex-1">
+                    ${p.categoria ? `<p class="truncate text-[10px] font-semibold tracking-wider text-slate-400 uppercase">${texto(p.categoria)}</p>` : ''}
+                    <p class="line-clamp-2 text-sm leading-snug font-semibold text-slate-900">${texto(p.nombre)}</p>
+                    ${p.precio !== null && p.precio !== undefined ? `<p class="mt-0.5 text-sm font-bold text-(--marca-texto)">${soles(p.precio)}${p.presentacion ? ` <span class="text-xs font-normal text-slate-500">· ${texto(p.presentacion)}</span>` : ''}</p>` : ''}
+                    ${p.disponible === false ? '<p class="text-xs font-medium text-red-600">Agotado</p>' : ''}
+                </div>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+                ${p.pedido ? `<a href="${texto(p.pedido)}" target="_blank" rel="noopener" class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] text-xs font-semibold text-white transition-colors hover:bg-[#1eb957]">${icono('<path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9z"/><path d="M9 10a.5.5 0 0 0 1 0V9a.5.5 0 0 0-1 0zm0 0a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1"/>', 'size-4')} Comprar</a>` : ''}
+                <a href="${texto(p.url)}" class="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-(--bot) text-xs font-semibold text-(--sobre-bot) transition-opacity hover:opacity-90 ${p.pedido ? '' : 'col-span-2'}">${icono('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>', 'size-4')} Detalles</a>
+            </div>
+        </article>`
+
+    const burbuja = (m) => {
+        if (m.rol === 'user') return `<div class="flex justify-end"><div class="max-w-[85%] rounded-2xl rounded-br-md bg-(--bot) px-3.5 py-2 text-sm whitespace-pre-wrap text-(--sobre-bot)">${texto(m.contenido)}</div></div>`
+        const productos = Array.isArray(m.productos) && m.productos.length ? `<div class="mt-2 space-y-2">${m.productos.map(tarjeta).join('')}</div>` : ''
+        return `<div class="flex justify-start"><div class="max-w-[92%]"><div class="space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800">${markdown(m.contenido)}</div>${productos}</div></div>`
+    }
+
+    const saludo = () => `<div class="flex justify-start"><div class="max-w-[92%] space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800"><p>${texto(conf.saludo)}</p></div></div>`
+    const sugerencias = () => conf.sugerencias?.length
+        ? `<div class="flex flex-wrap gap-1.5 pl-1">${conf.sugerencias.map((s) => `<button type="button" data-bot-sugerencia class="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-left text-xs font-medium text-slate-700 transition-colors hover:border-(--bot) hover:text-(--marca-texto)">${texto(s)}</button>`).join('')}</div>`
+        : ''
+    const pensando = () => `<div data-bot-pensando class="flex justify-start"><div class="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3"><span class="size-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]"></span><span class="size-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]"></span><span class="size-2 animate-bounce rounded-full bg-slate-400"></span><span class="ml-2 text-xs text-slate-500">Buscando en el catálogo…</span></div></div>`
+
+    function pintar(extra = '') {
+        mensajes.innerHTML = saludo() + (estado.mensajes.length ? '' : sugerencias()) + estado.mensajes.map(burbuja).join('') + extra
+        mensajes.scrollTop = mensajes.scrollHeight
+    }
+    const aviso = (t) => `<p class="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">${texto(t)}</p>`
+
+    function abrirBot() {
+        panelBot.classList.remove('hidden')
+        pintar()
+        if (window.matchMedia('(pointer: fine)').matches) entrada.focus()
+    }
+    const cerrarBot = () => panelBot.classList.add('hidden')
+
+    async function enviarBot(contenido) {
+        contenido = String(contenido ?? '').trim()
+        if (!contenido || enviando) return
+        enviando = true
+        botonEnviar.disabled = true
+        entrada.value = ''
+        entrada.style.height = ''
+        estado.mensajes.push({ rol: 'user', contenido })
+        guardarBot()
+        pintar(pensando())
+        try {
+            const r = await fetch('/asistente', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ texto: contenido, visitante: estado.visitante, conversacion_id: estado.conversacion }),
+            })
+            const respuesta = await r.json().catch(() => ({}))
+            if (!r.ok) {
+                estado.mensajes.pop()
+                entrada.value = contenido
+                pintar(aviso(respuesta.mensaje ?? respuesta.message ?? 'No se pudo enviar la consulta. Inténtalo de nuevo.'))
+                return
+            }
+            estado.conversacion = respuesta.conversacion_id ?? estado.conversacion
+            estado.mensajes.push({ rol: 'assistant', contenido: respuesta.mensaje?.contenido ?? '', productos: respuesta.mensaje?.productos ?? [] })
+            guardarBot()
+            pintar()
+        } catch {
+            estado.mensajes.pop()
+            entrada.value = contenido
+            pintar(aviso('Sin conexión. Revisa tu internet e inténtalo de nuevo.'))
+        } finally {
+            enviando = false
+            botonEnviar.disabled = false
+        }
+    }
+
+    bot.querySelector('[data-bot-abrir]')?.addEventListener('click', abrirBot)
+    bot.querySelector('[data-bot-cerrar]')?.addEventListener('click', cerrarBot)
+    bot.querySelector('[data-bot-nueva]')?.addEventListener('click', () => {
+        estado = { visitante: estado.visitante, conversacion: null, mensajes: [] }
+        guardarBot()
+        pintar()
+    })
+    mensajes.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-bot-sugerencia]')
+        if (chip) enviarBot(chip.textContent)
+    })
+    formBot.addEventListener('submit', (e) => {
+        e.preventDefault()
+        enviarBot(entrada.value)
+    })
+    entrada.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            enviarBot(entrada.value)
+        }
+    })
+    entrada.addEventListener('input', () => {
+        entrada.style.height = 'auto'
+        entrada.style.height = Math.min(entrada.scrollHeight, 128) + 'px'
+    })
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panelBot.classList.contains('hidden')) cerrarBot()
+    })
+
+    document.documentElement.classList.add('con-bot')
+}

@@ -51,8 +51,9 @@
     {{-- color de marca elegido por la tienda --}}
     <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
         /* lo que solo sirve con el pedido activo (necesita JavaScript) no aparece hasta que carga */
-        html:not(.con-pedido) [data-necesita-js] { display: none !important; }</style>
-    <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
+        html:not(.con-pedido) [data-necesita-js] { display: none !important; }
+        html:not(.con-bot) [data-necesita-bot] { display: none !important; }</style>
+    <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp'], 'asistente' => $asistente ? ['nombre' => $asistente['nombre'], 'saludo' => $asistente['saludo'], 'sugerencias' => $asistente['sugerencias']] : null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     {{-- el sitio y su buscador, para que Google entienda la tienda como un todo --}}
     <script type="application/ld+json">{!! $sitioEsquema !!}</script>
     @stack('cabecera')
@@ -388,6 +389,10 @@
             {{-- en pantalla grande, al pasar el cursor se abre con el texto --}}
             <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-48 group-hover:pr-5 group-focus-visible:max-w-48 group-focus-visible:pr-5 lg:block">Escríbenos por WhatsApp</span>
         </a>
+    @endif
+    {{-- chatbot de la tienda: solo si el dueño lo encendió --}}
+    @if ($asistente)
+        @include('tienda.asistente')
     @endif
     @yield('barra_movil')
 

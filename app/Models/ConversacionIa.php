@@ -18,7 +18,7 @@ class ConversacionIa extends Model
 
     public const UPDATED_AT = 'actualizado_en';
 
-    protected $fillable = ['empresa_id', 'usuario_id', 'agente_id', 'titulo'];
+    protected $fillable = ['empresa_id', 'usuario_id', 'agente_id', 'titulo', 'canal', 'visitante'];
 
     protected function casts(): array
     {

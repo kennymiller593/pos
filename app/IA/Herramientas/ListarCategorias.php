@@ -11,7 +11,7 @@ use Laravel\Ai\Tools\Request;
 /** Las categorías del catálogo con cuántos productos tiene cada una: le da al agente el mapa del negocio. */
 class ListarCategorias implements Tool
 {
-    public function __construct(private readonly Empresa $empresa) {}
+    public function __construct(private readonly Empresa $empresa, private readonly bool $publico = false) {}
 
     public function name(): string
     {
@@ -32,7 +32,7 @@ class ListarCategorias implements Tool
     {
         $categorias = Categoria::query()
             ->where('empresa_id', $this->empresa->id)
-            ->withCount(['productos' => fn ($q) => $q->where('activo', true)])
+            ->withCount(['productos' => fn ($q) => $q->where('activo', true)->when($this->publico, fn ($p) => $p->where('en_tienda', true))])
             ->orderBy('nombre')
             ->get()
             ->filter(fn ($c) => $c->productos_count > 0);

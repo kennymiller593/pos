@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\AgenteIa;
 use App\Models\ConversacionIa;
 use App\Models\MensajeIa;
+use App\Models\Producto;
 use App\Services\IA\AsistenteIaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -126,7 +127,36 @@ class AsistenteController extends Controller
             'modelo' => $m->modelo,
             'duracion_ms' => $m->duracion_ms,
             'herramientas' => collect($m->herramientas ?? [])->pluck('nombre')->unique()->values(),
+            'productos' => $this->tarjetas($m),
             'creado_en' => $m->creado_en?->toDateTimeString(),
         ];
+    }
+
+    /** Los productos que recomendó la respuesta, para mostrarlos como tarjetas. */
+    private function tarjetas(MensajeIa $m): array
+    {
+        $codigos = $m->productos ?? [];
+        if ($codigos === []) {
+            return [];
+        }
+
+        return Producto::query()
+            ->where('empresa_id', $m->empresa_id)->where('activo', true)->whereIn('codigo_interno', $codigos)
+            ->with(['categoria:id,nombre', 'presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')])
+            ->withSum('stock as stock_total', 'cantidad')
+            ->get()
+            ->sortBy(fn ($p) => array_search($p->codigo_interno, $codigos, true))
+            ->map(fn (Producto $p) => [
+                'codigo' => $p->codigo_interno,
+                'nombre' => $p->nombre,
+                'categoria' => $p->categoria?->nombre,
+                'imagen' => $p->imagen_url,
+                'precio' => $p->presentaciones->first() ? (float) $p->presentaciones->first()->precio_venta : null,
+                'presentacion' => $p->presentaciones->count() > 1 ? $p->presentaciones->first()->nombre : null,
+                'disponible' => ! $p->controla_stock || (float) ($p->stock_total ?? 0) > 0,
+                'url' => '/productos?buscar='.rawurlencode($p->codigo_interno),
+            ])
+            ->values()
+            ->all();
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Empresa;
 use App\Services\CatalogoTiendaService;
+use App\Services\IA\AsistenteIaService;
 use App\Support\Tienda;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -324,6 +325,31 @@ class TiendaController extends Controller
             // páginas de texto que la tienda tiene llenas (para el pie y la portada)
             'paginas' => array_values(array_map(fn ($p) => ['url' => $p['url'], 'titulo' => $p['titulo']], $this->paginas($config))),
             'nosotros' => $config['nosotros'],
+            // chatbot: null si el dueño no lo encendió o el agente ya no está activo
+            'asistente' => $this->asistente($empresa, $config),
+        ];
+    }
+
+    /** Cómo se presenta el chatbot en la tienda (nombre, saludo, color, avatar, preguntas sugeridas). */
+    private function asistente(Empresa $empresa, array $config): ?array
+    {
+        $agente = app(AsistenteIaService::class)->agenteDeTienda($empresa, $config);
+        if (! $agente) {
+            return null;
+        }
+
+        $negocio = $empresa->nombre_comercial ?: $empresa->razon_social;
+        $nombre = $config['chatbot_nombre'] ?: 'Asistente virtual';
+        $color = $config['chatbot_color'] && Tienda::esColor($config['chatbot_color']) ? strtoupper($config['chatbot_color']) : null;
+
+        return [
+            'nombre' => $nombre,
+            'inicial' => Str::upper(Str::substr($nombre, 0, 1)),
+            'saludo' => $config['chatbot_saludo'] ?: "¡Hola! Soy {$nombre}, asistente virtual de {$negocio}. Cuéntame qué buscas y te ayudo a encontrarlo.",
+            'color' => $color,
+            'sobre' => $color ? Tienda::SOBRE[Tienda::textoQueSeLee($color)] : null,
+            'avatar' => $config['chatbot_avatar'],
+            'sugerencias' => array_slice($agente->sugerencias ?? [], 0, 4),
         ];
     }
 }

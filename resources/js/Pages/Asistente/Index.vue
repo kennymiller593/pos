@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
-import { Bot, ChevronLeft, MessageSquarePlus, SendHorizontal, Sparkles, Trash2, UserRound } from '@lucide/vue'
+import { Bot, ChevronLeft, MessageSquarePlus, Package, SendHorizontal, Sparkles, Trash2, UserRound } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { markdownSencillo as html } from '@/utils/markdown'
@@ -192,6 +192,20 @@ watch(texto, () => {
                             <div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed" :class="m.rol === 'user' ? 'bg-emerald-600 text-white' : 'bg-stone-100 dark:bg-neutral-800'">
                                 <div v-if="m.rol === 'user'" class="whitespace-pre-wrap">{{ m.contenido }}</div>
                                 <div v-else class="space-y-1" v-html="html(m.contenido)" />
+                                <div v-if="m.rol !== 'user' && m.productos?.length" class="mt-2 grid gap-2 sm:grid-cols-2" data-tarjetas>
+                                    <a v-for="p in m.productos" :key="p.codigo" :href="p.url" class="flex gap-2.5 rounded-xl border border-stone-200 bg-white p-2 transition-colors hover:border-emerald-500 dark:border-neutral-700 dark:bg-neutral-900">
+                                        <span class="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-stone-50 text-neutral-300 dark:bg-neutral-800">
+                                            <img v-if="p.imagen" :src="p.imagen" alt="" class="size-full object-contain" />
+                                            <Package v-else class="size-5" />
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span v-if="p.categoria" class="block truncate text-[10px] font-semibold tracking-wider text-neutral-400 uppercase">{{ p.categoria }}</span>
+                                            <span class="line-clamp-2 text-xs leading-snug font-semibold">{{ p.nombre }}</span>
+                                            <span v-if="p.precio !== null" class="block text-xs font-bold text-emerald-700 dark:text-emerald-400">S/ {{ Number(p.precio).toFixed(2) }}<span v-if="p.presentacion" class="font-normal text-neutral-400"> · {{ p.presentacion }}</span></span>
+                                            <span v-if="!p.disponible" class="block text-[11px] font-medium text-red-600">Sin stock</span>
+                                        </span>
+                                    </a>
+                                </div>
                                 <p v-if="m.rol !== 'user' && (m.modelo || m.duracion_ms)" class="mt-1.5 text-[11px] text-neutral-400 dark:text-neutral-500">
                                     {{ m.modelo }}<template v-if="m.duracion_ms"> · {{ (m.duracion_ms / 1000).toFixed(1) }} s</template><template v-if="m.herramientas?.length"> · consultó el catálogo</template>
                                 </p>

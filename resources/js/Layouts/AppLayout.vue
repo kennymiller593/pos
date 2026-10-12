@@ -31,6 +31,7 @@ import {
     Moon,
     Navigation,
     Package,
+    QrCode,
     PanelLeftClose,
     PanelLeftOpen,
     ReceiptText,
@@ -80,8 +81,6 @@ const menuBase = [
         seccion: 'General',
         items: [
             { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
-            // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
-            { label: 'Asistente', href: '/asistente', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
         ],
     },
     {
@@ -132,7 +131,15 @@ const menuBase = [
     {
         seccion: 'Configuración',
         items: [
-            { label: 'Empresa', href: '/empresa', icon: Settings, permiso: 'empresa.gestionar' },
+            // desplegable: los datos de la empresa y lo que cuelga de ella
+            {
+                label: 'Empresa', icon: Settings, hijos: [
+                    { label: 'Datos de la empresa', href: '/empresa', icon: Settings, exact: true, permiso: 'empresa.gestionar' },
+                    { label: 'Cobros con QR', href: '/empresa/cobros-qr', icon: QrCode, permiso: 'empresa.gestionar' },
+                    // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
+                    { label: 'Asistente de IA', href: '/asistente', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
+                ],
+            },
             // adicional de pago: solo aparece si la plataforma lo activó para la empresa
             { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
             { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
@@ -160,12 +167,20 @@ const menuPlataforma = [
 
 // cada item se muestra solo si el usuario tiene su permiso (sin permiso = visible para todos)
 const { puede } = usePermisos()
+const visible = (item) => (!item.permiso || puede(item.permiso)) && (!item.si || item.si())
 const menu = computed(() => (esPlataforma.value ? menuPlataforma : menuBase)
     .map((grupo) => ({
         ...grupo,
-        items: grupo.items.filter((item) => (!item.permiso || puede(item.permiso)) && (!item.si || item.si())),
+        items: grupo.items
+            .map((item) => (item.hijos ? { ...item, hijos: item.hijos.filter(visible) } : item))
+            .filter((item) => (item.hijos ? item.hijos.length > 0 : visible(item))),
     }))
     .filter((grupo) => grupo.items.length))
+
+// desplegables: abiertos a mano, o solos cuando una de sus páginas está activa
+const desplegados = ref({})
+const desplegado = (item) => desplegados.value[item.label] ?? item.hijos.some(esActivo)
+const alternarDesplegable = (item) => (desplegados.value[item.label] = !desplegado(item))
 
 // modo oscuro: agrega .dark en <html>, persiste en localStorage y respeta la preferencia del sistema
 const esOscuro = useDark()
@@ -461,8 +476,46 @@ watch(
                         {{ grupo.seccion }}
                     </p>
                     <ul class="space-y-0.5">
-                        <li v-for="item in grupo.items" :key="item.href">
-                            <Link :href="item.href" :data-recorrido="item.href"
+                        <li v-for="item in grupo.items" :key="item.href ?? item.label">
+                            <!-- desplegable: con el menú angosto, sus páginas van como íconos sueltos -->
+                            <template v-if="item.hijos">
+                                <template v-if="colapsado && !abiertoMovil">
+                                    <Link v-for="hijo in item.hijos" :key="hijo.href" :href="hijo.href" :data-recorrido="hijo.href"
+                                        class="group mb-0.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
+                                        :class="esActivo(hijo)
+                                            ? 'bg-[#EEF2FF] font-semibold text-[#4338CA] dark:bg-emerald-500 dark:text-white'
+                                            : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'"
+                                        :title="hijo.label">
+                                        <component :is="hijo.icon" class="size-4.5 shrink-0" :class="esActivo(hijo) ? 'text-[#4338CA] dark:text-white' : ''" />
+                                    </Link>
+                                </template>
+                                <template v-else>
+                                    <button type="button" :data-desplegable="item.label" :aria-expanded="desplegado(item)"
+                                        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
+                                        :class="item.hijos.some(esActivo)
+                                            ? 'text-[#4338CA] dark:text-emerald-400'
+                                            : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'"
+                                        @click="alternarDesplegable(item)">
+                                        <component :is="item.icon" class="size-4.5 shrink-0" />
+                                        <span class="flex-1 truncate text-left">{{ item.label }}</span>
+                                        <ChevronDown class="size-4 shrink-0 transition-transform" :class="desplegado(item) ? 'rotate-180' : ''" />
+                                    </button>
+                                    <ul v-show="desplegado(item)" class="mt-0.5 ml-4 space-y-0.5 border-l border-[#E2E8F0] pl-2 dark:border-neutral-800">
+                                        <li v-for="hijo in item.hijos" :key="hijo.href">
+                                            <Link :href="hijo.href" :data-recorrido="hijo.href"
+                                                class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
+                                                :class="esActivo(hijo)
+                                                    ? 'bg-[#EEF2FF] font-semibold text-[#4338CA] dark:bg-emerald-500 dark:text-white'
+                                                    : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'"
+                                                @click="abiertoMovil = false">
+                                                <component :is="hijo.icon" class="size-4 shrink-0" :class="esActivo(hijo) ? 'text-[#4338CA] dark:text-white' : ''" />
+                                                <span class="truncate">{{ hijo.label }}</span>
+                                            </Link>
+                                        </li>
+                                    </ul>
+                                </template>
+                            </template>
+                            <Link v-else :href="item.href" :data-recorrido="item.href"
                                 class="group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
                                 :class="esActivo(item)
                                         ? 'bg-[#EEF2FF] font-semibold text-[#4338CA] dark:bg-emerald-500 dark:text-white'

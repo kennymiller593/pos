@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\ProveedorIaController as AdminProveedorIaControll
 use App\Http\Controllers\Admin\RubroController as AdminRubroController;
 use App\Http\Controllers\Admin\UnidadMedidaController as AdminUnidadMedidaController;
 use App\Http\Controllers\AsistenteController;
+use App\Http\Controllers\AsistenteTiendaController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\RecuperacionPasswordController;
@@ -71,6 +72,8 @@ if (Tienda::dominio()) {
             }
             Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
             Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
+            // chatbot de la tienda (sin sesión; el límite por IP evita que un visitante consuma el tope de la empresa)
+            Route::post('/asistente', [AsistenteTiendaController::class, 'enviar'])->middleware('throttle:12,1')->name('asistente');
     };
     $middlewareDeTienda = [CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class];
 
