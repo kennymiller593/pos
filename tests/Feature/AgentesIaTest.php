@@ -212,7 +212,7 @@ class AgentesIaTest extends TestCase
         $this->assertStringContainsString('No hay productos', $buscar->handle(new ToolRequest(['consulta' => 'fungicida roya'])));
 
         // otra empresa no ve este catálogo
-        $otra = Empresa::where('id', '!=', $this->empresa->id)->firstOrFail();
+        $otra = Empresa::create(['ruc' => '20'.random_int(10000000, 99999999).'1', 'razon_social' => 'Otra SAC', 'regimen_tributario' => 'RUS', 'rubro_codigo' => $this->empresa->rubro_codigo, 'activo' => true]);
         $this->assertStringContainsString('No hay productos', (new BuscarProductos($otra))->handle(new ToolRequest(['consulta' => 'clorpirifos'])));
 
         $this->assertStringContainsString('Dosis según etiqueta', (new DetalleProducto($this->empresa, $this->sucursal))->handle(new ToolRequest(['codigo' => $p->codigo_interno])));
