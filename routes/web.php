@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Http\Controllers\CajaController;
+use App\Http\Controllers\ChatsTiendaController;
 use App\Http\Controllers\CobroQrController;
 use App\Http\Controllers\CatalogoController;
 use App\Http\Controllers\CategoriaController;
@@ -74,6 +75,7 @@ if (Tienda::dominio()) {
             Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
             // chatbot de la tienda (sin sesión; el límite por IP evita que un visitante consuma el tope de la empresa)
             Route::post('/asistente', [AsistenteTiendaController::class, 'enviar'])->middleware('throttle:12,1')->name('asistente');
+            Route::get('/asistente/mensajes', [AsistenteTiendaController::class, 'mensajes'])->middleware('throttle:60,1')->name('asistente.mensajes');
     };
     $middlewareDeTienda = [CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class];
 
@@ -274,6 +276,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/asistente', [AsistenteController::class, 'index'])->name('asistente.index');
     Route::post('/asistente/mensajes', [AsistenteController::class, 'enviar'])->middleware('throttle:30,1')->name('asistente.enviar');
     Route::delete('/asistente/conversaciones/{conversacion}', [AsistenteController::class, 'eliminar'])->name('asistente.eliminar');
+    // chats que dejan los clientes en la tienda: leerlos, tomar la conversación y responder
+    Route::get('/asistente/tienda', [ChatsTiendaController::class, 'index'])->name('asistente.tienda');
+    Route::get('/asistente/tienda/{conversacion}/mensajes', [ChatsTiendaController::class, 'mensajes'])->name('asistente.tienda.mensajes');
+    Route::post('/asistente/tienda/{conversacion}/tomar', [ChatsTiendaController::class, 'tomar'])->name('asistente.tienda.tomar');
+    Route::post('/asistente/tienda/{conversacion}/devolver', [ChatsTiendaController::class, 'devolver'])->name('asistente.tienda.devolver');
+    Route::post('/asistente/tienda/{conversacion}/responder', [ChatsTiendaController::class, 'responder'])->middleware('throttle:60,1')->name('asistente.tienda.responder');
         Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
         Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
         Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');

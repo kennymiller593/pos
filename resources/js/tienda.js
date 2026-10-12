@@ -346,6 +346,7 @@ if (bot && datos.asistente) {
     const botonEnviar = bot.querySelector('[data-bot-enviar]')
     let estado = leerBot()
     let enviando = false
+    let sondeo = null // cuando atiende una persona, se consulta cada pocos segundos si respondió
 
     function leerBot() {
         try {
@@ -353,10 +354,11 @@ if (bot && datos.asistente) {
             return {
                 visitante: typeof g.visitante === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(g.visitante) ? g.visitante : idVisitante(),
                 conversacion: typeof g.conversacion === 'string' ? g.conversacion : null,
-                mensajes: Array.isArray(g.mensajes) ? g.mensajes.filter((m) => m && (m.rol === 'user' || m.rol === 'assistant') && typeof m.contenido === 'string').slice(-40) : [],
+                mensajes: Array.isArray(g.mensajes) ? g.mensajes.filter((m) => m && ['user', 'assistant', 'humano'].includes(m.rol) && typeof m.contenido === 'string').slice(-40) : [],
+                modo: g.modo === 'humano' ? 'humano' : 'bot',
             }
         } catch {
-            return { visitante: idVisitante(), conversacion: null, mensajes: [] }
+            return { visitante: idVisitante(), conversacion: null, mensajes: [], modo: 'bot' }
         }
     }
     function idVisitante() {
@@ -412,6 +414,7 @@ if (bot && datos.asistente) {
 
     const burbuja = (m) => {
         if (m.rol === 'user') return `<div class="flex justify-end"><div class="max-w-[85%] rounded-2xl rounded-br-md bg-(--bot) px-3.5 py-2 text-sm whitespace-pre-wrap text-(--sobre-bot)">${texto(m.contenido)}</div></div>`
+        if (m.rol === 'humano') return `<div class="flex justify-start"><div class="max-w-[92%]"><p class="mb-0.5 pl-1 text-[11px] font-semibold text-slate-500">${texto(datos.nombre)} · una persona te responde</p><div class="rounded-2xl rounded-bl-md border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap text-slate-800">${texto(m.contenido)}</div></div></div>`
         const productos = Array.isArray(m.productos) && m.productos.length ? `<div class="mt-2 space-y-2">${m.productos.map(tarjeta).join('')}</div>` : ''
         return `<div class="flex justify-start"><div class="max-w-[92%]"><div class="space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800">${markdown(m.contenido)}</div>${productos}</div></div>`
     }
@@ -420,20 +423,53 @@ if (bot && datos.asistente) {
     const sugerencias = () => conf.sugerencias?.length
         ? `<div class="flex flex-wrap gap-1.5 pl-1">${conf.sugerencias.map((s) => `<button type="button" data-bot-sugerencia class="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-left text-xs font-medium text-slate-700 transition-colors hover:border-(--bot) hover:text-(--marca-texto)">${texto(s)}</button>`).join('')}</div>`
         : ''
+    const esperando = () => `<div class="flex justify-start"><div class="rounded-2xl rounded-bl-md border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs text-amber-800">Una persona de ${texto(datos.nombre)} te está atendiendo. Te responde por aquí en breve.</div></div>`
     const pensando = () => `<div data-bot-pensando class="flex justify-start"><div class="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3"><span class="size-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]"></span><span class="size-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]"></span><span class="size-2 animate-bounce rounded-full bg-slate-400"></span><span class="ml-2 text-xs text-slate-500">Buscando en el catálogo…</span></div></div>`
 
     function pintar(extra = '') {
-        mensajes.innerHTML = saludo() + (estado.mensajes.length ? '' : sugerencias()) + estado.mensajes.map(burbuja).join('') + extra
+        const ultimo = estado.mensajes.at(-1)
+        const enEspera = estado.modo === 'humano' && ultimo?.rol === 'user' && !extra ? esperando() : ''
+        mensajes.innerHTML = saludo() + (estado.mensajes.length ? '' : sugerencias()) + estado.mensajes.map(burbuja).join('') + enEspera + extra
         mensajes.scrollTop = mensajes.scrollHeight
+    }
+
+    // mientras atiende una persona, se revisa si escribió algo nuevo
+    async function revisar() {
+        if (!estado.conversacion || document.hidden) return
+        const desde = [...estado.mensajes].reverse().find((m) => m.id)?.id ?? ''
+        try {
+            const r = await fetch(`/asistente/mensajes?conversacion_id=${encodeURIComponent(estado.conversacion)}&visitante=${encodeURIComponent(estado.visitante)}&desde=${encodeURIComponent(desde)}`, { headers: { Accept: 'application/json' } })
+            if (!r.ok) return
+            const respuesta = await r.json()
+            const nuevos = (respuesta.mensajes ?? []).filter((m) => !estado.mensajes.some((x) => x.id && x.id === m.id))
+            const cambioModo = respuesta.modo !== estado.modo
+            estado.modo = respuesta.modo === 'humano' ? 'humano' : 'bot'
+            if (nuevos.length) estado.mensajes.push(...nuevos.map((m) => ({ id: m.id, rol: m.rol, contenido: m.contenido, productos: m.productos ?? [], creado_en: m.creado_en })))
+            if (nuevos.length || cambioModo) { guardarBot(); pintar() }
+            vigilar()
+        } catch { /* se reintenta en el siguiente ciclo */ }
+    }
+    // con el panel abierto se revisa si hay novedades: seguido cuando atiende una persona, de vez en cuando si no
+    // (así el cliente se entera cuando el negocio toma la conversación aunque no haya vuelto a escribir)
+    let ritmo = 0
+    function vigilar() {
+        const hace = !!estado.conversacion && !panelBot.classList.contains('hidden')
+        const nuevoRitmo = !hace ? 0 : estado.modo === 'humano' ? 4000 : 10000
+        if (nuevoRitmo === ritmo) return
+        if (sondeo) { clearInterval(sondeo); sondeo = null }
+        ritmo = nuevoRitmo
+        if (ritmo) sondeo = setInterval(revisar, ritmo)
     }
     const aviso = (t) => `<p class="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">${texto(t)}</p>`
 
     function abrirBot() {
         panelBot.classList.remove('hidden')
         pintar()
+        if (estado.conversacion) revisar()
+        vigilar()
         if (window.matchMedia('(pointer: fine)').matches) entrada.focus()
     }
-    const cerrarBot = () => panelBot.classList.add('hidden')
+    const cerrarBot = () => { panelBot.classList.add('hidden'); vigilar() }
 
     async function enviarBot(contenido) {
         contenido = String(contenido ?? '').trim()
@@ -459,9 +495,11 @@ if (bot && datos.asistente) {
                 return
             }
             estado.conversacion = respuesta.conversacion_id ?? estado.conversacion
-            estado.mensajes.push({ rol: 'assistant', contenido: respuesta.mensaje?.contenido ?? '', productos: respuesta.mensaje?.productos ?? [] })
+            estado.modo = respuesta.modo === 'humano' ? 'humano' : 'bot'
+            if (respuesta.mensaje) estado.mensajes.push({ id: respuesta.mensaje.id, rol: 'assistant', contenido: respuesta.mensaje.contenido ?? '', productos: respuesta.mensaje.productos ?? [], creado_en: respuesta.mensaje.creado_en })
             guardarBot()
             pintar()
+            vigilar()
         } catch {
             estado.mensajes.pop()
             entrada.value = contenido
@@ -475,9 +513,10 @@ if (bot && datos.asistente) {
     bot.querySelector('[data-bot-abrir]')?.addEventListener('click', abrirBot)
     bot.querySelector('[data-bot-cerrar]')?.addEventListener('click', cerrarBot)
     bot.querySelector('[data-bot-nueva]')?.addEventListener('click', () => {
-        estado = { visitante: estado.visitante, conversacion: null, mensajes: [] }
+        estado = { visitante: estado.visitante, conversacion: null, mensajes: [], modo: 'bot' }
         guardarBot()
         pintar()
+        vigilar()
     })
     mensajes.addEventListener('click', (e) => {
         const chip = e.target.closest('[data-bot-sugerencia]')

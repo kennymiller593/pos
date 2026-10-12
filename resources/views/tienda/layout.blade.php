@@ -379,8 +379,9 @@
         </div>
     </footer>
 
-    {{-- botón flotante de WhatsApp, siempre a la mano (en celular, la página de producto ya trae su propia barra para pedir) --}}
-    @if ($whatsapp)
+    {{-- botón flotante de WhatsApp, siempre a la mano (en celular, la página de producto ya trae su propia barra para pedir).
+         Con el chatbot activo lo reemplaza el asistente: WhatsApp sigue en la cabecera y en el botón Comprar de cada producto --}}
+    @if ($whatsapp && ! $asistente)
         <a href="{{ $whatsapp }}" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp" title="Escríbenos por WhatsApp" data-whatsapp-flotante
             class="group fixed right-4 bottom-4 z-40 h-14 items-center rounded-full bg-[#25D366] text-white shadow-lg ring-4 shadow-black/25 ring-white transition-colors hover:bg-[#1eb957] sm:right-6 sm:bottom-6 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
             <span class="grid size-14 shrink-0 place-items-center">

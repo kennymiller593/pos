@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { router } from '@inertiajs/vue3'
-import { Bot, ChevronLeft, MessageSquarePlus, Package, SendHorizontal, Sparkles, Trash2, UserRound } from '@lucide/vue'
+import { Link, router } from '@inertiajs/vue3'
+import { Bot, ChevronLeft, MessageCircle, MessageSquarePlus, Package, SendHorizontal, Sparkles, Trash2, UserRound } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { markdownSencillo as html } from '@/utils/markdown'
@@ -172,6 +172,10 @@ watch(texto, () => {
                         <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">{{ agente?.descripcion || 'Responde con el catálogo de tu negocio' }}</p>
                     </div>
                     <p v-if="agente" class="shrink-0 text-xs text-neutral-400" :title="'Consultas usadas este mes'">{{ consultasMes[agente.id] }} / {{ agente.limite_mensual }}</p>
+                    <Link v-if="$page.props.auth?.user?.empresa?.tienda_habilitada" href="/asistente/tienda" class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" title="Lo que preguntan tus clientes en la tienda">
+                        <MessageCircle class="size-4 text-emerald-600" />
+                        <span class="max-sm:hidden">Chats de la tienda</span>
+                    </Link>
                 </header>
 
                 <div ref="fondo" class="min-h-0 flex-1 overflow-y-auto px-4 py-4">

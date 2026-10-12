@@ -19,7 +19,7 @@ class MensajeIa extends Model
 
     protected $fillable = [
         'conversacion_id', 'empresa_id', 'rol', 'contenido', 'proveedor_codigo', 'modelo',
-        'tokens_entrada', 'tokens_salida', 'costo_usd', 'duracion_ms', 'herramientas', 'intentos', 'productos',
+        'tokens_entrada', 'tokens_salida', 'costo_usd', 'duracion_ms', 'herramientas', 'intentos', 'productos', 'usuario_id',
     ];
 
     protected function casts(): array

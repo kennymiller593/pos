@@ -133,7 +133,7 @@ class AsistenteIaService
         }
 
         $historial = $conversacion->mensajes()->latest('creado_en')->limit(self::HISTORIAL)->get()->reverse()->values()
-            ->map(fn (MensajeIa $m) => $m->rol === 'user' ? new UserMessage($m->contenido) : new AssistantMessage($m->contenido))
+            ->map(fn (MensajeIa $m) => $m->rol === 'user' ? new UserMessage($m->contenido) : new AssistantMessage($m->rol === 'humano' ? '[Respondió una persona del negocio] '.$m->contenido : $m->contenido))
             ->all();
 
         $resultado = $this->consultar($agente, $empresa, $sucursal, $texto, $historial, $modo, $persona);

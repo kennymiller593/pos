@@ -6,7 +6,7 @@
 <div id="asistente" data-asistente style="--bot: {{ $colorBot }}; --sobre-bot: {{ $sobreBot }};">
     {{-- en celular va encima del botón de WhatsApp; en PC, encima de WhatsApp y del pedido --}}
     <button type="button" data-bot-abrir data-necesita-bot aria-label="Hablar con {{ $asistente['nombre'] }}" title="Hablar con {{ $asistente['nombre'] }}"
-        class="group fixed right-4 bottom-[6rem] z-40 flex h-14 cursor-pointer items-center rounded-full bg-(--bot) text-(--sobre-bot) shadow-lg ring-4 shadow-black/25 ring-white transition-transform hover:scale-105 sm:right-6 sm:bottom-[11.5rem]">
+        class="group fixed right-4 bottom-4 z-40 h-14 cursor-pointer items-center rounded-full bg-(--bot) text-(--sobre-bot) shadow-lg ring-4 shadow-black/25 ring-white transition-transform hover:scale-105 sm:right-6 sm:bottom-6 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
         <span class="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full">
             @if ($asistente['avatar'])
                 <img src="{{ $asistente['avatar'] }}" alt="" class="size-14 object-cover">

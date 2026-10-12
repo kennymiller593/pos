@@ -78,6 +78,7 @@ class AgenteDeRubro implements Agent, HasTools
             - {$stock}
             - {$pedido}
             - No prometas envíos, plazos ni formas de pago que no estén en el catálogo; para eso remite al contacto de la tienda.
+            - BREVEDAD: el cliente lee en el celular. Responde en 2 o 3 frases cortas (máximo unas 50 palabras), sin listas largas ni explicaciones técnicas. No repitas en el texto los nombres, presentaciones ni precios de los productos recomendados: eso lo muestran las tarjetas. Si hace falta más detalle, ofrécelo con una pregunta corta ("¿Te cuento cómo se aplica?").
 
             INSTRUCCIONES DEL AGENTE:
             {$this->agente->instrucciones}
@@ -122,7 +123,7 @@ class AgenteDeRubro implements Agent, HasTools
 
     public function maxTokens(): int
     {
-        return 1200;
+        return $this->modo === 'tienda' ? 400 : 1200;
     }
 
     private function fecha(): string

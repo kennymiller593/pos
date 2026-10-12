@@ -30,6 +30,7 @@ import {
     Menu,
     Moon,
     Navigation,
+    MessageCircle,
     Package,
     QrCode,
     PanelLeftClose,
@@ -137,7 +138,8 @@ const menuBase = [
                     { label: 'Datos de la empresa', href: '/empresa', icon: Settings, exact: true, permiso: 'empresa.gestionar' },
                     { label: 'Cobros con QR', href: '/empresa/cobros-qr', icon: QrCode, permiso: 'empresa.gestionar' },
                     // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
-                    { label: 'Asistente de IA', href: '/asistente', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
+                    { label: 'Asistente de IA', href: '/asistente', icon: Sparkles, exact: true, si: () => !!empresa.value?.ia_habilitada },
+                    { label: 'Chats de la tienda', href: '/asistente/tienda', icon: MessageCircle, si: () => !!empresa.value?.ia_habilitada && !!empresa.value?.tienda_habilitada },
                 ],
             },
             // adicional de pago: solo aparece si la plataforma lo activó para la empresa

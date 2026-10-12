@@ -18,11 +18,11 @@ class ConversacionIa extends Model
 
     public const UPDATED_AT = 'actualizado_en';
 
-    protected $fillable = ['empresa_id', 'usuario_id', 'agente_id', 'titulo', 'canal', 'visitante'];
+    protected $fillable = ['empresa_id', 'usuario_id', 'agente_id', 'titulo', 'canal', 'visitante', 'modo', 'atendida_por', 'leida_en'];
 
     protected function casts(): array
     {
-        return ['creado_en' => 'datetime', 'actualizado_en' => 'datetime'];
+        return ['creado_en' => 'datetime', 'actualizado_en' => 'datetime', 'leida_en' => 'datetime'];
     }
 
     public function agente(): BelongsTo
@@ -33,6 +33,12 @@ class ConversacionIa extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    /** Quien del negocio tomó la conversación de la tienda (modo humano). */
+    public function atendidaPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'atendida_por');
     }
 
     public function mensajes(): HasMany
