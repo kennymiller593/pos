@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, onMounted, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import { Head, Link, router, usePage } from '@inertiajs/vue3'
 import { onClickOutside, useDark, useStorage, useToggle } from '@vueuse/core'
 import DialogoConfirmacion from '@/Components/DialogoConfirmacion.vue'
@@ -142,13 +142,13 @@ const menuBase = [
                     { label: 'Asistente de IA', href: '/asistente', icon: Bot, exact: true, permiso: 'empresa.gestionar', si: () => !!empresa.value?.ia_habilitada },
                     { label: 'Consultar al asistente', href: '/asistente/consultas', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
                     { label: 'Chats de la tienda', href: '/asistente/tienda', icon: MessageCircle, si: () => !!empresa.value?.ia_habilitada && !!empresa.value?.tienda_habilitada },
+                    // adicional de pago: solo aparece si la plataforma lo activó para la empresa
+                    { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
+                    { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
+                    { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
+                    { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
                 ],
             },
-            // adicional de pago: solo aparece si la plataforma lo activó para la empresa
-            { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
-            { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
-            { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
-            { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
             { label: 'Auditoría', href: '/auditoria', icon: ScrollText, permiso: 'auditoria.ver' },
         ],
     },
@@ -185,6 +185,9 @@ const menu = computed(() => (esPlataforma.value ? menuPlataforma : menuBase)
 const desplegados = ref({})
 const desplegado = (item) => desplegados.value[item.label] ?? item.hijos.some(esActivo)
 const alternarDesplegable = (item) => (desplegados.value[item.label] = !desplegado(item))
+
+// al cargar, el menú baja hasta la página activa (si no, con el desplegable abierto quedaba fuera de vista)
+onMounted(() => nextTick(() => document.querySelector('aside nav a.font-semibold')?.scrollIntoView({ block: 'nearest' })))
 
 // modo oscuro: agrega .dark en <html>, persiste en localStorage y respeta la preferencia del sistema
 const esOscuro = useDark()
@@ -515,7 +518,7 @@ watch(
                                     </Link>
                                 </template>
                                 <template v-else>
-                                    <button type="button" :data-desplegable="item.label" :aria-expanded="desplegado(item)"
+                                    <button type="button" :data-desplegable="item.label" :data-recorrido="item.hijos[0]?.href" :aria-expanded="desplegado(item)"
                                         class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors"
                                         :class="item.hijos.some(esActivo)
                                             ? 'text-[#4338CA] dark:text-emerald-400'
