@@ -1,4 +1,5 @@
 <script setup>
+import { fechaLocal as hoyLocal } from '@/utils/fechas'
 import { computed } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import { useDark } from '@vueuse/core'
@@ -219,7 +220,7 @@ const PENDIENTES = computed(() => [
     { label: 'Por vencer', valor: `${props.pendientes.lotes_por_vencer} lotes`, url: '/stock?vencen=1', icon: CalendarClock, alerta: props.pendientes.lotes_por_vencer > 0 },
 ].filter(Boolean))
 
-const esHoy = (iso) => iso === new Date().toISOString().slice(0, 10)
+const esHoy = (iso) => iso === hoyLocal()
 
 // ---- este mes contra el mes anterior ----
 const fechaLocal = (iso) => new Date(`${iso}T00:00:00`)

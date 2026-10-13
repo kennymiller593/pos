@@ -1,4 +1,5 @@
 <script setup>
+import { fechaLocal } from '@/utils/fechas'
 import { computed, nextTick, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
@@ -20,7 +21,7 @@ const form = useForm({
     proveedor_id: null,
     tipo_comprobante_codigo: '',
     serie_numero: '',
-    fecha: new Date().toISOString().slice(0, 10),
+    fecha: fechaLocal(), // la de hoy en la hora local (no UTC: de noche marcaba mañana)
     es_credito: false,
     fecha_vencimiento: '',
     items: [],

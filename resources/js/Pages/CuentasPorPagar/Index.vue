@@ -1,4 +1,5 @@
 <script setup>
+import { fechaLocal } from '@/utils/fechas'
 import { ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
@@ -19,7 +20,7 @@ const { puede } = usePermisos()
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const fecha = (f) => f ? new Date(`${String(f).slice(0, 10)}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const saldoDe = (c) => Number(c.monto_total) - Number(c.monto_pagado)
-const estaVencida = (c) => c.estado !== 'pagado' && c.fecha_vencimiento && String(c.fecha_vencimiento).slice(0, 10) < new Date().toISOString().slice(0, 10)
+const estaVencida = (c) => c.estado !== 'pagado' && c.fecha_vencimiento && String(c.fecha_vencimiento).slice(0, 10) < fechaLocal()
 
 const ESTADOS = {
     pendiente: { label: 'Pendiente', clase: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
