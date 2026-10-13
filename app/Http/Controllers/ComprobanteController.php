@@ -249,6 +249,9 @@ class ComprobanteController extends Controller
             + ($qr ? 30 : 0)
             + ($puntos ? 6 + ($puntos['ganados'] > 0 ? 3.5 : 0) + ($puntos['canjeados'] > 0 ? 3.5 : 0) : 0)
         );
+        // siempre mas alto que ancho: una pagina mas ancha que alta Chrome la imprime como
+        // horizontal y el driver de la termica la encoge al rollo (salia a un tercio del papel)
+        $alto = max($alto, $ancho + 5);
 
         return SnappyPdf::loadView('pdf.ticket', [
             'comprobante' => $comprobante,

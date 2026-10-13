@@ -449,6 +449,24 @@ class VentaTest extends TestCase
         Storage::disk('public')->delete($rutaLogo);
     }
 
+    public function test_el_ticket_corto_sigue_siendo_vertical(): void
+    {
+        // una venta de un solo item en 80mm daba una pagina de ~61mm de alto: Chrome la tomaba
+        // como horizontal y en la termica salia encogida a un tercio del papel
+        $producto = $this->crearProducto(precio: 7.00);
+        $this->darStock($producto, 10, 2.00);
+        $this->abrirCaja();
+        $this->venderContado($producto->presentaciones->first(), 1);
+        $comprobante = Comprobante::where('empresa_id', $this->empresa->id)->firstOrFail();
+
+        $pdf = $this->actingAs($this->admin)->get("/comprobantes/{$comprobante->id}/ticket")->assertOk()->getContent();
+        $this->assertSame(1, preg_match('/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)/', $pdf, $caja));
+        $anchoMm = (float) $caja[1] / 72 * 25.4;
+        $altoMm = (float) $caja[2] / 72 * 25.4;
+        $this->assertEqualsWithDelta(80, $anchoMm, 0.5);
+        $this->assertGreaterThanOrEqual($anchoMm + 4, $altoMm);
+    }
+
     public function test_el_ticket_en_html_se_imprime_solo_al_ancho_de_la_caja(): void
     {
         $producto = $this->crearProducto(precio: 10.00);
