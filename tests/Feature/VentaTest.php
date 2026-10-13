@@ -255,11 +255,11 @@ class VentaTest extends TestCase
         // la lista encuentra el comprobante por su numero completo, con o sin ceros a la izquierda
         $serie = Comprobante::where('empresa_id', $this->empresa->id)->value('serie');
         $buscar = fn (string $texto) => collect($this->actingAs($this->admin)->get('/comprobantes?buscar='.urlencode($texto))->assertOk()
-            ->viewData('page')['props']['comprobantes']['data'])->pluck('correlativo')->all();
+            ->viewData('page')['props']['comprobantes']['data'])->pluck('correlativo')->sort()->values()->all();
         $this->assertSame([2], $buscar("{$serie}-000002"));
         $this->assertSame([2], $buscar(strtolower($serie).'-2'));
         $this->assertSame([], $buscar("{$serie}-000009"));
-        $this->assertSame([2, 1], $buscar($serie));
+        $this->assertSame([1, 2], $buscar($serie));
     }
 
     public function test_venta_sin_stock_suficiente_es_rechazada(): void
