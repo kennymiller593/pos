@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { Ban, Barcode, CalendarDays, Download, Eye, Plus, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import SelectorBuscable from '@/Components/SelectorBuscable.vue'
 import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
@@ -26,6 +27,10 @@ const desde = ref(props.filtros.desde ?? '')
 const hasta = ref(props.filtros.hasta ?? '')
 const proveedor = ref(props.filtros.proveedor ?? '')
 const hayFiltros = computed(() => !!(desde.value || hasta.value || proveedor.value))
+const opcionesProveedor = computed(() => [
+    { valor: '', texto: 'Todos los proveedores' },
+    ...props.proveedores.map((pr) => ({ valor: pr.id, texto: pr.razon_social })),
+])
 
 function aplicarFiltros() {
     router.get('/compras', {
@@ -81,10 +86,9 @@ function anular() {
                     <span class="text-xs text-[#94A3B8]">a</span>
                     <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" data-filtro-hasta class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
                 </div>
-                <select v-model="proveedor" :class="[claseInput, 'col-span-2 max-w-full sm:col-span-1 sm:max-w-72']" aria-label="Proveedor" data-filtro-proveedor>
-                    <option value="">Todos los proveedores</option>
-                    <option v-for="pr in proveedores" :key="pr.id" :value="pr.id">{{ pr.razon_social }}</option>
-                </select>
+                <div class="col-span-2 sm:col-span-1 sm:w-72" data-filtro-proveedor>
+                    <SelectorBuscable v-model="proveedor" :opciones="opcionesProveedor" :clase-input="claseInput + ' w-full'" placeholder="Todos los proveedores" />
+                </div>
                 <button
                     v-if="hayFiltros"
                     type="button"

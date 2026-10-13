@@ -86,7 +86,14 @@ class ComprobanteController extends Controller
             // las notas de credito no se listan sueltas: viajan dentro de su comprobante original
             ->where('tipo_comprobante_codigo', '!=', '07')
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {
+                $buscar = trim($buscar);
                 $q->where(function ($w) use ($buscar) {
+                    // numero completo "NV01-000007" o "B001-7": serie exacta y correlativo
+                    if (preg_match('/^([A-Za-z0-9]+)\s*-\s*0*(\d+)$/', $buscar, $partes)) {
+                        $w->where('serie', 'ilike', $partes[1])->where('correlativo', (int) $partes[2]);
+
+                        return;
+                    }
                     $w->where('serie', 'ilike', "%{$buscar}%")
                         ->orWhere('cliente_nombre', 'ilike', "%{$buscar}%")
                         ->orWhere('cliente_numero_doc', 'ilike', "{$buscar}%");
