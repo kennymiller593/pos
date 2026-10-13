@@ -233,7 +233,7 @@ const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor)
     <AppLayout titulo="Inicio">
         <div class="-m-4 min-h-[calc(100vh-4rem)] bg-[#F8FAFC] p-4 text-[#0F172A] sm:-m-6 sm:p-6 dark:bg-transparent dark:text-inherit">
         <!-- Tarjetas de resumen -->
-        <div class="grid gap-4 sm:grid-cols-2" :class="mes ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" :class="mes ? 'xl:grid-cols-4' : 'xl:grid-cols-3'">
             <!-- Ventas de hoy -->
             <div class="rounded-2xl bg-[#4F46E5] p-5 text-white">
                 <div class="flex items-center justify-between">
@@ -364,11 +364,11 @@ const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor)
         </section>
 
         <!-- Gráficas -->
-        <div class="mt-4 grid items-start gap-4 xl:grid-cols-3">
+        <div class="mt-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
             <!-- Ventas 14 días -->
             <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 xl:col-span-2 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas de los últimos 14 días</h2>
-                <div class="mt-4 h-64">
+                <div class="relative mt-4 h-64 min-w-0">
                     <Bar :data="datosSerie" :options="opcionesSerie" />
                 </div>
             </div>
@@ -377,7 +377,7 @@ const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor)
             <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas por medio de pago</h2>
                 <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 7 días</p>
-                <div v-if="mediosPago.length" class="mt-4 h-64">
+                <div v-if="mediosPago.length" class="relative mt-4 h-64 min-w-0">
                     <Doughnut :data="datosMedios" :options="opcionesMedios" />
                 </div>
                 <div v-else class="mt-4 grid h-64 place-items-center text-sm text-[#64748B] dark:text-neutral-500">
@@ -390,11 +390,11 @@ const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor)
         </div>
 
         <!-- Tendencia anual y estacionalidad semanal -->
-        <div class="mt-4 grid items-start gap-4 xl:grid-cols-2">
+        <div class="mt-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
             <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Ventas por mes</h2>
                 <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 12 meses</p>
-                <div class="mt-4 h-64">
+                <div class="relative mt-4 h-64 min-w-0">
                     <Bar :data="datosMeses" :options="opcionesMeses" />
                 </div>
             </div>
@@ -402,14 +402,14 @@ const valorComparado = (fila, valor) => (fila.formato === 'soles' ? soles(valor)
             <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
                 <h2 class="font-semibold tracking-tight">Venta promedio por día de la semana</h2>
                 <p class="text-xs text-[#64748B] dark:text-neutral-500">Últimos 90 días · promedio por día con ventas</p>
-                <div class="mt-4 h-64">
+                <div class="relative mt-4 h-64 min-w-0">
                     <Bar :data="datosDias" :options="opcionesDias" />
                 </div>
             </div>
         </div>
 
         <!-- Sucursales / top productos / últimas ventas -->
-        <div class="mt-4 grid items-start gap-4 xl:grid-cols-3">
+        <div class="mt-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
             <!-- Ventas por sucursal -->
             <div
                 v-if="ventasSucursales.length"
