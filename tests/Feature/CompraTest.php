@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CapaCosto;
 use App\Models\Compra;
 use App\Models\MovimientoInventario;
+use App\Models\Proveedor;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -60,6 +61,41 @@ class CompraTest extends TestCase
         $listado->assertOk();
         $this->assertStringContainsString($producto->nombre, $listado->getContent());
         $this->assertStringContainsString('Caja x12', $listado->getContent());
+    }
+
+    public function test_listado_filtra_por_fechas_y_proveedor(): void
+    {
+        $producto = $this->crearProducto(precio: 10.00);
+        $unidad = $producto->presentaciones->first();
+        $proveedorA = Proveedor::create(['empresa_id' => $this->empresa->id, 'razon_social' => 'Proveedor Alfa '.random_int(1000, 9999), 'ruc' => '20'.random_int(100000000, 999999999)]);
+        $proveedorB = Proveedor::create(['empresa_id' => $this->empresa->id, 'razon_social' => 'Proveedor Beta '.random_int(1000, 9999), 'ruc' => '20'.random_int(100000000, 999999999)]);
+
+        foreach ([[$proveedorA, '2026-03-05', 'F001-000001'], [$proveedorB, '2026-03-20', 'F001-000002'], [$proveedorA, '2026-04-02', 'F001-000003']] as [$proveedor, $fecha, $numero]) {
+            $this->actingAs($this->admin)->post('/compras', [
+                'proveedor_id' => $proveedor->id,
+                'tipo_comprobante_codigo' => '01',
+                'serie_numero' => $numero,
+                'fecha' => $fecha,
+                'es_credito' => false,
+                'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 1, 'costo_unitario' => 8.00]],
+            ])->assertRedirect(route('compras.index'));
+        }
+
+        $documentos = fn (string $url) => collect($this->actingAs($this->admin)->get($url)->assertOk()
+            ->viewData('page')['props']['compras']['data'])->pluck('serie_numero')->sort()->values()->all();
+
+        $this->assertSame(['F001-000001', 'F001-000002', 'F001-000003'], $documentos('/compras'));
+        $this->assertSame(['F001-000001', 'F001-000002'], $documentos('/compras?desde=2026-03-01&hasta=2026-03-31'));
+        $this->assertSame(['F001-000003'], $documentos('/compras?desde=2026-04-01'));
+        $this->assertSame(['F001-000001', 'F001-000003'], $documentos("/compras?proveedor={$proveedorA->id}"));
+        $this->assertSame(['F001-000002'], $documentos("/compras?proveedor={$proveedorB->id}&desde=2026-03-01&hasta=2026-03-31"));
+        // una fecha o proveedor mal formados no rompen ni filtran
+        $this->assertSame(['F001-000001', 'F001-000002', 'F001-000003'], $documentos('/compras?desde=ayer&proveedor=xx'));
+
+        // el select trae los proveedores de la empresa y los filtros aplicados vuelven a la página
+        $props = $this->actingAs($this->admin)->get("/compras?proveedor={$proveedorA->id}&desde=2026-03-01")->viewData('page')['props'];
+        $this->assertSame(['desde' => '2026-03-01', 'proveedor' => $proveedorA->id], $props['filtros']);
+        $this->assertContains($proveedorA->razon_social, collect($props['proveedores'])->pluck('razon_social')->all());
     }
 
     public function test_descarga_de_compra_en_pdf(): void

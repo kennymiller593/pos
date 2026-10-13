@@ -31,6 +31,7 @@ use App\Http\Controllers\CuentaPorPagarController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\EtiquetaController;
 use App\Http\Controllers\GuiaRemisionController;
+use App\Http\Controllers\HistorialProductoController;
 use App\Http\Controllers\ImportacionProductoController;
 use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LandingController;
@@ -249,6 +250,7 @@ Route::middleware('auth')->group(function () {
     // ---- productos y catalogos ----
     Route::get('/productos', [ProductoController::class, 'index'])->middleware('can:productos.ver')->name('productos.index');
     Route::get('/productos/exportar', [ProductoController::class, 'exportar'])->middleware('can:productos.ver')->name('productos.exportar');
+    Route::get('/productos/{producto}/historial', HistorialProductoController::class)->middleware('can:productos.ver')->name('productos.historial');
     Route::post('/productos', [ProductoController::class, 'store'])->middleware('can:productos.gestionar')->name('productos.store');
     // etiquetas con codigo de barras (ticketera o impresora de etiquetas)
     Route::get('/productos/etiquetas', [EtiquetaController::class, 'index'])->middleware('can:productos.ver')->name('productos.etiquetas');
@@ -291,7 +293,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
         Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
     });
-    Route::get('/pos/productos/{producto}/historial', [PosController::class, 'historialProducto'])->middleware('can:stock.costos')->name('pos.historial');
+    // últimas compras (stock.costos) y ventas (comprobantes.ver) de un producto; la ruta del POS se mantiene por compatibilidad
+    Route::get('/pos/productos/{producto}/historial', HistorialProductoController::class)->middleware('can:stock.costos')->name('pos.historial');
 
     Route::middleware('can:caja.operar')->group(function () {
         Route::get('/caja', [CajaController::class, 'index'])->name('caja.index');

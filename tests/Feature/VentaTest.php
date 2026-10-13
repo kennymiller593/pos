@@ -6,6 +6,7 @@ use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\CapaCosto;
 use App\Models\Comprobante;
+use App\Models\ComprobanteDetalle;
 use App\Models\CuentaPorCobrar;
 use App\Models\DetalleConsumoCapa;
 use App\Models\SerieCorrelativo;
@@ -75,7 +76,7 @@ class VentaTest extends TestCase
         $this->venderContado($saco, 1)->assertSessionHas('success');
         $this->venderContado($producto->presentaciones()->where('es_default', true)->first(), 3)->assertSessionHas('success');
 
-        $unidades = \App\Models\ComprobanteDetalle::whereIn('presentacion_id', $producto->presentaciones()->pluck('id'))
+        $unidades = ComprobanteDetalle::whereIn('presentacion_id', $producto->presentaciones()->pluck('id'))
             ->orderBy('cantidad')->pluck('unidad_codigo', 'descripcion')->all();
         $this->assertSame(['SA', 'KGM'], array_values($unidades)); // 1 saco = SA, 3 kilos sueltos = KGM
         $this->assertSame(447.0, $this->stockDe($producto));
@@ -484,9 +485,27 @@ class VentaTest extends TestCase
         $this->assertEqualsWithDelta(5, $datos['compras'][0]['cantidad'], 0.001);
         $this->assertEqualsWithDelta(3, $datos['compras'][0]['stock_restante'], 0.001);
 
+        // la misma consulta desde Productos trae también las ventas del producto
+        $datos = $this->actingAs($this->admin)->getJson("/productos/{$producto->id}/historial")->assertOk()->json();
+        $this->assertSame(['compras' => true, 'ventas' => true], $datos['puede']);
+        $this->assertCount(1, $datos['ventas']);
+        $this->assertEqualsWithDelta(2, $datos['ventas'][0]['cantidad'], 0.001);
+        $this->assertEqualsWithDelta(3.50, $datos['ventas'][0]['precio_unitario'], 0.001);
+        $this->assertSame('Clientes varios', $datos['ventas'][0]['cliente']);
+        $this->assertMatchesRegularExpression('/^[A-Z0-9]+-\d{6}$/', $datos['ventas'][0]['documento']);
+        $this->assertFalse($datos['ventas'][0]['anulada']);
+
+        // el vendedor no ve costos: solo la pestaña de ventas
+        $vendedor = $this->crearUsuario('vendedor', 'vend'.random_int(1000, 999999).'@test.local');
+        $datos = $this->actingAs($vendedor)->getJson("/productos/{$producto->id}/historial")->assertOk()->json();
+        $this->assertSame(['compras' => false, 'ventas' => true], $datos['puede']);
+        $this->assertSame([], $datos['compras']);
+        $this->assertCount(1, $datos['ventas']);
+
         // otra empresa no puede consultarlo
         $this->crearEscenarioBase();
         $this->actingAs($this->admin)->getJson("/pos/productos/{$producto->id}/historial")->assertForbidden();
+        $this->actingAs($this->admin)->getJson("/productos/{$producto->id}/historial")->assertForbidden();
     }
 
     public function test_credito_es_bloqueado_al_exceder_el_limite_y_sin_linea(): void

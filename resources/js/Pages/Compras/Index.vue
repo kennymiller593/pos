@@ -1,12 +1,16 @@
 <script setup>
-import { ref } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
-import { Ban, Barcode, Download, Eye, Plus, Truck, X } from '@lucide/vue'
+import { computed, ref, watch } from 'vue'
+import { Link, router, useForm } from '@inertiajs/vue3'
+import { Ban, Barcode, CalendarDays, Download, Eye, Plus, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
 
-defineProps({
+const props = defineProps({
     compras: { type: Object, required: true },
+    // { desde, hasta, proveedor } con lo que ya está aplicado
+    filtros: { type: Object, default: () => ({}) },
+    // [{ id, razon_social }]
+    proveedores: { type: Array, default: () => [] },
 })
 
 const { puede } = usePermisos()
@@ -16,6 +20,29 @@ const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T00:00:00`) : null)
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
 
 const compraVer = ref(null)
+
+// ---- filtros: rango de fechas de la compra y proveedor ----
+const desde = ref(props.filtros.desde ?? '')
+const hasta = ref(props.filtros.hasta ?? '')
+const proveedor = ref(props.filtros.proveedor ?? '')
+const hayFiltros = computed(() => !!(desde.value || hasta.value || proveedor.value))
+
+function aplicarFiltros() {
+    router.get('/compras', {
+        desde: desde.value || undefined,
+        hasta: hasta.value || undefined,
+        proveedor: proveedor.value || undefined,
+    }, { preserveState: true, preserveScroll: true, replace: true })
+}
+function limpiarFiltros() {
+    desde.value = ''
+    hasta.value = ''
+    proveedor.value = ''
+}
+watch([desde, hasta, proveedor], aplicarFiltros)
+
+const claseInput =
+    'h-10 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900'
 
 const fechaHora = (f) => (f
     ? new Date(f).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -44,10 +71,35 @@ function anular() {
 
 <template>
     <AppLayout titulo="Compras">
-        <div v-if="puede('compras.gestionar')" class="mb-4 flex justify-end">
+        <!-- Filtros y acción principal -->
+        <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center">
+                <!-- rango de fechas de la compra -->
+                <div class="col-span-2 flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 dark:border-neutral-800 dark:bg-neutral-900">
+                    <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
+                    <input v-model="desde" type="date" :max="hasta || undefined" aria-label="Desde" title="Desde" data-filtro-desde class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                    <span class="text-xs text-[#94A3B8]">a</span>
+                    <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" data-filtro-hasta class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+                </div>
+                <select v-model="proveedor" :class="[claseInput, 'col-span-2 max-w-full sm:col-span-1 sm:max-w-72']" aria-label="Proveedor" data-filtro-proveedor>
+                    <option value="">Todos los proveedores</option>
+                    <option v-for="pr in proveedores" :key="pr.id" :value="pr.id">{{ pr.razon_social }}</option>
+                </select>
+                <button
+                    v-if="hayFiltros"
+                    type="button"
+                    class="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 sm:col-span-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                    data-filtros-limpiar
+                    @click="limpiarFiltros"
+                >
+                    <X class="size-4" />
+                    Limpiar
+                </button>
+            </div>
             <Link
+                v-if="puede('compras.gestionar')"
                 href="/compras/crear"
-                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
             >
                 <Plus class="size-4" />
                 Nueva compra
@@ -74,10 +126,16 @@ function anular() {
                             <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <Truck class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
-                                    Aún no registras compras.
-                                    <Link v-if="puede('compras.gestionar')" href="/compras/crear" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400">
-                                        Registra la primera
-                                    </Link>
+                                    <template v-if="hayFiltros">
+                                        No hay compras con esos filtros.
+                                        <button type="button" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="limpiarFiltros">Ver todas</button>
+                                    </template>
+                                    <template v-else>
+                                        Aún no registras compras.
+                                        <Link v-if="puede('compras.gestionar')" href="/compras/crear" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+                                            Registra la primera
+                                        </Link>
+                                    </template>
                                 </div>
                             </td>
                         </tr>

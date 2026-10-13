@@ -7,6 +7,7 @@ use App\Models\Compra;
 use App\Models\CuentaPorPagar;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
+use App\Models\Proveedor;
 use App\Models\Sucursal;
 use App\Models\TipoComprobante;
 use App\Services\CompraService;
@@ -15,6 +16,7 @@ use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,8 +30,25 @@ class CompraController extends Controller
 
     public function index(Request $request): Response
     {
+        $empresaId = $request->user()->empresa_id;
+
+        // filtros: rango de fechas de la compra (AAAA-MM-DD) y proveedor; un valor mal formado se ignora
+        $filtros = [];
+        foreach (['desde', 'hasta'] as $campo) {
+            $valor = (string) $request->query($campo);
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor) && strtotime($valor)) {
+                $filtros[$campo] = $valor;
+            }
+        }
+        if (Str::isUuid((string) $request->query('proveedor'))) {
+            $filtros['proveedor'] = $request->query('proveedor');
+        }
+
         $compras = Compra::query()
-            ->where('empresa_id', $request->user()->empresa_id)
+            ->where('empresa_id', $empresaId)
+            ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
+            ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('fecha', '<=', $hasta))
+            ->when($filtros['proveedor'] ?? null, fn ($q, $proveedor) => $q->where('proveedor_id', $proveedor))
             ->with([
                 'proveedor' => fn ($q) => $q->withTrashed()->select('id', 'razon_social'),
                 'usuario:id,nombre_completo',
@@ -42,7 +61,19 @@ class CompraController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        return Inertia::render('Compras/Index', ['compras' => $compras]);
+        // proveedores de la empresa para el filtro (los eliminados siguen si tienen compras, para poder filtrarlas)
+        $proveedores = Proveedor::query()
+            ->withTrashed()
+            ->where('empresa_id', $empresaId)
+            ->where(fn ($q) => $q->whereNull(Proveedor::DELETED_AT)->orWhereHas('compras'))
+            ->orderBy('razon_social')
+            ->get(['id', 'razon_social']);
+
+        return Inertia::render('Compras/Index', [
+            'compras' => $compras,
+            'filtros' => $filtros,
+            'proveedores' => $proveedores,
+        ]);
     }
 
     public function pdf(Request $request, Compra $compra)

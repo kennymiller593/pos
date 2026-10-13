@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Package, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
+import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Package, Pencil, Plus, Search, ShoppingCart, Trash2, Truck } from '@lucide/vue'
+import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
@@ -75,6 +76,10 @@ const urlExportar = computed(() => {
 const modalAbierto = ref(false)
 const productoEditar = ref(null)
 const importarAbierto = ref(false)
+
+// historial de compras (stock.costos) y de ventas (comprobantes.ver) del producto
+const historial = ref(null) // { producto, tipo }
+const verHistorial = (producto, tipo) => (historial.value = { producto, tipo })
 
 function nuevo() {
     productoEditar.value = null
@@ -206,12 +211,13 @@ function claseStock(producto) {
                                     <ChevronsUpDown v-else class="size-3.5 opacity-60" />
                                 </button>
                             </th>
+                            <th v-if="puede('stock.costos') || puede('comprobantes.ver')" class="px-4 py-3.5 text-center font-semibold tracking-wider">Historial</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Acciones</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!productos.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td colspan="9" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <Package class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay productos que mostrar.
@@ -254,6 +260,32 @@ function claseStock(producto) {
                                 >
                                     {{ p.activo ? 'Activo' : 'Inactivo' }}
                                 </span>
+                            </td>
+                            <td v-if="puede('stock.costos') || puede('comprobantes.ver')" class="px-4 py-3">
+                                <div class="flex justify-center gap-1">
+                                    <button
+                                        v-if="puede('stock.costos')"
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-stone-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                        title="Últimas compras de este producto"
+                                        data-historial-compras
+                                        @click="verHistorial(p, 'compras')"
+                                    >
+                                        <Truck class="size-4 text-sky-600 dark:text-sky-400" />
+                                        Compras
+                                    </button>
+                                    <button
+                                        v-if="puede('comprobantes.ver')"
+                                        type="button"
+                                        class="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-600 hover:bg-stone-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                        title="Últimas ventas de este producto"
+                                        data-historial-ventas
+                                        @click="verHistorial(p, 'ventas')"
+                                    >
+                                        <ShoppingCart class="size-4 text-emerald-600 dark:text-emerald-400" />
+                                        Ventas
+                                    </button>
+                                </div>
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex justify-end gap-1">
@@ -315,6 +347,8 @@ function claseStock(producto) {
                 </div>
             </div>
         </div>
+
+        <HistorialProducto v-if="historial" :producto="historial.producto" :inicial="historial.tipo" @cerrar="historial = null" />
 
         <FormularioProducto
             :abierto="modalAbierto"

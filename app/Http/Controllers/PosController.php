@@ -6,7 +6,6 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Jobs\EnviarComprobanteSunat;
 use App\Models\Categoria;
 use App\Models\Cliente;
-use App\Models\CompraDetalle;
 use App\Models\Comprobante;
 use App\Models\CuentaPorCobrar;
 use App\Models\MedioPago;
@@ -195,48 +194,6 @@ class PosController extends Controller
             'deuda' => 0,
             'puntos' => 0,
         ], 201);
-    }
-
-    /** Últimas compras de un producto (para consulta rápida desde el POS). */
-    public function historialProducto(Request $request, Producto $producto): JsonResponse
-    {
-        $empresaId = $request->user()->empresa_id;
-
-        abort_unless($producto->empresa_id === $empresaId, 403);
-
-        $compras = CompraDetalle::query()
-            ->join('compras', 'compras.id', '=', 'compra_detalles.compra_id')
-            ->leftJoin('proveedores', 'proveedores.id', '=', 'compras.proveedor_id')
-            ->leftJoin('producto_presentaciones', 'producto_presentaciones.id', '=', 'compra_detalles.presentacion_id')
-            ->leftJoin('capas_costo', 'capas_costo.compra_detalle_id', '=', 'compra_detalles.id')
-            ->where('compras.empresa_id', $empresaId)
-            ->where('compra_detalles.producto_id', $producto->id)
-            ->orderByDesc('compras.creado_en')
-            ->limit(8)
-            ->get([
-                'compra_detalles.id',
-                'compra_detalles.cantidad',
-                'compra_detalles.costo_unitario',
-                'compra_detalles.total',
-                'compras.fecha',
-                'compras.serie_numero as documento',
-                'proveedores.razon_social as proveedor',
-                'producto_presentaciones.nombre as presentacion',
-                'capas_costo.cantidad_restante as stock_restante',
-            ])
-            ->map(fn ($fila) => [
-                'id' => $fila->id,
-                'fecha' => $fila->fecha,
-                'documento' => $fila->documento,
-                'proveedor' => $fila->proveedor,
-                'presentacion' => $fila->presentacion,
-                'stock_restante' => $fila->stock_restante !== null ? (float) $fila->stock_restante : null,
-                'cantidad' => (float) $fila->cantidad,
-                'costo_unitario' => (float) $fila->costo_unitario,
-                'total' => (float) $fila->total,
-            ]);
-
-        return response()->json(['compras' => $compras]);
     }
 
     /** Lo que la venta movio en puntos, para avisarle al cliente: null si no movio nada. */

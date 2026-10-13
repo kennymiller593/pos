@@ -41,6 +41,7 @@ import { useConfirmar } from '@/composables/confirmar'
 import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
 import PanelBilletera from '@/Components/Pos/PanelBilletera.vue'
+import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import { useImpresion } from '@/composables/impresion'
 import { useSonido } from '@/composables/sonido'
 import { ayudaDocumento, esSinDocumento } from '@/composables/documentoIdentidad'
@@ -415,22 +416,9 @@ function faltaStock(item) {
 
 const hayFaltantes = computed(() => carrito.value.some(faltaStock))
 
-// ================= historial de producto =================
+// ================= historial de producto (compras y ventas, componente compartido con Productos) =================
 const historialProducto = ref(null)
-const historialDatos = ref({ compras: [] })
-const cargandoHistorial = ref(false)
-
-async function verHistorial(producto) {
-    historialProducto.value = producto
-    historialDatos.value = { compras: [] }
-    cargandoHistorial.value = true
-    try {
-        const r = await fetch(`/pos/productos/${producto.id}/historial`, { headers: { Accept: 'application/json' } })
-        if (r.ok) historialDatos.value = await r.json()
-    } finally {
-        cargandoHistorial.value = false
-    }
-}
+const verHistorial = (producto) => (historialProducto.value = producto)
 
 function fechaCorta(valor) {
     const iso = String(valor)
@@ -1927,69 +1915,8 @@ const claseInput =
             </div>
         </Teleport>
 
-        <!-- ============ Modal historial de producto ============ -->
-        <Teleport to="body">
-            <div v-if="historialProducto" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
-                <div class="fixed inset-0 bg-neutral-950/60" @click="historialProducto = null" />
-                <div class="relative w-full max-w-3xl rounded-2xl border border-stone-200 bg-white text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
-                    <div class="flex items-center justify-between border-b border-stone-200 px-6 py-4 dark:border-neutral-800">
-                        <div>
-                            <h3 class="font-semibold tracking-tight">{{ historialProducto.nombre }}</h3>
-                            <p class="text-xs text-neutral-500 dark:text-neutral-400">Últimas compras</p>
-                        </div>
-                        <button
-                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                            @click="historialProducto = null"
-                        >
-                            <X class="size-5" />
-                        </button>
-                    </div>
-
-                    <div class="max-h-[65vh] overflow-x-auto overflow-y-auto px-6 py-4">
-                        <p v-if="cargandoHistorial" class="py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                            Cargando...
-                        </p>
-                        <p v-else-if="!historialDatos.compras.length" class="py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
-                            Sin compras registradas para este producto.
-                        </p>
-                        <table v-else class="w-full text-left text-sm">
-                            <thead class="text-xs text-neutral-400 uppercase dark:text-neutral-500">
-                                <tr>
-                                    <th class="pr-3 pb-2 font-semibold tracking-wider">Fecha</th>
-                                    <th class="px-3 pb-2 font-semibold tracking-wider">Documento</th>
-                                    <th class="px-3 pb-2 font-semibold tracking-wider">Proveedor</th>
-                                    <th class="px-3 pb-2 text-right font-semibold tracking-wider">Stock restante</th>
-                                    <th class="px-3 pb-2 text-right font-semibold tracking-wider">Cantidad</th>
-                                    <th class="px-3 pb-2 text-right font-semibold tracking-wider">Precio compra</th>
-                                    <th class="pb-2 pl-3 text-right font-semibold tracking-wider">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
-                                <tr v-for="c in historialDatos.compras" :key="c.id">
-                                    <td class="py-2.5 pr-3 whitespace-nowrap">{{ fechaCorta(c.fecha) }}</td>
-                                    <td class="px-3 py-2.5 font-mono text-xs text-neutral-600 dark:text-neutral-300">{{ c.documento ?? '—' }}</td>
-                                    <td class="max-w-40 truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-300">{{ c.proveedor ?? '—' }}</td>
-                                    <td
-                                        class="px-3 py-2.5 text-right font-medium"
-                                        :class="c.stock_restante !== null && c.stock_restante <= 0 ? 'text-red-600 dark:text-red-400' : ''"
-                                    >
-                                        {{ c.stock_restante !== null ? Number(c.stock_restante).toLocaleString('es-PE', { maximumFractionDigits: 3 }) : '—' }}
-                                    </td>
-                                    <td class="px-3 py-2.5 text-right">
-                                        {{ Number(c.cantidad).toLocaleString('es-PE', { maximumFractionDigits: 3 }) }}
-                                        <span v-if="c.presentacion && c.presentacion !== 'Unidad'" class="text-xs text-neutral-500 dark:text-neutral-400">
-                                            {{ c.presentacion }}
-                                        </span>
-                                    </td>
-                                    <td class="px-3 py-2.5 text-right text-neutral-600 dark:text-neutral-300">{{ soles(c.costo_unitario) }}</td>
-                                    <td class="py-2.5 pl-3 text-right font-semibold">{{ soles(c.total) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </Teleport>
+        <!-- ============ Historial del producto (compras y ventas) ============ -->
+        <HistorialProducto v-if="historialProducto" :producto="historialProducto" @cerrar="historialProducto = null" />
 
         <!-- ============ Modal cliente rápido ============ -->
         <Teleport to="body">
