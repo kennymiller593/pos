@@ -47,8 +47,16 @@ echo "→ Permisos (el deploy corre como root; PHP-FPM y el worker corren como w
 chown -R www-data:www-data storage bootstrap/cache public/build
 chown www-data:www-data .env
 
+# Desde aquí la app ya atiende: todo artisan corre como www-data. Si corriera como root, lo que escriba
+# en storage (caché, logs) quedaría de root y la web no podría usarlo (login con error 500 según la IP).
+if [ "$(id -u)" = "0" ] && command -v sudo >/dev/null; then
+    COMO_WEB="sudo -u www-data"
+else
+    COMO_WEB=""
+fi
+
 echo "→ Workers"
-$PHP artisan queue:restart
+$COMO_WEB $PHP artisan queue:restart
 if command -v supervisorctl >/dev/null && supervisorctl status "$PROGRAMA_SUPERVISOR" >/dev/null 2>&1; then
     supervisorctl restart "$PROGRAMA_SUPERVISOR"
 fi
@@ -57,12 +65,15 @@ echo "✔ Aplicación actualizada y en línea: $(leer APP_URL)/up"
 
 # ---- tareas de mantenimiento de datos: idempotentes y a veces largas; la app ya está sirviendo ----
 echo "→ Certificados guardados en claro (si los hubiera)"
-$PHP artisan empresa:cifrar-certificados || true
+$COMO_WEB $PHP artisan empresa:cifrar-certificados || true
 
 echo "→ Fotos de productos sin optimizar (si falla no detiene el despliegue)"
-$PHP artisan productos:optimizar-imagenes || true
+$COMO_WEB $PHP artisan productos:optimizar-imagenes || true
 
 echo "→ Presentaciones que repetían el nombre del producto"
-$PHP artisan productos:normalizar-presentaciones || true
+$COMO_WEB $PHP artisan productos:normalizar-presentaciones || true
+
+# por si algún paso dejó algo de root: los permisos se dejan bien al terminar
+chown -R www-data:www-data storage bootstrap/cache
 
 echo "✔ Despliegue completo"
