@@ -46,6 +46,7 @@ import {
     soles,
 } from './comun'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 import { useImpresion } from '@/composables/impresion'
 
 const { imprimirTicket } = useImpresion()
@@ -95,16 +96,19 @@ const claseAccion =
     'grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#475569] transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400'
 
 // ---- orden por columna ----
-const COLUMNAS = [
+const { multisucursal } = useSucursales()
+const COLUMNAS = computed(() => [
     { id: 'numero', titulo: 'Número' },
     { id: 'tipo', titulo: 'Tipo' },
     { id: 'fecha', titulo: 'Fecha' },
+    // con más de una sucursal se ve de cuál salió cada venta (no se ordena por ella)
+    ...(multisucursal.value ? [{ id: 'sucursal', titulo: 'Sucursal', sinOrden: true }] : []),
     { id: 'cliente', titulo: 'Cliente' },
     { id: 'total', titulo: 'Total', clase: 'text-right' },
     { id: 'estado', titulo: 'Estado' },
     { id: 'sunat', titulo: 'SUNAT' },
     { id: 'vendedor', titulo: 'Vendedor' },
-]
+])
 const orden = ref({ ...props.orden })
 
 function ordenarPor(columna) {
@@ -493,7 +497,9 @@ const claseInput =
                     <thead class="border-b border-[#E2E8F0] bg-slate-50/70 text-[11px] text-[#64748B] uppercase dark:border-neutral-800 dark:bg-neutral-950/40 dark:text-neutral-400">
                         <tr>
                             <th v-for="col in COLUMNAS" :key="col.id" class="px-3 py-3" :class="col.clase">
+                                <span v-if="col.sinOrden" class="font-semibold tracking-wider uppercase">{{ col.titulo }}</span>
                                 <button
+                                    v-else
                                     type="button"
                                     class="inline-flex items-center gap-1 font-semibold tracking-wider uppercase transition-colors hover:text-[#0F172A] dark:hover:text-neutral-100"
                                     :class="orden.columna === col.id ? 'text-[#0F172A] dark:text-neutral-100' : ''"
@@ -541,6 +547,7 @@ const claseInput =
                                     <p class="flex items-center gap-2 text-[#0F172A] dark:text-neutral-100"><CalendarDays class="size-4 text-[#94A3B8]" />{{ fecha(c) }}</p>
                                     <p class="mt-0.5 flex items-center gap-2 text-xs text-[#64748B] dark:text-neutral-400"><Clock3 class="size-4 text-[#94A3B8]" />{{ hora(c) }}</p>
                                 </td>
+                                <td v-if="multisucursal" class="px-3 py-4 whitespace-nowrap text-[#475569] dark:text-neutral-300">{{ c.sucursal?.nombre ?? '—' }}</td>
                                 <td class="px-3 py-4">
                                     <div class="flex items-center gap-3">
                                         <span class="grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold" :class="c.cliente_nombre ? colorAvatar(c.cliente_nombre) : 'bg-slate-100 text-[#64748B] dark:bg-neutral-800 dark:text-neutral-400'">

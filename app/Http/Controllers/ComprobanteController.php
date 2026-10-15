@@ -41,6 +41,7 @@ class ComprobanteController extends Controller
         $comprobantes = $consulta
             ->with([
                 'usuario:id,nombre_completo',
+                'sucursal:id,nombre',
                 'cliente:id,email',
                 'detalles:id,comprobante_id,descripcion,unidad_codigo,cantidad,precio_unitario,total',
                 'pagos:id,comprobante_id,medio_pago_codigo,monto,referencia',
@@ -83,6 +84,8 @@ class ComprobanteController extends Controller
 
         $consulta = Comprobante::query()
             ->where('empresa_id', $request->user()->empresa_id)
+            // la sucursal elegida en el selector (null = todas las que puede ver)
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             // las notas de credito no se listan sueltas: viajan dentro de su comprobante original
             ->where('tipo_comprobante_codigo', '!=', '07')
             ->when($filtros['buscar'] ?? null, function ($q, $buscar) {

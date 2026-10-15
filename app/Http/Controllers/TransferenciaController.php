@@ -21,6 +21,10 @@ class TransferenciaController extends Controller
         return Inertia::render('Transferencias/Index', [
             'transferencias' => Transferencia::query()
                 ->where('empresa_id', $request->user()->empresa_id)
+                // la sucursal elegida en el selector: salen las que entran o salen de ella
+                ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->where(fn ($w) => $w
+                    ->whereIn('sucursal_origen_id', $ids)
+                    ->orWhereIn('sucursal_destino_id', $ids)))
                 ->with([
                     'sucursalOrigen:id,nombre',
                     'sucursalDestino:id,nombre',
@@ -52,6 +56,8 @@ class TransferenciaController extends Controller
 
         return Inertia::render('Transferencias/Crear', [
             'origen' => Sucursal::find($origenId)?->only('id', 'nombre'),
+            // viendo "todas": puede elegir desde qué sucursal sale (?origen=)
+            'origenes' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
             'destinos' => Sucursal::query()
                 ->where('empresa_id', $usuario->empresa_id)
                 ->where('activo', true)
@@ -86,10 +92,10 @@ class TransferenciaController extends Controller
             'items.required' => 'Agrega al menos un producto.',
         ]);
 
-        $origenId = $this->sucursalOrigen($request);
+        $origenId = $this->sucursalElegida($request, 'sucursal_origen_id');
 
         if (! $origenId) {
-            return back()->with('error', 'No tienes una sucursal asignada.');
+            return back()->with('error', 'Elige la sucursal de origen.');
         }
 
         try {
@@ -140,8 +146,9 @@ class TransferenciaController extends Controller
         return back()->with('success', 'Transferencia anulada. La mercadería volvió al origen.');
     }
 
+    /** Origen de la transferencia: ?origen= (viendo "todas"), si no la del selector, si no la predeterminada. */
     private function sucursalOrigen(Request $request): ?string
     {
-        return $this->sucursalDeTrabajo($request);
+        return $this->sucursalElegida($request, 'origen');
     }
 }

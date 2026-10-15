@@ -76,7 +76,6 @@ function volverPlataforma() {
 const esPlataforma = computed(() => !!usuario.value?.es_superadmin)
 const nombreEmpresa = computed(() => (esPlataforma.value ? 'inkaPos' : empresa.value?.nombre_comercial || empresa.value?.razon_social || page.props.appName || 'inkaPos'))
 const inicialEmpresa = computed(() => nombreEmpresa.value.charAt(0).toUpperCase())
-const sucursalActiva = computed(() => usuario.value?.sucursal_activa ?? null)
 
 const menuBase = [
     {
@@ -202,18 +201,20 @@ const menuUsuarioAbierto = ref(false)
 const menuUsuarioRef = ref(null)
 onClickOutside(menuUsuarioRef, () => (menuUsuarioAbierto.value = false))
 
-// ---- selector de sucursal (barra superior) ----
+// ---- sucursal actual (selector de la barra superior) ----
+// Una sola noción para todo el sistema: lo que dice el selector es lo que muestran el dashboard,
+// los reportes, las listas y las pantallas de trabajo. El POS vende en la sucursal de la caja abierta.
 const sucursalesAccesibles = computed(() => usuario.value?.sucursales_accesibles ?? [])
 const puedeVerTodas = computed(() => usuario.value?.puede_ver_todas ?? false)
 const sucursalConsultaId = computed(() => usuario.value?.sucursal_consulta_id ?? null)
-const mostrarSelector = computed(() => sucursalesAccesibles.value.length > 1)
-
-const etiquetaSelector = computed(() => {
-    if (sucursalConsultaId.value) {
-        return sucursalesAccesibles.value.find((s) => s.id === sucursalConsultaId.value)?.nombre ?? 'Sucursal'
-    }
-    return puedeVerTodas.value ? 'Todas las sucursales' : (usuario.value?.sucursal?.nombre ?? 'Sucursal')
-})
+const etiquetaSelector = computed(() => usuario.value?.sucursal_etiqueta ?? 'Sucursal')
+const cajaAbierta = computed(() => usuario.value?.caja_abierta ?? null)
+// la empresa tiene más de una sucursal activa: se muestra el selector aunque el usuario solo entre a una
+const multisucursal = computed(() => !!empresa.value?.multisucursal)
+const mostrarSelector = computed(() => multisucursal.value && !esPlataforma.value)
+const puedeCambiarSucursal = computed(() => sucursalesAccesibles.value.length > 1)
+// tiene la caja abierta en una sucursal distinta a la que está consultando: se le avisa
+const cajaEnOtraSucursal = computed(() => !!cajaAbierta.value && sucursalConsultaId.value !== cajaAbierta.value.sucursal_id)
 
 const selectorAbierto = ref(false)
 const selectorRef = ref(null)
@@ -223,6 +224,9 @@ function cambiarSucursal(id) {
     selectorAbierto.value = false
     if (id === sucursalConsultaId.value) return
     router.post('/sucursal-activa', { sucursal_id: id }, { preserveScroll: true })
+}
+function abrirSelector() {
+    if (puedeCambiarSucursal.value) selectorAbierto.value = !selectorAbierto.value
 }
 
 // ---- notificaciones (campanita) ----
@@ -479,14 +483,20 @@ watch(
                         {{ nombreEmpresa }}
                     </span>
                     <span v-if="esPlataforma" class="block text-[11px] text-[#64748B] dark:text-neutral-400">Panel de la plataforma</span>
-                    <span v-else-if="sucursalActiva"
+                    <span v-else
                         class="flex items-center gap-1 text-[11px] text-[#64748B] dark:text-neutral-400"
-                        :title="sucursalActiva.caja ? `Operando en ${sucursalActiva.nombre} (${sucursalActiva.caja})` : `Sucursal ${sucursalActiva.nombre}`">
+                        :title="cajaAbierta ? `${cajaAbierta.caja_nombre} abierta en ${cajaAbierta.sucursal_nombre}` : etiquetaSelector"
+                        data-sucursal-badge>
                         <MapPin class="size-3 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
                         <span class="truncate">
-                            {{ sucursalActiva.nombre }}<template v-if="sucursalActiva.caja"> · {{ sucursalActiva.caja
-                                }}</template>
+                            {{ etiquetaSelector }}<template v-if="cajaAbierta && !cajaEnOtraSucursal"> · {{ cajaAbierta.caja_nombre }}</template>
                         </span>
+                    </span>
+                    <span v-if="!esPlataforma && cajaEnOtraSucursal"
+                        class="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400"
+                        title="Tu caja está abierta en otra sucursal: el POS vende ahí">
+                        <span class="size-1.5 shrink-0 rounded-full bg-amber-500" />
+                        <span class="truncate">{{ cajaAbierta.caja_nombre }} abierta en {{ cajaAbierta.sucursal_nombre }}</span>
                     </span>
                 </div>
                 <button
@@ -612,6 +622,13 @@ watch(
                 </button>
 
                 <h1 class="truncate text-xl font-semibold tracking-tight">{{ titulo }}</h1>
+                <!-- en qué sucursal está lo que se ve: sale en todas las pantallas cuando hay más de una -->
+                <span v-if="mostrarSelector"
+                    class="hidden shrink-0 items-center gap-1 rounded-full bg-[#F1F5F9] px-2.5 py-1 text-xs font-medium text-[#64748B] md:inline-flex dark:bg-neutral-800 dark:text-neutral-300"
+                    data-sucursal-contexto>
+                    <MapPin class="size-3 text-[#4F46E5] dark:text-emerald-400" />
+                    {{ etiquetaSelector }}
+                </span>
 
                 <div class="ml-auto flex items-center gap-2">
                     <!-- Estado de facturación electrónica -->
@@ -632,35 +649,53 @@ watch(
                     </component>
 
                     <!-- Selector de sucursal -->
-                    <div v-if="mostrarSelector && !esPlataforma" ref="selectorRef" class="relative">
+                    <div v-if="mostrarSelector" ref="selectorRef" class="relative">
                         <button
-                            class="flex h-10 items-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm font-medium text-[#64748B] transition-colors hover:border-[#CBD5E1] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
-                            title="Cambiar de sucursal" @click="selectorAbierto = !selectorAbierto">
-                            <Store class="size-4 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
+                            class="flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm font-medium transition-colors dark:bg-neutral-900"
+                            :class="[
+                                cajaEnOtraSucursal
+                                    ? 'border-amber-300 text-amber-800 dark:border-amber-500/40 dark:text-amber-300'
+                                    : 'border-[#E2E8F0] text-[#64748B] dark:border-neutral-800 dark:text-neutral-300',
+                                puedeCambiarSucursal ? 'hover:border-[#CBD5E1] hover:text-[#0F172A] dark:hover:border-neutral-700 dark:hover:text-neutral-100' : 'cursor-default',
+                            ]"
+                            :title="puedeCambiarSucursal ? 'Cambiar la sucursal que estás viendo' : 'Solo tienes acceso a esta sucursal'"
+                            :aria-expanded="selectorAbierto"
+                            data-selector-sucursal
+                            @click="abrirSelector">
+                            <Store class="size-4 shrink-0" :class="cajaEnOtraSucursal ? 'text-amber-600 dark:text-amber-400' : 'text-[#4F46E5] dark:text-emerald-400'" />
                             <span class="hidden max-w-44 truncate sm:block">{{ etiquetaSelector }}</span>
-                            <ChevronDown class="hidden size-4 shrink-0 text-[#64748B] sm:block" />
+                            <ChevronDown v-if="puedeCambiarSucursal" class="hidden size-4 shrink-0 sm:block" />
                         </button>
 
                         <div v-if="selectorAbierto"
-                            class="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white py-1 shadow-lg shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
+                            class="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white py-1 shadow-lg shadow-slate-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30"
+                            data-selector-sucursal-lista>
                             <p
                                 class="px-4 pt-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-[#64748B] uppercase dark:text-neutral-500">
                                 Viendo datos de
                             </p>
-                            <button v-if="puedeVerTodas"
+                            <button
                                 class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="cambiarSucursal(null)">
-                                Todas las sucursales
+                                {{ puedeVerTodas ? 'Todas las sucursales' : 'Todas mis sucursales' }}
                                 <CheckCircle2 v-if="!sucursalConsultaId"
                                     class="size-4 text-[#4F46E5] dark:text-emerald-400" />
                             </button>
                             <button v-for="s in sucursalesAccesibles" :key="s.id"
-                                class="flex w-full items-center justify-between px-4 py-2 text-sm hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
+                                class="flex w-full items-center justify-between gap-2 px-4 py-2 text-sm hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="cambiarSucursal(s.id)">
                                 <span class="truncate">{{ s.nombre }}</span>
+                                <span v-if="cajaAbierta?.sucursal_id === s.id" class="ml-auto shrink-0 text-[11px] text-[#94A3B8] dark:text-neutral-500">tu caja</span>
                                 <CheckCircle2 v-if="sucursalConsultaId === s.id"
                                     class="size-4 shrink-0 text-[#4F46E5] dark:text-emerald-400" />
                             </button>
+                            <p v-if="cajaEnOtraSucursal"
+                                class="mx-2 mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                                Tienes {{ cajaAbierta.caja_nombre }} abierta en {{ cajaAbierta.sucursal_nombre }}: el POS vende ahí. Aquí solo cambias lo que consultas.
+                            </p>
+                            <p v-else class="mx-2 mt-1 rounded-lg bg-[#F8FAFC] px-3 py-2 text-xs text-[#64748B] dark:bg-neutral-950/60 dark:text-neutral-400">
+                                Dashboard, reportes, listas, stock y compras muestran esta sucursal.
+                            </p>
                         </div>
                     </div>
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, Package, ScanBarcode, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
@@ -8,6 +8,8 @@ import { puedeEscanear } from '@/composables/escaner'
 
 const props = defineProps({
     origen: { type: Object, default: null },
+    // viendo "todas las sucursales": se elige aquí desde cuál sale (recarga con ?origen=)
+    origenes: { type: Array, default: () => [] },
     destinos: { type: Array, required: true },
     productos: { type: Array, required: true },
 })
@@ -15,6 +17,7 @@ const props = defineProps({
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
 
 const form = useForm({
+    sucursal_origen_id: props.origen?.id ?? null,
     sucursal_destino_id: props.destinos[0]?.id ?? '',
     observacion: '',
     items: [],
@@ -135,8 +138,18 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
                     <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
                         <div class="flex-1">
-                            <label :class="claseLabel">Desde</label>
-                            <div class="flex h-10 items-center rounded-xl border border-stone-200 bg-stone-100 px-3 text-sm font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300">
+                            <label :class="claseLabel" for="origen">Desde</label>
+                            <select
+                                v-if="origenes.length > 1"
+                                id="origen"
+                                :value="origen?.id"
+                                :class="claseInput"
+                                data-transferencia-origen
+                                @change="router.get('/transferencias/crear', { origen: $event.target.value })"
+                            >
+                                <option v-for="o in origenes" :key="o.id" :value="o.id">{{ o.nombre }}</option>
+                            </select>
+                            <div v-else class="flex h-10 items-center rounded-xl border border-stone-200 bg-stone-100 px-3 text-sm font-medium text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300">
                                 {{ origen?.nombre ?? '—' }}
                             </div>
                         </div>

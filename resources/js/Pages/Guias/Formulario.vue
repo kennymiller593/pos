@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import {
     Building2, Bus, CarFront, ChevronRight, Info, LoaderCircle, MapPin, Minus, Navigation, Package, Plus, ScanBarcode, Search, Trash2, TriangleAlert,
@@ -17,6 +17,8 @@ const props = defineProps({
     productos: { type: Array, required: true },
     // sucursal desde la que sale la mercadería: { id, nombre, direccion, lugar, completa }
     partida: { type: Object, default: null },
+    // viendo "todas las sucursales" y sin origen fijo: se elige aquí la partida (recarga con ?partida=)
+    partidas: { type: Array, default: () => [] },
     sucursales: { type: Array, default: () => [] },
     tiposDocumento: { type: Array, default: () => [] },
     // [{ codigo, nombre }] del catálogo 20 de SUNAT
@@ -37,6 +39,7 @@ function fechaLocal() {
 }
 
 const form = useForm({
+    sucursal_partida_id: props.partida?.id ?? null,
     motivo_codigo: props.inicial?.motivo_codigo ?? '01',
     motivo_descripcion: '',
     fecha_traslado: fechaLocal(),
@@ -64,6 +67,12 @@ const form = useForm({
 })
 
 const entreLocales = computed(() => form.motivo_codigo === '04')
+
+// cambiar la partida recarga el formulario conservando el origen (venta o transferencia) de la URL
+function cambiarPartida(id) {
+    const consulta = Object.fromEntries(new URLSearchParams(window.location.search))
+    router.get('/guias/crear', { ...consulta, partida: id })
+}
 const destinos = computed(() => props.sucursales.filter((s) => s.id !== props.partida?.id))
 const destinoElegido = computed(() => props.sucursales.find((s) => s.id === form.sucursal_destino_id) ?? null)
 
@@ -526,7 +535,18 @@ const claseChip =
                                         </p>
                                     </div>
                                 </div>
-                                <p class="mt-1 text-xs text-[#94A3B8]">La sucursal se cambia con el selector de la barra superior.</p>
+                                <label v-if="partidas.length > 1" class="mt-2 flex items-center gap-2 text-xs text-[#64748B] dark:text-neutral-400">
+                                    <span class="shrink-0">Salir desde:</span>
+                                    <select
+                                        :value="partida?.id"
+                                        class="h-9 min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-2 text-sm text-[#0F172A] focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+                                        data-guia-partida
+                                        @change="cambiarPartida($event.target.value)"
+                                    >
+                                        <option v-for="s in partidas" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                                    </select>
+                                </label>
+                                <p v-else class="mt-1 text-xs text-[#94A3B8]">La sucursal se cambia con el selector de la barra superior.</p>
                             </div>
 
                             <!-- Llegada entre locales -->

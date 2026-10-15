@@ -5,6 +5,7 @@ import { Ban, Barcode, CalendarDays, Download, Eye, Plus, Truck, X } from '@luci
 import AppLayout from '@/Layouts/AppLayout.vue'
 import SelectorBuscable from '@/Components/SelectorBuscable.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 const props = defineProps({
     compras: { type: Object, required: true },
@@ -15,6 +16,7 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const { multisucursal } = useSucursales()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T00:00:00`) : null)?.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -116,6 +118,7 @@ function anular() {
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Fecha</th>
+                            <th v-if="multisucursal" class="px-4 py-3.5 font-semibold tracking-wider">Sucursal</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Proveedor</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Documento</th>
                             <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Ítems</th>
@@ -127,7 +130,7 @@ function anular() {
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!compras.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="multisucursal ? 9 : 8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <Truck class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     <template v-if="hayFiltros">
@@ -151,6 +154,7 @@ function anular() {
                             @click="compraVer = c"
                         >
                             <td class="px-4 py-3 whitespace-nowrap">{{ fecha(c.fecha) }}</td>
+                            <td v-if="multisucursal" class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ c.sucursal?.nombre ?? '—' }}</td>
                             <td class="px-4 py-3">
                                 <span class="font-medium">{{ c.proveedor?.razon_social ?? 'Sin proveedor' }}</span>
                                 <span

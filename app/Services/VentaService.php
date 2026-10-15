@@ -700,6 +700,35 @@ class VentaService
     }
 
     /**
+     * Series iniciales de una sucursal nueva (nota de venta, boleta, factura y guía) con el
+     * siguiente número libre, para que el admin las vea y pueda cambiarlas antes de la primera venta.
+     */
+    public function crearSeriesIniciales(string $empresaId, string $sucursalId): void
+    {
+        foreach (array_keys(self::SERIES_POR_DEFECTO) as $tipo) {
+            Cache::lock("serie:{$empresaId}:{$tipo}", 10)->block(5, function () use ($empresaId, $sucursalId, $tipo) {
+                DB::transaction(function () use ($empresaId, $sucursalId, $tipo) {
+                    $existe = SerieCorrelativo::query()
+                        ->where('empresa_id', $empresaId)
+                        ->where('sucursal_id', $sucursalId)
+                        ->where('tipo_comprobante_codigo', $tipo)
+                        ->whereNull('caja_id')
+                        ->exists();
+                    if (! $existe) {
+                        SerieCorrelativo::create([
+                            'empresa_id' => $empresaId,
+                            'sucursal_id' => $sucursalId,
+                            'tipo_comprobante_codigo' => $tipo,
+                            'serie' => $this->siguienteSerieLibre($empresaId, $tipo),
+                            'correlativo' => 0,
+                        ]);
+                    }
+                });
+            });
+        }
+    }
+
+    /**
      * La serie es unica por empresa, asi que cada sucursal recibe la siguiente
      * libre del mismo prefijo: B001 (principal), B002 (segunda sucursal), etc.
      */

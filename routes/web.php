@@ -17,11 +17,11 @@ use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Http\Controllers\CajaController;
-use App\Http\Controllers\ChatsTiendaController;
-use App\Http\Controllers\CobroQrController;
 use App\Http\Controllers\CatalogoController;
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\ChatsTiendaController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\CobroQrController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\ComprobanteController;
 use App\Http\Controllers\ConsultaController;
@@ -61,23 +61,23 @@ use Illuminate\Support\Facades\Route;
 // (un buscador o un pico de visitas no abre sesiones ni toca nada del sistema).
 if (Tienda::dominio()) {
     $rutasDeTienda = function () {
-            Route::get('/', [TiendaController::class, 'inicio'])->name('inicio');
-            Route::get('/categoria/{categoria}', [TiendaController::class, 'categoria'])->where('categoria', '[a-z0-9-]+')->name('categoria');
-            Route::get('/catalogo', [TiendaController::class, 'catalogo'])->name('catalogo');
-            // sugerencias del buscador mientras se escribe
-            Route::get('/buscar', [TiendaController::class, 'buscar'])->name('buscar');
-            Route::get('/catalogo/{ref}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
-            // enlaces de antes (/producto/urea-46-x-50-kg y /producto/P0006/urea-46-x-50-kg): se redirigen
-            Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'productoAntiguo'])->where('ref', '[A-Za-z0-9_-]+');
-            // páginas de texto que escribe el dueño (existen solo si las llenó)
-            foreach (TiendaController::PAGINAS as $ruta => $pagina) {
-                Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
-            }
-            Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
-            Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
-            // chatbot de la tienda (sin sesión; el límite por IP evita que un visitante consuma el tope de la empresa)
-            Route::post('/asistente', [AsistenteTiendaController::class, 'enviar'])->middleware('throttle:12,1,bot-enviar')->name('asistente');
-            Route::get('/asistente/mensajes', [AsistenteTiendaController::class, 'mensajes'])->middleware('throttle:60,1,bot-sondeo')->name('asistente.mensajes');
+        Route::get('/', [TiendaController::class, 'inicio'])->name('inicio');
+        Route::get('/categoria/{categoria}', [TiendaController::class, 'categoria'])->where('categoria', '[a-z0-9-]+')->name('categoria');
+        Route::get('/catalogo', [TiendaController::class, 'catalogo'])->name('catalogo');
+        // sugerencias del buscador mientras se escribe
+        Route::get('/buscar', [TiendaController::class, 'buscar'])->name('buscar');
+        Route::get('/catalogo/{ref}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
+        // enlaces de antes (/producto/urea-46-x-50-kg y /producto/P0006/urea-46-x-50-kg): se redirigen
+        Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'productoAntiguo'])->where('ref', '[A-Za-z0-9_-]+');
+        // páginas de texto que escribe el dueño (existen solo si las llenó)
+        foreach (TiendaController::PAGINAS as $ruta => $pagina) {
+            Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
+        }
+        Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
+        Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
+        // chatbot de la tienda (sin sesión; el límite por IP evita que un visitante consuma el tope de la empresa)
+        Route::post('/asistente', [AsistenteTiendaController::class, 'enviar'])->middleware('throttle:12,1,bot-enviar')->name('asistente');
+        Route::get('/asistente/mensajes', [AsistenteTiendaController::class, 'mensajes'])->middleware('throttle:60,1,bot-sondeo')->name('asistente.mensajes');
     };
     $middlewareDeTienda = [CabecerasTienda::class, 'throttle:180,1', ResolverTienda::class];
 
@@ -278,17 +278,17 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:pos.vender')->group(function () {
         Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
 
-    // asistente de IA (adicional: solo si la plataforma activó un agente para la empresa)
-    Route::get('/asistente/consultas', [AsistenteController::class, 'index'])->name('asistente.consultas');
-    Route::post('/asistente/mensajes', [AsistenteController::class, 'enviar'])->middleware('throttle:30,1,asistente-enviar')->name('asistente.enviar');
-    Route::delete('/asistente/conversaciones/{conversacion}', [AsistenteController::class, 'eliminar'])->name('asistente.eliminar');
-    // chats que dejan los clientes en la tienda: leerlos, tomar la conversación y responder
-    Route::get('/asistente/tienda', [ChatsTiendaController::class, 'index'])->name('asistente.tienda');
-    Route::get('/asistente/tienda/{conversacion}/mensajes', [ChatsTiendaController::class, 'mensajes'])->name('asistente.tienda.mensajes');
-    Route::post('/asistente/tienda/{conversacion}/tomar', [ChatsTiendaController::class, 'tomar'])->name('asistente.tienda.tomar');
-    Route::post('/asistente/tienda/{conversacion}/devolver', [ChatsTiendaController::class, 'devolver'])->name('asistente.tienda.devolver');
-    Route::post('/asistente/tienda/{conversacion}/responder', [ChatsTiendaController::class, 'responder'])->middleware('throttle:60,1,chats-responder')->name('asistente.tienda.responder');
-    Route::delete('/asistente/tienda/{conversacion}', [ChatsTiendaController::class, 'eliminar'])->name('asistente.tienda.eliminar');
+        // asistente de IA (adicional: solo si la plataforma activó un agente para la empresa)
+        Route::get('/asistente/consultas', [AsistenteController::class, 'index'])->name('asistente.consultas');
+        Route::post('/asistente/mensajes', [AsistenteController::class, 'enviar'])->middleware('throttle:30,1,asistente-enviar')->name('asistente.enviar');
+        Route::delete('/asistente/conversaciones/{conversacion}', [AsistenteController::class, 'eliminar'])->name('asistente.eliminar');
+        // chats que dejan los clientes en la tienda: leerlos, tomar la conversación y responder
+        Route::get('/asistente/tienda', [ChatsTiendaController::class, 'index'])->name('asistente.tienda');
+        Route::get('/asistente/tienda/{conversacion}/mensajes', [ChatsTiendaController::class, 'mensajes'])->name('asistente.tienda.mensajes');
+        Route::post('/asistente/tienda/{conversacion}/tomar', [ChatsTiendaController::class, 'tomar'])->name('asistente.tienda.tomar');
+        Route::post('/asistente/tienda/{conversacion}/devolver', [ChatsTiendaController::class, 'devolver'])->name('asistente.tienda.devolver');
+        Route::post('/asistente/tienda/{conversacion}/responder', [ChatsTiendaController::class, 'responder'])->middleware('throttle:60,1,chats-responder')->name('asistente.tienda.responder');
+        Route::delete('/asistente/tienda/{conversacion}', [ChatsTiendaController::class, 'eliminar'])->name('asistente.tienda.eliminar');
         Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
         Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
         Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
@@ -393,7 +393,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware('can:transferencias.gestionar')->group(function () {
         Route::get('/transferencias/crear', [TransferenciaController::class, 'crear'])->name('transferencias.crear');
         Route::post('/transferencias', [TransferenciaController::class, 'store'])->name('transferencias.store');
-        Route::post('/transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir'])->name('transferencias.recibir');
     });
+    Route::post('/transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir'])->middleware('can:transferencias.recibir')->name('transferencias.recibir');
     Route::post('/transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular'])->middleware('can:transferencias.anular')->name('transferencias.anular');
 });

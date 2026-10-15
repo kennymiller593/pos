@@ -6,7 +6,9 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\Caja;
 use App\Models\SerieCorrelativo;
 use App\Models\Sucursal;
+use App\Models\Usuario;
 use App\Services\SuscripcionService;
+use App\Services\VentaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -25,14 +27,23 @@ class SucursalController extends Controller
                     'series' => fn ($q) => $q->orderBy('tipo_comprobante_codigo')->orderBy('serie')->with('caja:id,nombre'),
                     'ubigeoInfo',
                 ])
-                ->withCount('usuarios')
                 ->orderByDesc('activo')
                 ->orderBy('nombre')
-                ->get(),
+                ->get()
+                // usuarios que pueden trabajar en la sucursal: asignados a ella o sin restricción (todas)
+                ->each(fn (Sucursal $s) => $s->usuarios_count = Usuario::query()
+                    ->where('empresa_id', $s->empresa_id)
+                    ->where('activo', true)
+                    ->where('es_superadmin', false)
+                    ->where(fn ($q) => $q
+                        ->where('sucursal_id', $s->id)
+                        ->orWhereHas('sucursales', fn ($w) => $w->whereKey($s->id))
+                        ->orWhereDoesntHave('sucursales'))
+                    ->count()),
         ]);
     }
 
-    public function store(Request $request, SuscripcionService $suscripciones): RedirectResponse
+    public function store(Request $request, SuscripcionService $suscripciones, VentaService $ventas): RedirectResponse
     {
         $datos = $this->validar($request);
 
@@ -55,14 +66,26 @@ class SucursalController extends Controller
             'activo' => true,
         ]);
 
-        return back()->with('success', "Sucursal \"{$sucursal->nombre}\" creada con su Caja 1.");
+        // y sus series listas (NV02, B002, F002...) para revisarlas antes de la primera venta
+        $ventas->crearSeriesIniciales($sucursal->empresa_id, $sucursal->id);
+
+        return back()->with('success', "Sucursal \"{$sucursal->nombre}\" creada con su Caja 1 y sus series.");
     }
 
-    public function update(Request $request, Sucursal $sucursal): RedirectResponse
+    public function update(Request $request, Sucursal $sucursal, SuscripcionService $suscripciones): RedirectResponse
     {
         abort_unless($sucursal->empresa_id === $request->user()->empresa_id, 403);
 
         $datos = $this->validar($request, $sucursal);
+
+        // reactivar cuenta igual que crear para el límite del plan
+        if ($datos['activo'] && ! $sucursal->activo) {
+            try {
+                $suscripciones->verificarLimite($request->user()->empresa, 'sucursales');
+            } catch (ErrorDeNegocio $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        }
 
         if (! $datos['activo'] && $sucursal->activo) {
             $otrasActivas = Sucursal::query()
@@ -145,8 +168,7 @@ class SucursalController extends Controller
 
         $id = $datos['sucursal_id'] ?? null;
 
-        $permitidas = $request->user()->sucursalesPermitidas();
-        if ($id && $permitidas && ! in_array($id, $permitidas, true)) {
+        if ($id && ! $this->contextoSucursal($request)->esAccesible($id)) {
             abort(403);
         }
 

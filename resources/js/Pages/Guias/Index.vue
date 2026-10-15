@@ -5,6 +5,7 @@ import { watchDebounced } from '@vueuse/core'
 import { ArrowRight, Ban, Eye, FileCode2, FileDown, LoaderCircle, Navigation, Plus, RefreshCw, Search, ShieldCheck, TriangleAlert, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 const props = defineProps({
     guias: { type: Object, required: true },
@@ -13,6 +14,7 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const { multisucursal } = useSucursales()
 
 const fecha = (f) => (f ? new Date(`${String(f).slice(0, 10)}T00:00:00`) : null)?.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
@@ -155,6 +157,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Número</th>
+                            <th v-if="multisucursal" class="px-4 py-3.5 font-semibold tracking-wider">Sucursal</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Traslado</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Destinatario</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Motivo</th>
@@ -187,6 +190,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                                 <p class="font-mono text-xs font-semibold">{{ g.numero }}</p>
                                 <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fecha(g.fecha_emision) }}</p>
                             </td>
+                            <td v-if="multisucursal" class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ g.sucursal ?? '—' }}</td>
                             <td class="px-4 py-3 whitespace-nowrap">{{ fecha(g.fecha_traslado) }}</td>
                             <td class="px-4 py-3">
                                 <p class="font-medium">{{ g.destinatario_nombre }}</p>

@@ -36,6 +36,8 @@ class GuiaRemisionController extends Controller
 
         $guias = GuiaRemision::query()
             ->where('empresa_id', $request->user()->empresa_id)
+            // la sucursal elegida en el selector (null = todas las que puede ver)
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             ->with([
                 'detalles:id,guia_id,codigo,descripcion,unidad_codigo,cantidad,orden',
                 'usuario:id,nombre_completo',
@@ -124,7 +126,8 @@ class GuiaRemisionController extends Controller
         $inicial = $this->inicialDesdeOrigen($request);
 
         // la guia de una transferencia sale del local de origen de esa transferencia
-        $partidaId = $inicial['sucursal_partida_id'] ?? $this->sucursalDeTrabajo($request);
+        // viendo "todas" puede elegir la partida (?partida=); si no, la del selector o la predeterminada
+        $partidaId = $inicial['sucursal_partida_id'] ?? $this->sucursalElegida($request, 'partida');
         $partida = Sucursal::where('empresa_id', $empresa->id)->find($partidaId);
 
         $productos = Producto::query()
@@ -158,6 +161,10 @@ class GuiaRemisionController extends Controller
                 'lugar' => $this->lugar($partida->ubigeo),
                 'completa' => filled($partida->direccion) && filled(trim((string) $partida->ubigeo)),
             ] : null,
+            // viendo "todas" y sin origen fijo (venta o transferencia), la partida se elige en el formulario
+            'partidas' => $this->sucursalDeTrabajo($request) || isset($inicial['sucursal_partida_id'])
+                ? []
+                : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
             'sucursales' => Sucursal::where('empresa_id', $empresa->id)->where('activo', true)->orderBy('nombre')
                 ->get(['id', 'nombre', 'direccion', 'ubigeo'])
                 ->map(fn ($s) => [
@@ -246,8 +253,8 @@ class GuiaRemisionController extends Controller
             'items.*.cantidad.gt' => 'La cantidad debe ser mayor a 0.',
         ]);
 
-        // el punto de partida es la sucursal de trabajo; en una transferencia, su local de origen
-        $sucursalId = $this->sucursalDeTrabajo($request);
+        // el punto de partida es la sucursal elegida en el formulario (o la del selector); en una transferencia, su local de origen
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_partida_id');
         if ($entreLocales && filled($datos['transferencia_id'] ?? null)) {
             $sucursalId = Transferencia::where('empresa_id', $empresa->id)->whereKey($datos['transferencia_id'])->value('sucursal_origen_id') ?? $sucursalId;
         }
@@ -416,6 +423,8 @@ class GuiaRemisionController extends Controller
                 'origen' => 'Venta '.$venta->serie.'-'.str_pad((string) $venta->correlativo, 6, '0', STR_PAD_LEFT),
                 'motivo_codigo' => '01',
                 'comprobante_id' => $venta->id,
+                // la mercadería sale del local donde se hizo la venta
+                'sucursal_partida_id' => $venta->sucursal_id,
                 'cliente' => $cliente ? [
                     'id' => $cliente->id,
                     'nombre' => $cliente->nombre,

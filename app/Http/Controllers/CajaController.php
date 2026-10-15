@@ -41,6 +41,8 @@ class CajaController extends Controller
             ->where('empresa_id', $usuario->empresa_id)
             ->whereNotNull('cerrada_en')
             ->when(! $veTodas, fn ($q) => $q->where('usuario_id', $usuario->id))
+            // la sucursal elegida en el selector (null = todas las que puede ver)
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereHas('caja', fn ($c) => $c->whereIn('sucursal_id', $ids)))
             ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo', 'cierresMedios.medioPago:codigo,nombre'])
             ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
@@ -149,6 +151,9 @@ class CajaController extends Controller
             // la BD garantiza una apertura por caja y una por usuario aunque lleguen dos clics a la vez
             return back()->with('error', 'Esa caja (o tu usuario) ya tiene un turno abierto.');
         }
+
+        // al abrir caja se pasa a ver esa sucursal: lo que vende y lo que consulta coinciden
+        $request->session()->put('sucursal_activa_id', $caja->sucursal_id);
 
         return back()->with('success', "Caja {$caja->nombre} abierta.");
     }

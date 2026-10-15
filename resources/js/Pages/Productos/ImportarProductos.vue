@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
+import { useSucursales } from '@/composables/sucursales'
 import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Upload, X, XCircle } from '@lucide/vue'
 
 const props = defineProps({
@@ -8,6 +9,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['cerrar'])
+
+// viendo "todas las sucursales": se elige aquí a cuál entra el stock inicial
+const { viendoTodas, accesibles } = useSucursales()
+const sucursalId = ref(accesibles.value[0]?.id ?? '')
 
 // ---- estado ----
 const paso = ref(1)
@@ -134,7 +139,7 @@ function importar() {
     if (!aImportar.value || importando.value) return
     router.post(
         '/productos/importar',
-        { token: resultado.value.token },
+        { token: resultado.value.token, sucursal_id: viendoTodas.value ? sucursalId.value : undefined },
         {
             preserveScroll: true,
             onStart: () => (importando.value = true),
@@ -417,6 +422,12 @@ const textoEstado = { ok: 'OK', advertencia: 'Advertencia', error: 'Error' }
                         </div>
 
                         <div class="flex flex-col-reverse gap-2 border-t border-stone-200 px-4 py-4 sm:flex-row sm:justify-end sm:px-6 dark:border-neutral-800">
+                            <label v-if="viendoTodas" class="flex items-center gap-2 text-sm sm:mr-auto">
+                                <span class="shrink-0 text-neutral-500 dark:text-neutral-400">Stock a:</span>
+                                <select v-model="sucursalId" class="h-9 rounded-xl border border-stone-300 bg-white px-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950" data-importar-sucursal>
+                                    <option v-for="s in accesibles" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                                </select>
+                            </label>
                             <button
                                 type="button"
                                 :disabled="importando"

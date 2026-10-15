@@ -7,7 +7,7 @@ use App\Models\CapaCosto;
 use App\Models\Lote;
 use App\Models\MovimientoInventario;
 use App\Models\Producto;
-use App\Models\Sucursal;
+use App\Models\Stock;
 use App\Services\InventarioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,18 +23,22 @@ class StockController extends Controller
     public function index(Request $request): Response
     {
         $empresaId = $request->user()->empresa_id;
-        $sucursalId = $this->sucursalDelUsuario($request);
+        $contexto = $this->contextoSucursal($request);
+        $sucursalId = $this->sucursalDeTrabajo($request);
+        // la sucursal elegida o, viendo "todas", cada una de las suyas: el stock sale por columna y sumado
+        $ids = $sucursalId ? [$sucursalId] : $contexto->accesibles->pluck('id')->all();
+        $marcas = implode(',', array_fill(0, max(1, count($ids)), '?'));
         $filtros = $request->only(['buscar', 'bajos', 'vencen']);
 
         $capasPorVencer = fn ($q) => $q
-            ->where('sucursal_id', $sucursalId)
+            ->whereIn('sucursal_id', $ids)
             ->where('cantidad_restante', '>', 0)
             ->whereHas('lote', fn ($l) => $l
                 ->whereNotNull('fecha_vencimiento')
                 ->where('fecha_vencimiento', '<=', now()->addDays(30)->toDateString()));
 
-        $condicionBajo = 'COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id = ?), 0) <= 0'
-            .' or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id = ?), 0) <= stock_minimo)';
+        $condicionBajo = "COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id in ({$marcas})), 0) <= 0"
+            ." or (stock_minimo > 0 and COALESCE((select sum(s.cantidad) from stock s where s.producto_id = productos.id and s.sucursal_id in ({$marcas})), 0) <= stock_minimo)";
 
         $productos = Producto::query()
             ->where('empresa_id', $empresaId)
@@ -42,25 +46,40 @@ class StockController extends Controller
             ->where('controla_stock', true)
             ->when($filtros['vencen'] ?? null, fn ($q) => $q->whereHas('capasCosto', $capasPorVencer))
             ->with(['categoria:id,nombre', 'unidadBase:codigo,nombre'])
-            ->withSum(['stock as stock' => fn ($q) => $q->where('sucursal_id', $sucursalId)], 'cantidad')
+            ->withSum(['stock as stock' => fn ($q) => $q->whereIn('sucursal_id', $ids)], 'cantidad')
             ->addSelect(['valor_inventario' => CapaCosto::query()
                 ->selectRaw('COALESCE(SUM(cantidad_restante * costo_unitario), 0)')
                 ->whereColumn('producto_id', 'productos.id')
-                ->where('sucursal_id', $sucursalId)
+                ->whereIn('sucursal_id', $ids)
                 ->where('cantidad_restante', '>', 0),
             ])
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where(fn ($w) => $w
                 ->where('nombre', 'ilike', "%{$buscar}%")
                 ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
-            ->when($filtros['bajos'] ?? null, fn ($q) => $q->whereRaw("({$condicionBajo})", [$sucursalId, $sucursalId]))
+            ->when($filtros['bajos'] ?? null, fn ($q) => $q->whereRaw("({$condicionBajo})", [...$ids, ...$ids]))
             ->orderBy('nombre')
             ->paginate(15)
             ->withQueryString();
 
+        // viendo varias sucursales: cuánto hay en cada una (columna por sucursal)
+        if (count($ids) > 1) {
+            $porSucursal = Stock::query()
+                ->whereIn('producto_id', $productos->getCollection()->pluck('id'))
+                ->whereIn('sucursal_id', $ids)
+                ->get(['producto_id', 'sucursal_id', 'cantidad'])
+                ->groupBy('producto_id');
+            $productos->through(function ($producto) use ($porSucursal) {
+                $producto->por_sucursal = ($porSucursal[$producto->id] ?? collect())
+                    ->mapWithKeys(fn ($s) => [$s->sucursal_id => (float) $s->cantidad]);
+
+                return $producto;
+            });
+        }
+
         $resumen = [
             'valor_total' => (float) CapaCosto::query()
                 ->where('empresa_id', $empresaId)
-                ->where('sucursal_id', $sucursalId)
+                ->whereIn('sucursal_id', $ids)
                 ->where('cantidad_restante', '>', 0)
                 ->selectRaw('COALESCE(SUM(cantidad_restante * costo_unitario), 0) as valor')
                 ->value('valor'),
@@ -68,7 +87,7 @@ class StockController extends Controller
                 ->where('empresa_id', $empresaId)
                 ->where('activo', true)
                 ->where('controla_stock', true)
-                ->whereRaw("({$condicionBajo})", [$sucursalId, $sucursalId])
+                ->whereRaw("({$condicionBajo})", [...$ids, ...$ids])
                 ->count(),
             'productos' => Producto::query()
                 ->where('empresa_id', $empresaId)
@@ -97,7 +116,9 @@ class StockController extends Controller
             'productos' => $productos,
             'filtros' => $filtros,
             'resumen' => $resumen,
-            'sucursal' => Sucursal::find($sucursalId)?->nombre,
+            'sucursal' => $contexto->nombreDe($sucursalId),
+            // [{ id, nombre }] cuando se ven varias: una columna por sucursal y selector en ajustes y kardex
+            'sucursales' => count($ids) > 1 ? $contexto->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values() : [],
         ]);
     }
 
@@ -105,7 +126,8 @@ class StockController extends Controller
     {
         abort_unless($producto->empresa_id === $request->user()->empresa_id, 403);
 
-        $sucursalId = $this->sucursalDelUsuario($request);
+        // ?sucursal_id= viendo "todas"; si no, la del selector
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
 
         $lotes = Lote::query()
             ->where('producto_id', $producto->id)
@@ -169,7 +191,8 @@ class StockController extends Controller
             return back()->with('error', 'Este producto no permite cantidades fraccionadas.');
         }
 
-        $sucursalId = $this->sucursalDelUsuario($request);
+        // la sucursal elegida en el modal (viendo "todas") o la del selector
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
         $cantidad = round((float) $datos['cantidad'], 3);
 
         if ($datos['direccion'] === 'salida') {
@@ -235,10 +258,5 @@ class StockController extends Controller
         return back()->with('success', $datos['direccion'] === 'entrada'
             ? 'Entrada registrada. Stock actualizado.'
             : 'Salida registrada. Stock actualizado.');
-    }
-
-    private function sucursalDelUsuario(Request $request): ?string
-    {
-        return $this->sucursalDeTrabajo($request);
     }
 }

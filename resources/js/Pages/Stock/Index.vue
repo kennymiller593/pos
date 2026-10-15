@@ -22,7 +22,10 @@ const props = defineProps({
     filtros: { type: Object, default: () => ({}) },
     resumen: { type: Object, required: true },
     sucursal: { type: String, default: null },
+    // viendo varias sucursales: [{ id, nombre }] para la columna de cada una
+    sucursales: { type: Array, default: () => [] },
 })
+const comparado = computed(() => props.sucursales.length > 1)
 
 const { puede } = usePermisos()
 // sin permiso de costos el backend manda valor_total = null (y valor_inventario = null por producto)
@@ -75,12 +78,16 @@ const kardexProducto = ref(null)
 const kardexDatos = ref({ lotes: [], movimientos: [] })
 const cargandoKardex = ref(false)
 
+// viendo varias sucursales, el kardex es de una: se elige en el modal
+const kardexSucursal = ref(props.sucursales[0]?.id ?? '')
+
 async function verKardex(producto) {
     kardexProducto.value = producto
     kardexDatos.value = { lotes: [], movimientos: [] }
     cargandoKardex.value = true
     try {
-        const r = await fetch(`/stock/${producto.id}/kardex`, { headers: { Accept: 'application/json' } })
+        const consulta = comparado.value ? `?sucursal_id=${kardexSucursal.value}` : ''
+        const r = await fetch(`/stock/${producto.id}/kardex${consulta}`, { headers: { Accept: 'application/json' } })
         if (r.ok) kardexDatos.value = await r.json()
     } finally {
         cargandoKardex.value = false
@@ -106,6 +113,7 @@ function fechaHora(iso) {
 // ---- ajuste ----
 const ajusteProducto = ref(null)
 const formAjuste = useForm({
+    sucursal_id: props.sucursales[0]?.id ?? null,
     direccion: 'entrada',
     cantidad: '',
     costo_unitario: '',
@@ -117,7 +125,12 @@ function abrirAjuste(producto) {
     ajusteProducto.value = producto
     formAjuste.clearErrors()
     formAjuste.reset()
+    formAjuste.sucursal_id = comparado.value ? (formAjuste.sucursal_id || props.sucursales[0]?.id) : null
 }
+// stock actual del producto en la sucursal del ajuste
+const stockActualAjuste = computed(() => (comparado.value
+    ? (ajusteProducto.value?.por_sucursal?.[formAjuste.sucursal_id] ?? 0)
+    : (ajusteProducto.value?.stock ?? 0)))
 
 function guardarAjuste() {
     formAjuste.transform((data) => ({
@@ -147,7 +160,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <Boxes class="size-4 text-neutral-400" />
                 </div>
                 <p class="mt-2 text-xl font-bold tracking-tight">{{ resumen.productos }}</p>
-                <p v-if="sucursal" class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">Sucursal {{ sucursal }}</p>
+                <p class="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">{{ sucursal ? `Sucursal ${sucursal}` : (comparado ? 'Todas tus sucursales' : '') }}</p>
             </div>
             <div v-if="verCostos" class="rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex items-center justify-between">
@@ -212,7 +225,10 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <tr>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Producto</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Categoría</th>
-                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Stock</th>
+                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">{{ comparado ? 'Stock total' : 'Stock' }}</th>
+                            <template v-if="comparado">
+                                <th v-for="s in sucursales" :key="s.id" class="px-4 py-3.5 text-right font-semibold tracking-wider whitespace-nowrap" :title="`Stock en ${s.nombre}`">{{ s.nombre }}</th>
+                            </template>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Mínimo</th>
                             <template v-if="verCostos">
                                 <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Costo prom.</th>
@@ -224,7 +240,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!productos.data.length">
-                            <td :colspan="verCostos ? 8 : 6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="(verCostos ? 8 : 6) + (comparado ? sucursales.length : 0)" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <Boxes class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                 {{ soloBajos ? 'Nada con stock bajo. ¡Buen inventario!' : 'No hay productos que controlen stock.' }}
                             </td>
@@ -247,6 +263,11 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 {{ cantidad(p.stock) }}
                                 <span class="text-xs font-normal text-neutral-400">{{ p.unidad_base?.nombre ?? '' }}</span>
                             </td>
+                            <template v-if="comparado">
+                                <td v-for="s in sucursales" :key="s.id" class="px-4 py-3 text-right text-neutral-600 tabular-nums dark:text-neutral-300" data-stock-sucursal>
+                                    {{ cantidad(p.por_sucursal?.[s.id] ?? 0) }}
+                                </td>
+                            </template>
                             <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ cantidad(p.stock_minimo) }}</td>
                             <template v-if="verCostos">
                                 <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">
@@ -322,7 +343,19 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     <div class="flex items-center justify-between border-b border-stone-200 px-6 py-4 dark:border-neutral-800">
                         <div>
                             <h3 class="font-semibold tracking-tight">Kardex · {{ kardexProducto.nombre }}</h3>
-                            <p class="text-xs text-neutral-500 dark:text-neutral-400">Últimos 30 movimientos</p>
+                            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                Últimos 30 movimientos<template v-if="sucursal"> · {{ sucursal }}</template>
+                            </p>
+                            <select
+                                v-if="comparado"
+                                v-model="kardexSucursal"
+                                class="mt-2 h-8 rounded-lg border border-stone-300 bg-white px-2 text-xs focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                aria-label="Sucursal del kardex"
+                                data-kardex-sucursal
+                                @change="verKardex(kardexProducto)"
+                            >
+                                <option v-for="s in sucursales" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                            </select>
                         </div>
                         <button
                             class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
@@ -404,7 +437,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 Ajustar stock<template v-if="sucursal"> · {{ sucursal }}</template>
                             </h3>
                             <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ ajusteProducto.nombre }} · actual: {{ cantidad(ajusteProducto.stock) }}
+                                {{ ajusteProducto.nombre }} · actual: {{ cantidad(stockActualAjuste) }}
                             </p>
                         </div>
                         <button
@@ -440,6 +473,13 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <ArrowDownCircle class="size-4" />
                                 Salida / merma
                             </button>
+                        </div>
+
+                        <div v-if="comparado">
+                            <label :class="claseLabel" for="aj_sucursal">Sucursal *</label>
+                            <select id="aj_sucursal" v-model="formAjuste.sucursal_id" :class="claseInput" data-ajuste-sucursal>
+                                <option v-for="s in sucursales" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                            </select>
                         </div>
 
                         <div>

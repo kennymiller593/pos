@@ -5,6 +5,7 @@ import { watchDebounced } from '@vueuse/core'
 import { AlertCircle, Banknote, HandCoins, Search, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 const props = defineProps({
     cuentas: { type: Object, required: true },
@@ -15,6 +16,7 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const { multisucursal } = useSucursales()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const numero = (c) => c.comprobante ? `${c.comprobante.serie}-${String(c.comprobante.correlativo).padStart(6, '0')}` : '—'
@@ -137,6 +139,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Cliente</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Venta</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Fecha</th>
+                            <th v-if="multisucursal" class="px-4 py-3.5 font-semibold tracking-wider">Sucursal</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Total</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Pagado</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Saldo</th>
@@ -146,7 +149,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!cuentas.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="multisucursal ? 9 : 8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <HandCoins class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay cuentas por cobrar. Las ventas al crédito del POS aparecerán aquí.
@@ -162,6 +165,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </td>
                             <td class="px-4 py-3 font-mono text-xs">{{ numero(c) }}</td>
                             <td class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ fecha(c.comprobante?.fecha_emision) }}</td>
+                            <td v-if="multisucursal" class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ c.comprobante?.sucursal?.nombre ?? '—' }}</td>
                             <td class="px-4 py-3 text-right">{{ soles(c.monto_total) }}</td>
                             <td class="px-4 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(c.monto_pagado) }}</td>
                             <td class="px-4 py-3 text-right font-semibold" :class="saldoDe(c) > 0 ? 'text-amber-600 dark:text-amber-400' : ''">

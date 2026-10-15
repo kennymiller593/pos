@@ -6,6 +6,7 @@ import { watchDebounced } from '@vueuse/core'
 import { AlertCircle, Banknote, CalendarClock, Search, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 const props = defineProps({
     cuentas: { type: Object, required: true },
@@ -16,6 +17,7 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const { multisucursal } = useSucursales()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const fecha = (f) => f ? new Date(`${String(f).slice(0, 10)}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -133,6 +135,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <tr>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Proveedor</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Compra</th>
+                            <th v-if="multisucursal" class="px-4 py-3.5 font-semibold tracking-wider">Sucursal</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Vence</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Total</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Pagado</th>
@@ -143,7 +146,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!cuentas.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="multisucursal ? 9 : 8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <Truck class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay deudas con proveedores. Las compras al crédito aparecerán aquí.
@@ -161,6 +164,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <p class="font-mono text-xs">{{ c.compra?.serie_numero ?? 'Sin comprobante' }}</p>
                                 <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fecha(c.compra?.fecha) }}</p>
                             </td>
+                            <td v-if="multisucursal" class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ c.compra?.sucursal?.nombre ?? '—' }}</td>
                             <td class="px-4 py-3 whitespace-nowrap">
                                 <span :class="estaVencida(c) ? 'font-semibold text-red-600 dark:text-red-400' : 'text-neutral-600 dark:text-neutral-300'">
                                     {{ fecha(c.fecha_vencimiento) }}

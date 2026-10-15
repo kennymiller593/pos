@@ -3,11 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Http\Controllers\Auth\VerificacionCorreoController;
-use App\Models\AperturaCaja;
-use App\Models\Sucursal;
 use App\Services\IA\AsistenteIaService;
 use App\Services\ImpersonacionService;
 use App\Services\SuscripcionService;
+use App\Support\ContextoSucursal;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -62,28 +61,8 @@ class HandleInertiaRequests extends Middleware
 
                     $usuario->loadMissing(['empresa', 'sucursal', 'rol']);
 
-                    // sucursal en la que esta operando: la de su caja abierta,
-                    // o su sucursal predeterminada si aun no abre caja
-                    $aperturaAbierta = AperturaCaja::query()
-                        ->where('usuario_id', $usuario->id)
-                        ->whereNull('cerrada_en')
-                        ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre'])
-                        ->latest('abierta_en')
-                        ->first();
-
-                    // selector superior: sucursales a las que puede entrar y la elegida en sesion
-                    $permitidas = $usuario->sucursalesPermitidas();
-                    $accesibles = Sucursal::query()
-                        ->where('empresa_id', $usuario->empresa_id)
-                        ->where('activo', true)
-                        ->when($permitidas, fn ($q) => $q->whereIn('id', $permitidas))
-                        ->orderBy('nombre')
-                        ->get(['id', 'nombre']);
-
-                    $consultaId = $request->session()->get('sucursal_activa_id');
-                    if ($consultaId && ! $accesibles->contains('id', $consultaId)) {
-                        $consultaId = null;
-                    }
+                    // sucursal actual (selector de la barra superior): una sola noción para todo el sistema
+                    $contexto = ContextoSucursal::de($request);
 
                     return [
                         'id' => $usuario->id,
@@ -104,21 +83,14 @@ class HandleInertiaRequests extends Middleware
                             'tienda_habilitada' => (bool) $usuario->empresa->tienda_habilitada,
                             // adicional de pago: decide si el menu muestra "Asistente"
                             'ia_habilitada' => app(AsistenteIaService::class)->tieneAgentes($usuario->empresa),
+                            // con más de una sucursal activa se muestran el selector y las columnas "Sucursal"
+                            'multisucursal' => $contexto->multisucursal,
                         ],
                         'sucursal' => $usuario->sucursal ? [
                             'id' => $usuario->sucursal->id,
                             'nombre' => $usuario->sucursal->nombre,
                         ] : null,
-                        'sucursal_activa' => $aperturaAbierta?->caja?->sucursal ? [
-                            'nombre' => $aperturaAbierta->caja->sucursal->nombre,
-                            'caja' => $aperturaAbierta->caja->nombre,
-                        ] : ($usuario->sucursal ? [
-                            'nombre' => $usuario->sucursal->nombre,
-                            'caja' => null,
-                        ] : null),
-                        'sucursales_accesibles' => $accesibles,
-                        'sucursal_consulta_id' => $consultaId,
-                        'puede_ver_todas' => $permitidas === null,
+                        ...$contexto->paraLayout(),
                         // estado del plan para el aviso de vencimiento en el layout
                         'suscripcion' => app(SuscripcionService::class)->resumen($usuario->empresa),
                         // aviso de "confirma tu correo" mientras dura la gracia

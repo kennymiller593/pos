@@ -18,7 +18,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -63,7 +62,8 @@ class ProductoController extends Controller
                 'unidadBase:codigo,nombre',
                 'presentaciones' => fn ($q) => $q->orderByDesc('es_default')->orderBy('nombre'),
             ])
-            ->withSum('stock as stock_total', 'cantidad')
+            // stock de la sucursal elegida en el selector (null = todas las que puede ver)
+            ->withSum(['stock as stock_total' => fn ($q) => $q->when($this->sucursalesConsulta($request), fn ($w, $ids) => $w->whereIn('sucursal_id', $ids))], 'cantidad')
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->where(fn ($w) => $w
                 ->where('nombre', 'ilike', "%{$buscar}%")
                 ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))

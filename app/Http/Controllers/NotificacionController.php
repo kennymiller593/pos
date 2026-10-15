@@ -21,10 +21,10 @@ class NotificacionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $empresaId = $request->user()->empresa_id;
-        $sucursalId = $this->sucursalConsultaId($request);
+        $sucursalIds = $this->sucursalesConsulta($request); // null = toda la empresa
 
-        $filtroSucursal = $sucursalId ? ' and s.sucursal_id = ?' : '';
-        $parametros = $sucursalId ? [$sucursalId, $sucursalId] : [];
+        $filtroSucursal = $sucursalIds ? ' and s.sucursal_id in ('.implode(',', array_fill(0, count($sucursalIds), '?')).')' : '';
+        $parametros = $sucursalIds ? [...$sucursalIds, ...$sucursalIds] : [];
 
         $stockBajo = Producto::query()
             ->where('empresa_id', $empresaId)
@@ -36,7 +36,7 @@ class NotificacionController extends Controller
 
         $lotesPorVencer = CapaCosto::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('cantidad_restante', '>', 0)
             ->whereHas('lote', fn ($l) => $l
                 ->whereNotNull('fecha_vencimiento')
@@ -126,7 +126,7 @@ class NotificacionController extends Controller
         // 24 h corren riesgo de vencer el plazo legal de envio; los rechazados exigen accion
         $sunat = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->whereIn('tipo_comprobante_codigo', ['01', '03', '07'])
             ->where('estado', 'emitido')
             ->where('creado_en', '<', now()->subDay())

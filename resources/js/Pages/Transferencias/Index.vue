@@ -5,12 +5,15 @@ import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Navigation,
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 defineProps({
     transferencias: { type: Object, required: true },
 })
 
 const { puede } = usePermisos()
+// recibir solo se ofrece a quien trabaja en la sucursal de destino
+const { esAccesible } = useSucursales()
 
 const { confirmar } = useConfirmar()
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
@@ -128,7 +131,7 @@ async function anular(t) {
                                             Guía
                                         </Link>
                                         <button
-                                            v-if="puede('transferencias.gestionar') && ['pendiente', 'en_transito'].includes(t.estado)"
+                                            v-if="puede('transferencias.recibir') && esAccesible(t.sucursal_destino_id) && ['pendiente', 'en_transito'].includes(t.estado)"
                                             class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                                             @click.stop="recibir(t)"
                                         >

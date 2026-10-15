@@ -22,11 +22,16 @@ class CuentaPorCobrarController extends Controller
         $empresaId = $request->user()->empresa_id;
         $filtros = $request->only(['buscar', 'estado']);
 
+        // la sucursal elegida en el selector (null = todas las que puede ver): la deuda es de la venta
+        $sucursalIds = $this->sucursalesConsulta($request);
+
         $cuentas = CuentaPorCobrar::query()
             ->where('empresa_id', $empresaId)
+            ->when($sucursalIds, fn ($q) => $q->whereHas('comprobante', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
             ->with([
                 'cliente:id,nombre,numero_documento,telefono',
-                'comprobante:id,serie,correlativo,fecha_emision',
+                'comprobante:id,serie,correlativo,fecha_emision,sucursal_id',
+                'comprobante.sucursal:id,nombre',
             ])
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->whereHas('cliente', fn ($c) => $c
                 ->where('nombre', 'ilike', "%{$buscar}%")

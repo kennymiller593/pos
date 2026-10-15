@@ -44,11 +44,11 @@ class ReportesNegocioService
     // Ventas
     // ---------------------------------------------------------------
 
-    public function porProducto(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function porProducto(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
 
-        $filas = $this->detalles($empresaId, $sucursalId, $desde, $hasta)
+        $filas = $this->detalles($empresaId, $sucursalIds, $desde, $hasta)
             ->join('productos', 'productos.id', '=', 'comprobante_detalles.producto_id')
             ->leftJoin('categorias', 'categorias.id', '=', 'productos.categoria_id')
             // la cantidad se lleva a la unidad base: una caja x12 cuenta como 12 unidades
@@ -92,12 +92,12 @@ class ReportesNegocioService
         ];
     }
 
-    public function porCategoria(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function porCategoria(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
         $costo = self::COSTO;
 
-        $filas = $this->detalles($empresaId, $sucursalId, $desde, $hasta)
+        $filas = $this->detalles($empresaId, $sucursalIds, $desde, $hasta)
             ->join('productos', 'productos.id', '=', 'comprobante_detalles.producto_id')
             ->leftJoin('categorias', 'categorias.id', '=', 'productos.categoria_id')
             ->groupBy('categorias.id', 'categorias.nombre')
@@ -138,11 +138,11 @@ class ReportesNegocioService
         ];
     }
 
-    public function porVendedor(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function porVendedor(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
 
-        $filas = $this->comprobantes($empresaId, $sucursalId, $desde, $hasta)
+        $filas = $this->comprobantes($empresaId, $sucursalIds, $desde, $hasta)
             ->join('usuarios', 'usuarios.id', '=', 'comprobantes.usuario_id')
             ->groupBy('usuarios.id', 'usuarios.nombre_completo')
             ->selectRaw('
@@ -154,7 +154,7 @@ class ReportesNegocioService
             ->orderByDesc('venta')
             ->get();
 
-        $utilidades = $this->detalles($empresaId, $sucursalId, $desde, $hasta)
+        $utilidades = $this->detalles($empresaId, $sucursalIds, $desde, $hasta)
             ->groupBy('comprobantes.usuario_id')
             ->selectRaw("comprobantes.usuario_id, SUM({$signo} * (comprobante_detalles.total - ".self::COSTO.')) as utilidad')
             ->pluck('utilidad', 'usuario_id');
@@ -185,11 +185,11 @@ class ReportesNegocioService
         ];
     }
 
-    public function porHora(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function porHora(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
 
-        $porHora = $this->comprobantes($empresaId, $sucursalId, $desde, $hasta)
+        $porHora = $this->comprobantes($empresaId, $sucursalIds, $desde, $hasta)
             ->groupByRaw('EXTRACT(hour FROM comprobantes.hora_emision)')
             ->selectRaw('
                 EXTRACT(hour FROM comprobantes.hora_emision)::int as hora,
@@ -238,11 +238,11 @@ class ReportesNegocioService
         ];
     }
 
-    public function porDiaSemana(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function porDiaSemana(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
 
-        $porDia = $this->comprobantes($empresaId, $sucursalId, $desde, $hasta)
+        $porDia = $this->comprobantes($empresaId, $sucursalIds, $desde, $hasta)
             ->groupByRaw('EXTRACT(isodow FROM comprobantes.fecha_emision)')
             ->selectRaw('
                 EXTRACT(isodow FROM comprobantes.fecha_emision)::int as dia,
@@ -297,7 +297,7 @@ class ReportesNegocioService
     // ---------------------------------------------------------------
 
     /** @param  string|null  $agrupar  dia, semana o mes; null = según el largo del rango */
-    public function utilidadPorPeriodo(string $empresaId, ?string $sucursalId, string $desde, string $hasta, ?string $agrupar = null): array
+    public function utilidadPorPeriodo(string $empresaId, ?array $sucursalIds, string $desde, string $hasta, ?string $agrupar = null): array
     {
         $agrupar = in_array($agrupar, ['dia', 'semana', 'mes'], true) ? $agrupar : $this->agrupacionSugerida($desde, $hasta);
         $signo = self::SIGNO;
@@ -308,7 +308,7 @@ class ReportesNegocioService
             default => 'comprobantes.fecha_emision',
         };
 
-        $filas = $this->detalles($empresaId, $sucursalId, $desde, $hasta)
+        $filas = $this->detalles($empresaId, $sucursalIds, $desde, $hasta)
             ->groupByRaw($periodo)
             ->selectRaw("
                 to_char({$periodo}, 'YYYY-MM-DD') as periodo,
@@ -374,11 +374,11 @@ class ReportesNegocioService
     // Clientes
     // ---------------------------------------------------------------
 
-    public function clientesQueMasCompran(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function clientesQueMasCompran(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;
 
-        $filas = $this->comprobantes($empresaId, $sucursalId, $desde, $hasta)
+        $filas = $this->comprobantes($empresaId, $sucursalIds, $desde, $hasta)
             ->leftJoin('clientes', 'clientes.id', '=', 'comprobantes.cliente_id')
             ->groupBy('comprobantes.cliente_id', 'clientes.nombre', 'clientes.numero_documento')
             ->selectRaw('
@@ -426,7 +426,7 @@ class ReportesNegocioService
      * Lo que deben los clientes hoy, según cuánto tiempo lleva cada deuda.
      * Las ventas a crédito no guardan fecha de vencimiento: la antigüedad se cuenta desde la venta.
      */
-    public function cobranzaPorAntiguedad(string $empresaId, ?string $sucursalId): array
+    public function cobranzaPorAntiguedad(string $empresaId, ?array $sucursalIds): array
     {
         $hoy = now()->startOfDay();
 
@@ -434,7 +434,7 @@ class ReportesNegocioService
             ->join('comprobantes', 'comprobantes.id', '=', 'cuentas_por_cobrar.comprobante_id')
             ->join('clientes', 'clientes.id', '=', 'cuentas_por_cobrar.cliente_id')
             ->where('cuentas_por_cobrar.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('cuentas_por_cobrar.estado', '!=', 'pagado')
             ->where('comprobantes.estado', 'emitido')
             ->selectRaw('
@@ -493,7 +493,7 @@ class ReportesNegocioService
     // ---------------------------------------------------------------
 
     /** Por dónde entró y salió el dinero en el rango: mismas partidas que el arqueo de caja. */
-    public function cajaPorMedioDePago(string $empresaId, ?string $sucursalId, string $desde, string $hasta): array
+    public function cajaPorMedioDePago(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $inicio = Carbon::parse($desde)->startOfDay();
         $fin = Carbon::parse($hasta)->endOfDay();
@@ -505,15 +505,15 @@ class ReportesNegocioService
             ->selectRaw("{$tabla}.medio_pago_codigo as medio, COALESCE(SUM({$tabla}.monto), 0) as total")
             ->pluck('total', 'medio');
 
-        // con una sucursal elegida: el pago sigue a su comprobante; lo demás, a la caja del turno
-        $porTurno = fn (Builder $consulta, string $tabla) => $consulta->when($sucursalId, fn ($q) => $q
+        // con sucursales elegidas: el pago sigue a su comprobante; lo demás, a la caja del turno
+        $porTurno = fn (Builder $consulta, string $tabla) => $consulta->when($sucursalIds, fn ($q) => $q
             ->join('aperturas_caja', 'aperturas_caja.id', '=', "{$tabla}.apertura_id")
             ->join('cajas', 'cajas.id', '=', 'aperturas_caja.caja_id')
-            ->where('cajas.sucursal_id', $sucursalId));
+            ->whereIn('cajas.sucursal_id', $sucursalIds));
 
-        $ventas = $sumar(Pago::query()->when($sucursalId, fn ($q) => $q
+        $ventas = $sumar(Pago::query()->when($sucursalIds, fn ($q) => $q
             ->join('comprobantes', 'comprobantes.id', '=', 'pagos.comprobante_id')
-            ->where('comprobantes.sucursal_id', $sucursalId)), 'pagos');
+            ->whereIn('comprobantes.sucursal_id', $sucursalIds)), 'pagos');
         $cobros = $sumar($porTurno(Cobro::query(), 'cobros'), 'cobros');
         $ingresos = $sumar($porTurno(MovimientoCaja::query()->where('movimientos_caja.tipo', 'ingreso'), 'movimientos_caja'), 'movimientos_caja');
         $egresos = $sumar($porTurno(MovimientoCaja::query()->where('movimientos_caja.tipo', 'egreso'), 'movimientos_caja'), 'movimientos_caja');
@@ -572,22 +572,22 @@ class ReportesNegocioService
     // ---------------------------------------------------------------
 
     /** Comprobantes emitidos (no anulados) del rango. */
-    private function comprobantes(string $empresaId, ?string $sucursalId, string $desde, string $hasta): Builder
+    private function comprobantes(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): Builder
     {
         return Comprobante::query()
             ->where('comprobantes.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('comprobantes.estado', 'emitido')
             ->whereBetween('comprobantes.fecha_emision', [$desde, $hasta]);
     }
 
     /** Líneas vendidas en el rango, unidas a su comprobante. */
-    private function detalles(string $empresaId, ?string $sucursalId, string $desde, string $hasta): Builder
+    private function detalles(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): Builder
     {
         return ComprobanteDetalle::query()
             ->join('comprobantes', 'comprobantes.id', '=', 'comprobante_detalles.comprobante_id')
             ->where('comprobantes.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('comprobantes.estado', 'emitido')
             ->whereBetween('comprobantes.fecha_emision', [$desde, $hasta]);
     }

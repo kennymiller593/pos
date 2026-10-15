@@ -46,11 +46,14 @@ class CompraController extends Controller
 
         $compras = Compra::query()
             ->where('empresa_id', $empresaId)
+            // la sucursal elegida en el selector (null = todas las que puede ver)
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
             ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('fecha', '<=', $hasta))
             ->when($filtros['proveedor'] ?? null, fn ($q, $proveedor) => $q->where('proveedor_id', $proveedor))
             ->with([
                 'proveedor' => fn ($q) => $q->withTrashed()->select('id', 'razon_social'),
+                'sucursal:id,nombre',
                 'usuario:id,nombre_completo',
                 'anuladaPor:id,nombre_completo',
                 'detalles:id,compra_id,producto_id,presentacion_id,cantidad,costo_unitario,total',
@@ -130,7 +133,9 @@ class CompraController extends Controller
                 ]),
             ]),
             'tiposComprobante' => TipoComprobante::whereIn('codigo', ['01', '03', '00'])->orderBy('codigo')->get(['codigo', 'nombre']),
-            'sucursalDestino' => Sucursal::find($this->sucursalDeTrabajo($request))?->nombre,
+            // sucursal que recibe la mercadería: la del selector; viendo "todas", se elige en el formulario
+            'sucursalDestino' => $this->contextoSucursal($request)->nombreDe($this->sucursalDeTrabajo($request)),
+            'sucursales' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
         ]);
     }
 
@@ -164,10 +169,11 @@ class CompraController extends Controller
             'items.*.costo_unitario.min' => 'El costo no puede ser negativo.',
         ]);
 
-        $sucursalId = $this->sucursalDeTrabajo($request);
+        // la sucursal que recibe: la elegida en el formulario (viendo "todas") o la del selector
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
 
         if (! $sucursalId) {
-            return back()->with('error', 'No tienes una sucursal asignada.');
+            return back()->with('error', 'Elige la sucursal que recibe la compra.');
         }
 
         // el mismo comprobante del proveedor no se registra dos veces

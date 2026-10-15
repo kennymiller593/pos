@@ -6,6 +6,7 @@ import { Ban, Copy, Eye, FileDown, FileText, Mail, MessageCircle, Pencil, Plus, 
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 
 const props = defineProps({
     cotizaciones: { type: Object, required: true },
@@ -14,6 +15,7 @@ const props = defineProps({
 })
 
 const { puede } = usePermisos()
+const { multisucursal } = useSucursales()
 const { confirmar } = useConfirmar()
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
@@ -150,6 +152,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                         <tr>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Número</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Fecha</th>
+                            <th v-if="multisucursal" class="px-4 py-3.5 font-semibold tracking-wider">Sucursal</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Cliente</th>
                             <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Total</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Válida hasta</th>
@@ -160,7 +163,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!cotizaciones.data.length">
-                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="multisucursal ? 9 : 8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <FileText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     <template v-if="hayFiltros()">No hay cotizaciones con esos filtros.</template>
@@ -182,6 +185,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                         >
                             <td class="px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap">{{ c.codigo }}</td>
                             <td class="px-4 py-3 whitespace-nowrap">{{ fecha(c.fecha_emision) }}</td>
+                            <td v-if="multisucursal" class="px-4 py-3 whitespace-nowrap text-neutral-600 dark:text-neutral-300">{{ c.sucursal ?? '—' }}</td>
                             <td class="px-4 py-3">
                                 <p class="font-medium">{{ c.cliente_nombre ?? 'Sin cliente' }}</p>
                                 <p v-if="c.cliente_numero_doc" class="text-xs text-neutral-500 dark:text-neutral-400">{{ c.cliente_numero_doc }}</p>

@@ -22,11 +22,16 @@ class CuentaPorPagarController extends Controller
         $empresaId = $request->user()->empresa_id;
         $filtros = $request->only(['buscar', 'estado']);
 
+        // la sucursal elegida en el selector (null = todas las que puede ver): la deuda es de la compra
+        $sucursalIds = $this->sucursalesConsulta($request);
+
         $cuentas = CuentaPorPagar::query()
             ->where('empresa_id', $empresaId)
+            ->when($sucursalIds, fn ($q) => $q->whereHas('compra', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
             ->with([
                 'proveedor:id,razon_social,ruc,telefono',
-                'compra:id,serie_numero,fecha',
+                'compra:id,serie_numero,fecha,sucursal_id',
+                'compra.sucursal:id,nombre',
             ])
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->whereHas('proveedor', fn ($p) => $p
                 ->where('razon_social', 'ilike', "%{$buscar}%")

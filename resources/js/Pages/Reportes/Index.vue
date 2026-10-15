@@ -15,6 +15,8 @@ const props = defineProps({
     productos: { type: Array, required: true },
     // [{ grupo, reportes: [{ valor, label, descripcion, sin_fechas?, producto?, agrupar? }] }]
     catalogo: { type: Array, required: true },
+    // kardex viendo "todas las sucursales": [{ id, nombre }] para elegir una
+    sucursalesKardex: { type: Array, default: () => [] },
 })
 
 const ICONOS = { Ventas: ShoppingCart, Ganancias: TrendingUp, Clientes: Users, Caja: Wallet, Inventario: Boxes, Contabilidad: BookOpenText }
@@ -23,6 +25,8 @@ const tipo = ref(props.filtros.tipo)
 const desde = ref(props.filtros.desde)
 const hasta = ref(props.filtros.hasta)
 const productoId = ref(props.filtros.producto_id ?? '')
+// kardex viendo "todas las sucursales": se elige aquí cuál
+const sucursalKardex = ref(props.filtros.sucursal_id ?? '')
 // día, semana o mes elegido a mano; vacío = lo decide el largo del rango
 const agruparElegido = ref('')
 
@@ -39,6 +43,7 @@ function parametros() {
         desde: desde.value,
         hasta: hasta.value,
         producto_id: reporte.value.producto ? (productoId.value || undefined) : undefined,
+        sucursal_id: reporte.value.producto && props.sucursalesKardex.length > 1 ? (sucursalKardex.value || undefined) : undefined,
         agrupar: reporte.value.agrupar ? (agruparElegido.value || undefined) : undefined,
     }
 }
@@ -47,7 +52,7 @@ function aplicar() {
     router.get('/reportes', parametros(), { preserveState: true, preserveScroll: true, replace: true })
 }
 
-watch([tipo, desde, hasta, productoId, agruparElegido], aplicar)
+watch([tipo, desde, hasta, productoId, sucursalKardex, agruparElegido], aplicar)
 
 // ---- rangos rápidos ----
 const iso = (fecha) => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
@@ -228,6 +233,9 @@ const claseInput =
                 <select v-if="reporte.producto" v-model="productoId" :class="[claseInput, 'max-w-72']" aria-label="Producto">
                     <option value="">Elige un producto...</option>
                     <option v-for="p in productos" :key="p.id" :value="p.id">{{ p.nombre }} ({{ p.codigo_interno }})</option>
+                </select>
+                <select v-if="reporte.producto && sucursalesKardex.length > 1" v-model="sucursalKardex" :class="claseInput" aria-label="Sucursal del kardex" data-kardex-sucursal>
+                    <option v-for="s in sucursalesKardex" :key="s.id" :value="s.id">{{ s.nombre }}</option>
                 </select>
 
                 <select

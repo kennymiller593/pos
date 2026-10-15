@@ -425,6 +425,8 @@ class SunatService
         $ubigeo = $codigo !== '' ? Ubigeo::find($codigo) : null;
 
         return (new Address)
+            // código del local (anexo) declarado en SUNAT: 0000 es el domicilio fiscal
+            ->setCodLocal(trim((string) ($sucursal?->codigo_sunat ?? '')) ?: '0000')
             ->setUbigueo($codigo ?: null)
             ->setDepartamento($ubigeo?->departamento)
             ->setProvincia($ubigeo?->provincia)

@@ -12,12 +12,15 @@ const props = defineProps({
     productos: { type: Array, required: true },
     tiposComprobante: { type: Array, required: true },
     sucursalDestino: { type: String, default: null },
+    // viendo "todas las sucursales": se elige aquí cuál recibe la compra
+    sucursales: { type: Array, default: () => [] },
 })
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 
 // ================= cabecera =================
 const form = useForm({
+    sucursal_id: props.sucursales[0]?.id ?? null,
     proveedor_id: null,
     tipo_comprobante_codigo: '',
     serie_numero: '',
@@ -822,7 +825,14 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                         </div>
 
                         <div class="mt-4 space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-[#475569] dark:bg-neutral-950/60 dark:text-neutral-300">
-                            <p v-if="sucursalDestino" class="flex items-center gap-2" title="La sucursal se cambia con el selector de la barra superior">
+                            <label v-if="sucursales.length" class="flex items-center gap-2">
+                                <MapPin class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span class="shrink-0">Ingresa a:</span>
+                                <select v-model="form.sucursal_id" class="h-8 min-w-0 flex-1 rounded-lg border border-[#E2E8F0] bg-white px-2 text-xs font-semibold focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900" data-compra-sucursal>
+                                    <option v-for="s in sucursales" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                                </select>
+                            </label>
+                            <p v-else-if="sucursalDestino" class="flex items-center gap-2" title="La sucursal se cambia con el selector de la barra superior">
                                 <MapPin class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                                 <span>Ingresa a: <strong>{{ sucursalDestino }}</strong></span>
                             </p>

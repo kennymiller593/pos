@@ -49,9 +49,10 @@ class ImportacionProductoController extends Controller
     {
         $datos = $request->validate(['token' => ['required', 'uuid']]);
 
-        $sucursalId = $this->sucursalDeTrabajo($request);
+        // el stock inicial entra a la sucursal elegida en el modal (viendo "todas") o a la del selector
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
         if (! $sucursalId) {
-            return back()->with('error', 'No tienes una sucursal asignada para cargar el stock.');
+            return back()->with('error', 'Elige la sucursal donde entra el stock.');
         }
 
         try {

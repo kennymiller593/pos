@@ -37,7 +37,10 @@ class CotizacionController extends Controller
 
         $cotizaciones = Cotizacion::query()
             ->where('empresa_id', $request->user()->empresa_id)
+            // la sucursal elegida en el selector (null = todas las que puede ver)
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             ->with([
+                'sucursal:id,nombre',
                 'detalles:id,cotizacion_id,descripcion,unidad_codigo,cantidad,precio_unitario,descuento,total,orden',
                 'usuario:id,nombre_completo',
                 'cliente' => fn ($q) => $q->withTrashed()->select('id', 'email', 'telefono'),
@@ -74,6 +77,7 @@ class CotizacionController extends Controller
                 'observaciones' => $c->observaciones,
                 'total' => (float) $c->total,
                 'vendedor' => $c->usuario?->nombre_completo,
+                'sucursal' => $c->sucursal?->nombre,
                 'comprobante' => $c->comprobante
                     ? "{$c->comprobante->serie}-".str_pad((string) $c->comprobante->correlativo, 6, '0', STR_PAD_LEFT)
                     : null,
@@ -222,7 +226,7 @@ class CotizacionController extends Controller
             $datos['items'] = array_map(fn ($i) => [...$i, 'precio_unitario' => null], $datos['items']);
         }
 
-        $sucursalId = $cotizacion?->sucursal_id ?? $this->sucursalDeTrabajo($request);
+        $sucursalId = $cotizacion?->sucursal_id ?? $this->sucursalDeTrabajo($request) ?? $this->sucursalPorDefecto($request);
 
         if (! $sucursalId) {
             return back()->with('error', 'No tienes una sucursal asignada.');

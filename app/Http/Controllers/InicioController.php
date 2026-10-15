@@ -19,7 +19,7 @@ class InicioController extends Controller
     public function index(Request $request): Response
     {
         $empresaId = $request->user()->empresa_id;
-        $sucursalId = $this->sucursalConsultaId($request); // null = todas
+        $sucursalIds = $this->sucursalesConsulta($request); // null = toda la empresa
         $hoy = now()->toDateString();
 
         // en todas las sumas de venta, las notas de credito restan (venta neta)
@@ -28,7 +28,7 @@ class InicioController extends Controller
         // ---- ventas de hoy ----
         $ventasHoy = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->whereDate('fecha_emision', $hoy)
             ->selectRaw("COALESCE(SUM({$neto}), 0) as total, COUNT(*) FILTER (WHERE tipo_comprobante_codigo <> '07') as tickets")
@@ -36,7 +36,7 @@ class InicioController extends Controller
 
         $totalAyer = (float) Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->whereDate('fecha_emision', now()->subDay()->toDateString())
             ->selectRaw("COALESCE(SUM({$neto}), 0) as total")
@@ -45,7 +45,7 @@ class InicioController extends Controller
         // ---- mes actual vs el mismo tramo del mes pasado ----
         $totalEnRango = fn (string $desde, string $hasta) => (float) Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->whereBetween('fecha_emision', [$desde, $hasta])
             ->selectRaw("COALESCE(SUM({$neto}), 0) as total")
@@ -64,7 +64,7 @@ class InicioController extends Controller
         $margenEnRango = fn (string $desde, string $hasta) => (float) ComprobanteDetalle::query()
             ->join('comprobantes', 'comprobantes.id', '=', 'comprobante_detalles.comprobante_id')
             ->where('comprobantes.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('comprobantes.estado', 'emitido')
             ->whereBetween('comprobantes.fecha_emision', [$desde, $hasta])
             ->selectRaw("COALESCE(SUM({$signo} * (comprobante_detalles.total - comprobante_detalles.costo_unitario * comprobante_detalles.cantidad)), 0) as margen")
@@ -76,7 +76,7 @@ class InicioController extends Controller
         // ---- este mes contra el mismo tramo del mes anterior (del 1 al dia de hoy) ----
         $ventasEnRango = fn (string $desde, string $hasta) => (int) Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->where('tipo_comprobante_codigo', '!=', '07')
             ->whereBetween('fecha_emision', [$desde, $hasta])
@@ -92,7 +92,7 @@ class InicioController extends Controller
 
         $porDia = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->whereDate('fecha_emision', '>=', $desde)
             ->selectRaw("fecha_emision, COALESCE(SUM({$neto}), 0) as total")
@@ -111,7 +111,7 @@ class InicioController extends Controller
             ->join('comprobantes', 'comprobantes.id', '=', 'comprobante_detalles.comprobante_id')
             ->join('productos', 'productos.id', '=', 'comprobante_detalles.producto_id')
             ->where('comprobantes.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('comprobantes.sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('comprobantes.estado', 'emitido')
             ->whereDate('comprobantes.fecha_emision', '>=', now()->subDays(29)->toDateString())
             ->groupBy('productos.id', 'productos.nombre')
@@ -129,9 +129,9 @@ class InicioController extends Controller
         $mediosPago = Pago::query()
             ->join('medios_pago', 'medios_pago.codigo', '=', 'pagos.medio_pago_codigo')
             ->where('pagos.empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q
+            ->when($sucursalIds, fn ($q) => $q
                 ->join('comprobantes', 'comprobantes.id', '=', 'pagos.comprobante_id')
-                ->where('comprobantes.sucursal_id', $sucursalId))
+                ->whereIn('comprobantes.sucursal_id', $sucursalIds))
             ->where('pagos.creado_en', '>=', now()->subDays(6)->startOfDay())
             ->groupBy('medios_pago.codigo', 'medios_pago.nombre')
             ->selectRaw('medios_pago.nombre, COALESCE(SUM(pagos.monto), 0) as total')
@@ -142,7 +142,7 @@ class InicioController extends Controller
         // ---- ventas por mes (12 ultimos) ----
         $porMes = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->where('fecha_emision', '>=', now()->subMonthsNoOverflow(11)->startOfMonth()->toDateString())
             ->selectRaw("to_char(fecha_emision, 'YYYY-MM') as mes, COALESCE(SUM({$neto}), 0) as total")
@@ -158,7 +158,7 @@ class InicioController extends Controller
         // ---- promedio de venta por dia de la semana (90 dias) ----
         $porDiaSemana = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('estado', 'emitido')
             ->where('fecha_emision', '>=', now()->subDays(89)->toDateString())
             ->selectRaw("EXTRACT(isodow FROM fecha_emision) as dia, COALESCE(SUM({$neto}), 0) as total, COUNT(DISTINCT fecha_emision) as dias")
@@ -204,7 +204,7 @@ class InicioController extends Controller
         // ---- ultimas ventas (las notas de credito no son ventas) ----
         $ultimasVentas = Comprobante::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('tipo_comprobante_codigo', '!=', '07')
             ->with('sucursal:id,nombre')
             ->latest('creado_en')
@@ -237,7 +237,7 @@ class InicioController extends Controller
 
         $lotesPorVencer = CapaCosto::query()
             ->where('empresa_id', $empresaId)
-            ->when($sucursalId, fn ($q) => $q->where('sucursal_id', $sucursalId))
+            ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
             ->where('cantidad_restante', '>', 0)
             ->whereHas('lote', fn ($l) => $l
                 ->whereNotNull('fecha_vencimiento')
@@ -245,8 +245,8 @@ class InicioController extends Controller
             ->distinct('lote_id')
             ->count('lote_id');
 
-        $filtroSucursal = $sucursalId ? ' and s.sucursal_id = ?' : '';
-        $parametros = $sucursalId ? [$sucursalId, $sucursalId] : [];
+        $filtroSucursal = $sucursalIds ? ' and s.sucursal_id in ('.implode(',', array_fill(0, count($sucursalIds), '?')).')' : '';
+        $parametros = $sucursalIds ? [...$sucursalIds, ...$sucursalIds] : [];
         $stockBajo = Producto::query()
             ->where('empresa_id', $empresaId)
             ->where('activo', true)

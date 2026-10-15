@@ -69,8 +69,10 @@ class ReporteController extends Controller
 
         return Inertia::render('Reportes/Index', [
             // agrupar: lo que se aplicó de verdad (si no se eligió, sale del largo del rango)
-            'filtros' => ['tipo' => $tipo, 'desde' => $desde, 'hasta' => $hasta, 'producto_id' => $productoId, 'agrupar' => $datos['agrupar'] ?? null],
+            'filtros' => ['tipo' => $tipo, 'desde' => $desde, 'hasta' => $hasta, 'producto_id' => $productoId, 'agrupar' => $datos['agrupar'] ?? null, 'sucursal_id' => $this->sucursalKardex($request)],
             'catalogo' => self::CATALOGO,
+            // el kardex es de una sola sucursal: viendo "todas" se elige aquí
+            'sucursalesKardex' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
             'datos' => $datos,
             'productos' => Producto::query()
                 ->where('empresa_id', $request->user()->empresa_id)
@@ -145,21 +147,21 @@ class ReporteController extends Controller
     private function construir(Request $request, string $tipo, string $desde, string $hasta, ?string $productoId, ?string $agrupar = null): array
     {
         $empresaId = $request->user()->empresa_id;
-        $sucursalId = $this->sucursalConsultaId($request); // null = todas
+        $sucursalIds = $this->sucursalesConsulta($request); // null = toda la empresa
 
         return match ($tipo) {
             'libro' => $this->reporteLibroVentas($request, $desde, $hasta),
             'margen' => $this->reporteMargen($request, $desde, $hasta),
             'kardex' => $this->reporteKardex($request, $desde, $hasta, $productoId),
-            'productos' => $this->negocio->porProducto($empresaId, $sucursalId, $desde, $hasta),
-            'categorias' => $this->negocio->porCategoria($empresaId, $sucursalId, $desde, $hasta),
-            'vendedores' => $this->negocio->porVendedor($empresaId, $sucursalId, $desde, $hasta),
-            'horas' => $this->negocio->porHora($empresaId, $sucursalId, $desde, $hasta),
-            'dias' => $this->negocio->porDiaSemana($empresaId, $sucursalId, $desde, $hasta),
-            'utilidad' => $this->negocio->utilidadPorPeriodo($empresaId, $sucursalId, $desde, $hasta, $agrupar),
-            'clientes' => $this->negocio->clientesQueMasCompran($empresaId, $sucursalId, $desde, $hasta),
-            'cobranza' => $this->negocio->cobranzaPorAntiguedad($empresaId, $sucursalId),
-            'caja' => $this->negocio->cajaPorMedioDePago($empresaId, $sucursalId, $desde, $hasta),
+            'productos' => $this->negocio->porProducto($empresaId, $sucursalIds, $desde, $hasta),
+            'categorias' => $this->negocio->porCategoria($empresaId, $sucursalIds, $desde, $hasta),
+            'vendedores' => $this->negocio->porVendedor($empresaId, $sucursalIds, $desde, $hasta),
+            'horas' => $this->negocio->porHora($empresaId, $sucursalIds, $desde, $hasta),
+            'dias' => $this->negocio->porDiaSemana($empresaId, $sucursalIds, $desde, $hasta),
+            'utilidad' => $this->negocio->utilidadPorPeriodo($empresaId, $sucursalIds, $desde, $hasta, $agrupar),
+            'clientes' => $this->negocio->clientesQueMasCompran($empresaId, $sucursalIds, $desde, $hasta),
+            'cobranza' => $this->negocio->cobranzaPorAntiguedad($empresaId, $sucursalIds),
+            'caja' => $this->negocio->cajaPorMedioDePago($empresaId, $sucursalIds, $desde, $hasta),
             default => $this->reporteVentas($request, $desde, $hasta),
         };
     }
@@ -173,7 +175,7 @@ class ReporteController extends Controller
     {
         $comprobantes = Comprobante::query()
             ->where('empresa_id', $request->user()->empresa_id)
-            ->when($this->sucursalConsultaId($request), fn ($q, $id) => $q->where('sucursal_id', $id))
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             ->whereIn('tipo_comprobante_codigo', ['01', '03', '07'])
             ->whereBetween('fecha_emision', [$desde, $hasta])
             ->with([
@@ -243,7 +245,7 @@ class ReporteController extends Controller
     {
         $comprobantes = Comprobante::query()
             ->where('empresa_id', $request->user()->empresa_id)
-            ->when($this->sucursalConsultaId($request), fn ($q, $id) => $q->where('sucursal_id', $id))
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('sucursal_id', $ids))
             ->where('estado', 'emitido')
             ->whereBetween('fecha_emision', [$desde, $hasta])
             ->with('usuario:id,nombre_completo')
@@ -286,7 +288,7 @@ class ReporteController extends Controller
             ->join('comprobantes', 'comprobantes.id', '=', 'comprobante_detalles.comprobante_id')
             ->join('productos', 'productos.id', '=', 'comprobante_detalles.producto_id')
             ->where('comprobantes.empresa_id', $request->user()->empresa_id)
-            ->when($this->sucursalConsultaId($request), fn ($q, $id) => $q->where('comprobantes.sucursal_id', $id))
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereIn('comprobantes.sucursal_id', $ids))
             ->where('comprobantes.estado', 'emitido')
             ->whereBetween('comprobantes.fecha_emision', [$desde, $hasta])
             ->groupBy('productos.id', 'productos.nombre')
@@ -326,10 +328,16 @@ class ReporteController extends Controller
         ];
     }
 
+    /** Sucursal del kardex: ?sucursal_id= (viendo "todas"), si no la del selector, si no la predeterminada. */
+    private function sucursalKardex(Request $request): ?string
+    {
+        return $this->sucursalElegida($request, 'sucursal_id');
+    }
+
     private function reporteKardex(Request $request, string $desde, string $hasta, ?string $productoId): array
     {
         $usuario = $request->user();
-        $sucursalId = $this->sucursalDeTrabajo($request);
+        $sucursalId = $this->sucursalKardex($request);
 
         $producto = $productoId
             ? Producto::where('empresa_id', $usuario->empresa_id)->find($productoId)
