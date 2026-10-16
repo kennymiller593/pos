@@ -283,7 +283,7 @@ const claseBoton =
                 </div>
             </div>
 
-            <div class="grid gap-6 lg:grid-cols-3">
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <!-- Suscripción -->
                 <section :class="claseTarjeta">
                     <div class="flex items-start gap-3">
@@ -513,7 +513,7 @@ const claseBoton =
             </div>
 
             <!-- Uso -->
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div v-for="t in tarjetasUso" :key="t.label" :class="claseTarjeta">
                     <div class="flex items-center gap-2 text-xs font-semibold tracking-wider text-neutral-400 uppercase dark:text-neutral-500">
                         <component :is="t.icon" class="size-4" />

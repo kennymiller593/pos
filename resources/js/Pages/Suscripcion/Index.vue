@@ -280,7 +280,7 @@ const etiquetaEstado = (e) => (ESTADOS[e]?.texto ?? (e ? e.charAt(0).toUpperCase
                 <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
                     <h2 class="font-semibold tracking-tight">Historial</h2>
                 </div>
-                <div class="@container overflow-x-auto">
+                <div class="@container relative overflow-x-auto">
                     <table class="w-full text-left text-sm">
                         <thead
                             class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">

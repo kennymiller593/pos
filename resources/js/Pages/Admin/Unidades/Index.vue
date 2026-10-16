@@ -63,7 +63,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            <div class="@container overflow-x-auto">
+            <div class="@container relative overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>

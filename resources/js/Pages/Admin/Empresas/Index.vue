@@ -105,7 +105,7 @@ const claseInput =
 <template>
     <AppLayout titulo="Empresas">
         <!-- Totales -->
-        <div class="mb-6 grid gap-4 sm:grid-cols-3">
+        <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div
                 v-for="t in tarjetas"
                 :key="t.clave"
@@ -145,7 +145,7 @@ const claseInput =
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-            <div class="@container overflow-x-auto">
+            <div class="@container relative overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                         <tr>

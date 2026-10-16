@@ -98,7 +98,7 @@ const claseTarjeta = 'rounded-2xl border border-stone-200 bg-white p-5 dark:bord
 
 <template>
     <AppLayout titulo="Proveedores de IA">
-        <div class="mb-4 grid gap-3 sm:grid-cols-3">
+        <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div :class="claseTarjeta">
                 <p class="text-xs font-semibold tracking-wider text-neutral-400 uppercase">Consultas este mes</p>
                 <p class="mt-1 text-2xl font-bold tracking-tight">{{ consultasMes.toLocaleString('es-PE') }}</p>
