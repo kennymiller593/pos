@@ -22,19 +22,22 @@
         'potentialAction' => ['@type' => 'SearchAction', 'target' => ['@type' => 'EntryPoint', 'urlTemplate' => rtrim($tienda['url'], '/').'/catalogo?q={termino}'], 'query-input' => 'required name=termino'],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
 
-    // franja superior: el anuncio del dueño o, si no escribió uno, lo que ofrece la tienda
+    // franja superior: el anuncio del dueño o, si no escribió uno, la promesa de una tienda en línea
     $franja = $tienda['anuncio'] ?: implode(' · ', array_filter([
-        $contactos['direccion'] ? 'Recojo en tienda' : null,
-        $whatsapp ? 'Pedidos y asesoría por WhatsApp' : null,
-        $contactos['horario'] ?: null,
+        'Envíos a todo el Perú',
+        $whatsapp ? 'Pedidos y asesoría por WhatsApp' : 'Pedidos en línea',
+        $contactos['horario'] ? 'Atención '.$contactos['horario'] : null,
     ]));
-    // sellos de confianza: solo lo que la tienda realmente ofrece
-    $sellos = array_values(array_filter([
-        $whatsapp ? ['whatsapp', 'Pedidos por WhatsApp', 'Te confirmamos disponibilidad y precio al momento.'] : null,
-        ['actualizado', 'Catálogo al día', 'Productos y precios tal como están en nuestro sistema.'],
-        $contactos['direccion'] ? ['lugar', 'Recojo en tienda', implode(' · ', array_column($contactos['direcciones'], 'texto'))] : null,
-        $contactos['telefono'] ? ['telefono', 'Atención por teléfono', $contactos['telefono']] : null,
-    ]));
+    // sellos de confianza de una tienda en línea (ícono, título, detalle, es-whatsapp)
+    $entrega = $entrega ?? ['envios' => null, 'pagos' => null];
+    $sellos = [
+        ['camion', 'Envíos a todo el Perú', $entrega['envios'] ?: 'Coordinamos la entrega contigo al confirmar tu pedido.'],
+        ['escudo', 'Pago seguro', $entrega['pagos'] ?: 'Te confirmamos el total y el medio de pago antes de pagar.'],
+        $whatsapp
+            ? ['whatsapp', 'Asesoría por WhatsApp', 'Te ayudamos a elegir y te confirmamos disponibilidad al momento.']
+            : ['audifonos', 'Atención personalizada', $contactos['telefono'] ? 'Llámanos al '.$contactos['telefono'].' y te asesoramos.' : 'Escríbenos y te asesoramos con gusto.'],
+        ['sello', 'Productos originales', 'Catálogo real de nuestra tienda, con precios al día.'],
+    ];
 @endphp
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
@@ -158,7 +161,7 @@
         <ul class="mx-auto grid max-w-7xl gap-4 px-4 py-8 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
             @foreach ($sellos as [$icono, $tituloSello, $detalle])
                 <li class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-(--marca-suave) text-(--marca-texto)">@include('tienda.icono', ['n' => $icono, 'clase' => 'size-5'])</span>
+                    <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-(--marca-suave) text-(--marca-texto)">@include($icono === 'whatsapp' ? 'tienda.icono' : 'tienda.mercado.icono', ['n' => $icono, 'clase' => 'size-5'])</span>
                     <span class="min-w-0">
                         <span class="block text-sm font-bold">{{ $tituloSello }}</span>
                         <span class="line-clamp-2 text-xs text-slate-500">{{ $detalle }}</span>
@@ -188,7 +191,7 @@
             </div>
 
             <div>
-                <h2 class="text-sm font-bold tracking-wider uppercase opacity-70">Atención</h2>
+                <h2 class="text-sm font-bold tracking-wider uppercase opacity-70">Visítanos y contáctanos</h2>
                 <ul class="mt-3 space-y-2 text-sm">
                     @foreach ($contactos['direcciones'] as $lugar)
                         <li><a href="{{ $lugar['mapa'] }}" target="_blank" rel="noopener" class="flex items-start gap-2 hover:underline">@include('tienda.icono', ['n' => 'lugar', 'clase' => 'mt-0.5 size-4 opacity-70'])<span>{{ $lugar['texto'] }}</span></a></li>

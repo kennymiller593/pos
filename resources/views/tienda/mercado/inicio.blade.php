@@ -82,9 +82,11 @@
         @if ($portada)
             {{-- Campaña: título, presentación y botones, con la foto de portada al lado --}}
             <section class="mt-5 overflow-hidden rounded-2xl bg-(--mercado-fondo) text-(--sobre-fondo) sm:mt-6" data-portada="mercado">
-                <div class="grid {{ $fotoCampana ? 'lg:grid-cols-[1.1fr_1fr]' : '' }}">
-                    <div class="px-6 py-10 sm:px-10 sm:py-14 lg:py-16">
-                        <p class="text-xs font-bold tracking-[0.2em] uppercase opacity-75">{{ $tienda['anuncio'] ? 'Campaña' : 'Catálogo en línea' }}</p>
+                <div class="relative grid {{ $fotoCampana ? 'lg:grid-cols-[1.1fr_1fr]' : '' }}">
+                    {{-- brillo suave del color de la tienda, para que la campaña no sea un bloque plano --}}
+                    <div class="pointer-events-none absolute -top-32 -left-24 size-96 rounded-full bg-(--marca) opacity-25 blur-3xl" aria-hidden="true"></div>
+                    <div class="relative px-6 py-10 sm:px-10 sm:py-14 lg:py-16">
+                        <p class="text-xs font-bold tracking-[0.2em] uppercase opacity-75">{{ $tienda['anuncio'] ? 'Campaña' : 'Tienda en línea' }}</p>
                         <h1 class="mt-3 text-3xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">{{ $tienda['portada']['titulo'] }}</h1>
                         <p class="mt-4 max-w-lg text-base leading-relaxed opacity-85 sm:text-lg">{{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}</p>
                         <div class="mt-7 flex flex-wrap gap-3">
@@ -93,6 +95,14 @@
                                 <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-lg px-6 text-sm font-bold ring-1 ring-white/40 transition-colors hover:bg-white/10">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])Pedir por WhatsApp</a>
                             @endif
                         </div>
+                        {{-- lo que ofrece la tienda, de un vistazo --}}
+                        <ul class="mt-8 flex flex-wrap gap-2 text-xs font-semibold" data-beneficios>
+                            <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.mercado.icono', ['n' => 'camion', 'clase' => 'size-4'])Envíos a todo el Perú</li>
+                            <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.mercado.icono', ['n' => 'escudo', 'clase' => 'size-4'])Pago seguro</li>
+                            @if ($whatsapp)
+                                <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4'])Asesoría por WhatsApp</li>
+                            @endif
+                        </ul>
                     </div>
                     @if ($fotoCampana)
                         <div class="relative min-h-56 bg-black/20 lg:min-h-full">
@@ -114,6 +124,30 @@
                             @endif
                         </{{ $etiqueta }}>
                     @endforeach
+                </section>
+            @endif
+            {{-- Compra por categoría --}}
+            @if ($categorias->count() >= 3)
+                <section class="mt-10" aria-labelledby="titulo-categorias" data-categorias>
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <h2 id="titulo-categorias" class="text-2xl font-extrabold tracking-tight">Compra por categoría</h2>
+                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver todo @include('tienda.icono', ['n' => 'flecha'])</a>
+                    </div>
+                    <div class="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+                        @foreach ($categorias->take(6) as $cat)
+                            <a href="{{ $cat->url }}" class="group rounded-xl bg-white p-3 text-center ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/10 hover:ring-(--marca)">
+                                <span class="mx-auto grid size-16 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-xl font-extrabold text-(--marca-texto) sm:size-20">
+                                    @if ($cat->imagen)
+                                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="160" height="160" class="size-full object-contain p-2 mix-blend-multiply transition-transform duration-300 group-hover:scale-110">
+                                    @else
+                                        {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($cat->nombre, 0, 1)) }}
+                                    @endif
+                                </span>
+                                <span class="mt-2.5 block truncate text-sm font-bold group-hover:text-(--marca-texto)">{{ $cat->nombre }}</span>
+                                <span class="block text-xs text-slate-500">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
+                            </a>
+                        @endforeach
+                    </div>
                 </section>
             @endif
         @else
