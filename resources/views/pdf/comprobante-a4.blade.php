@@ -122,9 +122,9 @@
                 <td class="etiqueta">Condición</td>
                 <td>
                     @if ($comprobante->es_credito)
-                        Crédito{{ $comprobante->fecha_vencimiento ? ' — vence ' . $comprobante->fecha_vencimiento->format('d/m/Y') : '' }}
+                        <strong>CRÉDITO</strong>{{ $comprobante->fecha_vencimiento ? ' — vence ' . $comprobante->fecha_vencimiento->format('d/m/Y') : '' }}
                     @else
-                        Contado
+                        CONTADO
                     @endif
                 </td>
             </tr>

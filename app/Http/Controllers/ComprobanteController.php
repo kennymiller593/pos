@@ -245,7 +245,8 @@ class ComprobanteController extends Controller
             + $comprobante->detalles->count() * ($ancho === 58 ? 6.5 : 5)
             + $comprobante->pagos->count() * 3.5
             + ($comprobante->cliente_nombre ? 7 : 0)
-            + ($comprobante->es_credito ? 6 : 0)
+            + 3.5 // linea de condicion (contado / credito)
+            + ($comprobante->es_credito ? 14 : 0)
             + ($comprobante->estado === 'anulado' ? 10 : 0)
             + ($comprobante->comprobanteRef ? 4 : 0)
             + ($logo ? 18 : 0)

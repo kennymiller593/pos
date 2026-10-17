@@ -29,6 +29,11 @@
             padding: 4px; margin: 6px 0; letter-spacing: 3px;
         }
         .pie { margin-top: 8px; text-align: center; font-size: 8.5px; }
+        .credito {
+            border: 2px solid #000; text-align: center; padding: 5px 4px; margin: 6px 0;
+        }
+        .credito .titulo-credito { font-size: 13px; font-weight: 700; letter-spacing: 1px; }
+        .credito .vence { font-size: 10.5px; font-weight: 700; margin-top: 2px; }
         @if (!empty($imprimirDirecto))
             /* impresion directa desde el navegador: el papel es del ancho de la caja */
             @page { size: {{ $ancho }}mm auto; margin: 3mm 4mm; }
@@ -85,6 +90,7 @@
         <span class="izq">Fecha: {{ $comprobante->fecha_emision->format('d/m/Y') }} {{ substr($comprobante->hora_emision, 0, 5) }}</span>
     </div>
     <div>Cajero: {{ $comprobante->usuario?->nombre_completo ?? '—' }}</div>
+    <div class="negrita">Condición: {{ $comprobante->es_credito ? 'CRÉDITO' : 'CONTADO' }}</div>
     @if ($comprobante->cliente_nombre)
         <div>Cliente: {{ $comprobante->cliente_nombre }}</div>
         @if ($comprobante->cliente_numero_doc)
@@ -141,8 +147,12 @@
 
     {{-- Pagos --}}
     @if ($comprobante->es_credito)
-        <div class="separador"></div>
-        <div class="centro negrita">VENTA AL CRÉDITO</div>
+        <div class="credito">
+            <div class="titulo-credito">VENTA AL CRÉDITO</div>
+            @if ($comprobante->fecha_vencimiento)
+                <div class="vence">Pagar hasta el {{ $comprobante->fecha_vencimiento->format('d/m/Y') }}</div>
+            @endif
+        </div>
     @elseif ($comprobante->pagos->isNotEmpty())
         <div class="separador"></div>
         @foreach ($comprobante->pagos as $pago)
