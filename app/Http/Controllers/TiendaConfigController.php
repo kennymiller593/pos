@@ -210,7 +210,8 @@ class TiendaConfigController extends Controller
             'facebook' => ['nullable', 'string', 'max:150'],
             'instagram' => ['nullable', 'string', 'max:150'],
             'tiktok' => ['nullable', 'string', 'max:150'],
-            // apariencia de la portada (opcionales: quien no los manda conserva lo que tenía)
+            // diseño de la tienda y apariencia de la portada (opcionales: quien no los manda conserva lo que tenía)
+            'plantilla' => ['sometimes', Rule::in(Tienda::PLANTILLAS)],
             'portada_estilo' => ['sometimes', Rule::in(Tienda::ESTILOS)],
             'portada_titulo' => ['nullable', 'string', 'max:80'],
             'portada_boton' => ['nullable', 'string', 'max:30'],

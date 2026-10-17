@@ -45,8 +45,9 @@ class TiendaController extends Controller
         }
 
         // antes la portada también buscaba y paginaba (/?q=urea, /?page=2): eso ahora vive en /catalogo
-        if (filled($request->query('q')) || (int) $request->query('page') > 1 || in_array($request->query('orden'), ['menor', 'mayor'], true)) {
-            return redirect('/catalogo?'.http_build_query($request->only('q', 'orden', 'page')), 301);
+        if (filled($request->query('q')) || (int) $request->query('page') > 1 || in_array($request->query('orden'), ['menor', 'mayor'], true)
+            || filled($request->query('marca')) || filled($request->query('hasta'))) {
+            return redirect('/catalogo?'.http_build_query($request->only('q', 'orden', 'page', 'marca', 'hasta')), 301);
         }
 
         return $this->listado($request, $config, $contexto, null, portada: true);
@@ -108,10 +109,18 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $buscar = $portada ? '' : trim(mb_substr((string) $request->query('q'), 0, 80));
         $orden = $config['mostrar_precios'] && in_array($request->query('orden'), ['menor', 'mayor'], true) ? $request->query('orden') : 'nombre';
+        // filtros del panel lateral de la plantilla Mercado: una marca y un precio tope (?marca=Bayer&hasta=50)
+        $mercado = $config['plantilla'] === 'mercado';
+        $marca = $mercado && ! $portada ? trim(mb_substr((string) $request->query('marca'), 0, 60)) : '';
+        $hasta = $mercado && ! $portada && $config['mostrar_precios'] && is_numeric($request->query('hasta')) && (float) $request->query('hasta') > 0
+            ? round((float) $request->query('hasta'), 2)
+            : null;
 
         $productos = $this->catalogo->productos($empresa)
             ->when($buscar !== '', fn ($q) => $this->catalogo->buscar($q, $buscar))
             ->when($categoria, fn ($q) => $q->where('productos.categoria_id', $categoria->id))
+            ->when($marca !== '', fn ($q) => $q->whereHas('marca', fn ($m) => $m->where('nombre', $marca)))
+            ->when($hasta !== null, fn ($q) => $q->whereHas('presentaciones', fn ($p) => $p->where('activo', true)->where('precio_venta', '<=', $hasta)))
             // por defecto, primero lo que hay para vender: una primera página llena de "Agotado" espanta
             ->when($orden === 'nombre' && $config['mostrar_stock'], fn ($q) => $q->orderByRaw(
                 '(CASE WHEN NOT productos.controla_stock OR COALESCE((SELECT SUM(s.cantidad) FROM stock s WHERE s.producto_id = productos.id), 0) > 0 THEN 0 ELSE 1 END)'
@@ -126,10 +135,10 @@ class TiendaController extends Controller
         // una página más allá de la última no existe: 404 de verdad, no una página vacía que Google indexe
         abort_if($productos->currentPage() > 1 && $productos->isEmpty(), 404);
 
-        $filtrando = $buscar !== '' || $categoria !== null;
+        $filtrando = $buscar !== '' || $categoria !== null || $marca !== '' || $hasta !== null;
         $destacados = $portada ? $this->catalogo->destacados($empresa) : null;
 
-        return view('tienda.inicio', [
+        return view($mercado ? 'tienda.mercado.inicio' : 'tienda.inicio', [
             ...$contexto,
             'portada' => $portada,
             'buscar' => $buscar,
@@ -137,6 +146,11 @@ class TiendaController extends Controller
             'orden' => $orden,
             'filtrando' => $filtrando,
             'productos' => $productos,
+            // solo la plantilla Mercado: marcas para filtrar y tope del filtro de precio
+            'marca' => $marca,
+            'hasta' => $hasta,
+            'marcas' => $mercado && ! $portada ? $this->catalogo->marcas($empresa, $categoria?->id) : collect(),
+            'precioMaximo' => $mercado && ! $portada && $config['mostrar_precios'] ? ceil($this->catalogo->precioMaximo($empresa)) : 0,
             'destacados' => $destacados ? [
                 'origen' => $destacados['origen'],
                 'productos' => $destacados['productos']->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
@@ -306,6 +320,7 @@ class TiendaController extends Controller
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
                 'anuncio' => $config['anuncio'],
+                'plantilla' => $config['plantilla'],
                 'seo' => ['titulo' => $config['seo_titulo'], 'descripcion' => $config['seo_descripcion']],
                 'portada' => [
                     'estilo' => $config['portada_estilo'],
@@ -317,6 +332,8 @@ class TiendaController extends Controller
             ],
             // true cuando el dueño está mirando un borrador con su enlace de vista previa
             'previa' => (bool) $request->attributes->get('tienda_previa', false),
+            // la plantilla elegida decide con qué cabecera y pie se arman las páginas
+            'layoutTienda' => $config['plantilla'] === 'mercado' ? 'tienda.mercado.layout' : 'tienda.layout',
             'contactos' => $this->catalogo->contactos($empresa, $config),
             // la barra de categorías y el pie van en todas las páginas
             'categorias' => $categorias,

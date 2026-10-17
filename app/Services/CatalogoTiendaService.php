@@ -11,6 +11,7 @@ use App\Support\Tienda;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -73,6 +74,31 @@ class CatalogoTiendaService
         }
 
         return $consulta;
+    }
+
+    /** Marcas con productos visibles en la tienda (en una categoría, si se indica), con cuántos productos cada una. */
+    public function marcas(Empresa $empresa, ?string $categoriaId = null): Collection
+    {
+        return Producto::query()
+            ->join('marcas', 'marcas.id', '=', 'productos.marca_id')
+            ->where('productos.empresa_id', $empresa->id)
+            ->where('productos.activo', true)
+            ->where('productos.en_tienda', true)
+            ->when($categoriaId, fn ($q) => $q->where('productos.categoria_id', $categoriaId))
+            ->whereHas('presentaciones', fn ($q) => $q->where('activo', true))
+            ->groupBy('marcas.nombre')
+            ->orderBy('marcas.nombre')
+            ->selectRaw('marcas.nombre, COUNT(*) AS productos')
+            ->get()
+            ->map(fn ($m) => ['nombre' => $m->nombre, 'productos' => (int) $m->productos]);
+    }
+
+    /** El precio de lista más alto de la tienda, para el tope del filtro por precio. */
+    public function precioMaximo(Empresa $empresa): float
+    {
+        return (float) DB::query()
+            ->fromSub($this->productos($empresa)->reorder()->toBase(), 'p')
+            ->max('precio');
     }
 
     /** Cuántos productos se ven en la tienda. */

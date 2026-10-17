@@ -41,7 +41,7 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
     { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
-    { valor: 'portada', nombre: 'Portada', campos: ['portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
+    { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
@@ -101,7 +101,8 @@ const form = useForm({
     facebook: props.tienda.config.facebook ?? '',
     instagram: props.tienda.config.instagram ?? '',
     tiktok: props.tienda.config.tiktok ?? '',
-    // apariencia de la portada
+    // diseño de la tienda y apariencia de la portada
+    plantilla: props.tienda.config.plantilla ?? 'clasica',
     portada_estilo: props.tienda.config.portada_estilo ?? 'vitrina',
     portada_titulo: props.tienda.config.portada_titulo ?? '',
     portada_boton: props.tienda.config.portada_boton ?? '',
@@ -180,6 +181,12 @@ const conError = computed(() => {
 function mostrarErrores() {
     if (conError.value.length && !conError.value.includes(seccion.value)) irA(conError.value[0])
 }
+
+// ---- diseño de la tienda ----
+const PLANTILLAS = [
+    { valor: 'clasica', nombre: 'Clásica', detalle: 'Portada con tu estilo elegido, destacados y categorías con foto.' },
+    { valor: 'mercado', nombre: 'Mercado', detalle: 'Estilo marketplace: campaña arriba y filtros por categoría, marca y precio al costado.' },
+]
 
 // ---- apariencia de la portada ----
 const ESTILOS = [
@@ -768,8 +775,48 @@ function guardarDescripcion() {
                 <h2 id="titulo-apariencia" class="font-semibold tracking-tight">Portada</h2>
                 <p class="text-sm text-neutral-500 dark:text-neutral-400">Lo primero que ve tu cliente al entrar. Usa "Vista previa" para probar sin que nadie más lo vea.</p>
 
-                <fieldset class="mt-4">
-                    <legend :class="claseLabel">Estilo</legend>
+                <fieldset class="mt-4" data-plantillas>
+                    <legend :class="claseLabel">Plantilla</legend>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label
+                            v-for="plantilla in PLANTILLAS"
+                            :key="plantilla.valor"
+                            class="cursor-pointer rounded-2xl border p-3 transition-colors"
+                            :class="form.plantilla === plantilla.valor
+                                ? 'border-emerald-600 bg-emerald-50/60 ring-1 ring-emerald-600 dark:border-emerald-500 dark:bg-emerald-500/10 dark:ring-emerald-500'
+                                : 'border-stone-200 hover:bg-stone-50 dark:border-neutral-800 dark:hover:bg-neutral-800'"
+                        >
+                            <input v-model="form.plantilla" type="radio" name="plantilla" :value="plantilla.valor" class="sr-only" />
+                            <!-- miniatura de la plantilla -->
+                            <span class="relative block aspect-[16/8] overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-neutral-700 dark:bg-neutral-800" aria-hidden="true">
+                                <template v-if="plantilla.valor === 'clasica'">
+                                    <span class="absolute inset-x-0 top-0 h-[12%] bg-white shadow-sm dark:bg-neutral-700" />
+                                    <span class="absolute top-[18%] right-[6%] bottom-[46%] left-[6%] rounded-md bg-emerald-50 dark:bg-emerald-500/15" />
+                                    <span class="absolute top-[30%] left-[11%] h-[7%] w-[28%] rounded bg-neutral-800 dark:bg-neutral-200" />
+                                    <span class="absolute top-[41%] left-[11%] h-[8%] w-[12%] rounded bg-emerald-600" />
+                                    <span v-for="i in 4" :key="i" class="absolute bottom-[8%] h-[30%] w-[19%] rounded-md bg-stone-100 ring-1 ring-stone-200 dark:bg-neutral-700 dark:ring-neutral-600" :style="{ left: `${6 + (i - 1) * 22.5}%` }" />
+                                </template>
+                                <template v-else>
+                                    <span class="absolute inset-x-0 top-0 h-[14%] bg-emerald-800" />
+                                    <span class="absolute inset-x-0 top-[14%] h-[9%] bg-emerald-600" />
+                                    <span class="absolute top-[30%] right-[6%] left-[6%] h-[26%] rounded-md bg-emerald-950" />
+                                    <span class="absolute top-[37%] left-[10%] h-[7%] w-[28%] rounded bg-white" />
+                                    <span class="absolute top-[47%] left-[10%] h-[6%] w-[11%] rounded bg-lime-400" />
+                                    <span class="absolute bottom-[6%] left-[6%] h-[30%] w-[16%] rounded-md bg-stone-100 ring-1 ring-stone-200 dark:bg-neutral-700 dark:ring-neutral-600" />
+                                    <span v-for="i in 3" :key="i" class="absolute bottom-[6%] h-[30%] w-[20%] rounded-md bg-white ring-1 ring-stone-200 dark:bg-neutral-700 dark:ring-neutral-600" :style="{ left: `${26 + (i - 1) * 23}%` }" />
+                                </template>
+                            </span>
+                            <span class="mt-2.5 flex items-center justify-between gap-2 text-sm font-semibold">
+                                {{ plantilla.nombre }}
+                                <Check v-if="form.plantilla === plantilla.valor" class="size-4 text-emerald-600 dark:text-emerald-400" />
+                            </span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">{{ plantilla.detalle }}</span>
+                        </label>
+                    </div>
+                </fieldset>
+
+                <fieldset v-show="form.plantilla === 'clasica'" class="mt-5">
+                    <legend :class="claseLabel">Estilo de portada</legend>
                     <div class="grid gap-3 sm:grid-cols-3">
                         <label
                             v-for="estilo in ESTILOS"
@@ -815,7 +862,7 @@ function guardarDescripcion() {
                 <div class="mt-5 grid gap-5 lg:grid-cols-2">
                     <!-- Foto de portada -->
                     <div>
-                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")' }}</span></p>
+                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(va al lado del título en la portada)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
                         <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-neutral-800">
                             <img :src="fotoPortada" alt="Foto de portada" class="aspect-[16/7] w-full object-cover" />
                             <!-- el mismo velo que lleva en la tienda, para ver cómo se leerá el título -->

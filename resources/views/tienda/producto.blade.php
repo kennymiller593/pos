@@ -1,4 +1,4 @@
-@extends('tienda.layout')
+@extends($layoutTienda ?? 'tienda.layout')
 
 @php
     $principal = $producto['presentaciones'][0];

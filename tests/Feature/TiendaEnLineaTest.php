@@ -696,7 +696,7 @@ class TiendaEnLineaTest extends TestCase
         $this->sucursal->update(['direccion' => 'JR. SAN MARTIN N 1638 - HUANUCO']);
         $this->publicar([
             // lo que ya estaba escrito con punto y coma también se separa
-            'direccion' => "Jr. San Martín N° 1638, Huánuco; Jr. Aguilar N° 347, Huánuco",
+            'direccion' => 'Jr. San Martín N° 1638, Huánuco; Jr. Aguilar N° 347, Huánuco',
             'mapa_url' => 'https://maps.app.goo.gl/AbCdEf123456',
             'horario' => "Lunes a sábado, 8 a. m. a 6 p. m.\nDomingos, 8 a. m. a 1 p. m.",
         ]);
@@ -1171,7 +1171,7 @@ class TiendaEnLineaTest extends TestCase
 
         $this->tienda('/robots.txt')->assertOk()
             ->assertHeader('Content-Type', 'text/plain; charset=utf-8')
-            ->assertSee("Sitemap: http://agro.tienda.test/sitemap.xml", false)
+            ->assertSee('Sitemap: http://agro.tienda.test/sitemap.xml', false)
             ->assertSee('Disallow: /buscar', false);
         $this->tienda('/sitemap.xml')
             ->assertSee("<loc>http://agro.tienda.test/</loc>\n        <lastmod>{$hoy}</lastmod>", false)
@@ -1344,5 +1344,47 @@ class TiendaEnLineaTest extends TestCase
 
         $this->assertFalse(Tienda::esHost('pos.tienda.test'));
         $this->assertTrue(Tienda::esHost('agro.tienda.test'));
+    }
+
+    // ---------------- plantilla "Mercado" ----------------
+
+    public function test_la_plantilla_mercado_se_elige_y_filtra_por_marca_y_precio(): void
+    {
+        // por defecto sigue la plantilla clásica, tal cual
+        $this->publicar();
+        $this->tienda('/')->assertOk()->assertSee('data-portada="vitrina"', false)->assertDontSee('data-plantilla="mercado"', false);
+
+        // el dueño la cambia desde su panel; un valor inventado se rechaza y no mandarla conserva la elegida
+        $this->actingAs($this->admin)->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'plantilla' => 'moderna']))->assertSessionHasErrors('plantilla');
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'plantilla' => 'mercado']))->assertSessionHasNoErrors();
+        $this->assertSame('mercado', $this->empresa->fresh()->tienda_config['plantilla']);
+        $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro']))->assertSessionHasNoErrors();
+        $this->assertSame('mercado', $this->empresa->fresh()->tienda_config['plantilla']);
+
+        // la portada: campaña arriba, productos con "Agregar al carrito" y el mismo pedido por WhatsApp
+        $portada = $this->tienda('/')->assertOk()
+            ->assertSee('data-plantilla="mercado"', false)
+            ->assertSee('data-portada="mercado"', false)
+            ->assertSee('Urea 46% x 50 kg')
+            ->assertSee('Agregar al carrito')
+            ->assertSee('id="pedido"', false)
+            ->assertSee('Enviar pedido por WhatsApp');
+        $this->assertStringContainsString('data-anadir=', $portada->getContent());
+
+        // el catálogo filtra por marca y por precio tope, y los filtros se conservan al combinarse
+        $this->tienda('/catalogo')->assertOk()->assertSee('data-filtro-marcas', false)->assertSee('Farmex')->assertSee('data-filtro-precio', false);
+        $this->tienda('/catalogo?marca=Farmex')->assertOk()->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL');
+        $this->tienda('/catalogo?hasta=30')->assertOk()->assertSee('Glifosato 480 SL')->assertDontSee('Urea 46% x 50 kg');
+        $this->tienda('/catalogo?marca=Farmex&hasta=30')->assertOk()->assertSee('No encontramos productos con esos filtros');
+        $this->tienda('/catalogo?marca=Otra')->assertOk()->assertSee('No encontramos productos con esos filtros');
+        // los filtros en la portada van al catálogo
+        $this->tienda('/?marca=Farmex')->assertRedirect('http://agro.tienda.test/catalogo?marca=Farmex');
+
+        // la página del producto y las de texto usan la misma cabecera y pie
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('data-plantilla="mercado"', false)->assertSee('data-cantidad-elegida', false);
+
+        // sin precios publicados no hay filtro de precio ni tope que aplicar
+        $this->publicar(['plantilla' => 'mercado', 'mostrar_precios' => false]);
+        $this->tienda('/catalogo?hasta=30')->assertOk()->assertSee('Urea 46% x 50 kg')->assertSee('Glifosato 480 SL')->assertDontSee('data-filtro-precio', false);
     }
 }

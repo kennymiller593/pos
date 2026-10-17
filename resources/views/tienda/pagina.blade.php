@@ -1,4 +1,4 @@
-@extends('tienda.layout')
+@extends($layoutTienda ?? 'tienda.layout')
 
 {{-- Página de texto de la tienda (Sobre nosotros, políticas, preguntas frecuentes): la escribe el dueño en "Contenido" --}}
 @php

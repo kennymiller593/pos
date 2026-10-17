@@ -31,7 +31,9 @@ class Tienda
         'facebook' => null,
         'instagram' => null,
         'tiktok' => null,
-        // apariencia de la portada
+        // diseño completo de la tienda: "clasica" (la de siempre) o "mercado" (filtros al costado, estilo marketplace)
+        'plantilla' => 'clasica',
+        // apariencia de la portada (plantilla clásica)
         'portada_estilo' => 'vitrina',
         'portada_imagen' => null,
         'portada_imagen_movil' => null, // la misma foto, más chica, para el celular
@@ -71,6 +73,9 @@ class Tienda
 
     /** Estilos de portada que puede elegir la tienda. */
     public const ESTILOS = ['vitrina', 'foto', 'texto'];
+
+    /** Plantillas (diseño completo) que puede elegir la tienda. */
+    public const PLANTILLAS = ['clasica', 'mercado'];
 
     public static function dominio(): ?string
     {
@@ -335,6 +340,10 @@ class Tienda
             $config[$lista] = array_values(array_filter((array) $config[$lista], 'is_array'));
         }
         $config['categorias_texto'] = array_filter((array) $config['categorias_texto'], 'is_string');
+
+        if (! in_array($config['plantilla'], self::PLANTILLAS, true)) {
+            $config['plantilla'] = self::CONFIG['plantilla'];
+        }
 
         // el estilo "foto" sin foto no tiene qué mostrar: vuelve a la vitrina
         if (! in_array($config['portada_estilo'], self::ESTILOS, true) || ($config['portada_estilo'] === 'foto' && blank($config['portada_imagen']))) {

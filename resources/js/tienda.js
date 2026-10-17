@@ -19,6 +19,14 @@ const TRAZOS = {
 
 // el orden del catálogo se aplica al elegirlo (sin JavaScript queda el botón "Aplicar")
 document.getElementById('orden')?.addEventListener('change', (e) => e.target.form?.submit())
+// filtros de la plantilla Mercado: el precio tope se aplica al soltar el control y se muestra mientras se mueve
+document.querySelectorAll('[data-filtro-auto]').forEach((campo) => {
+    campo.addEventListener('change', () => campo.form?.submit())
+    campo.addEventListener('input', () => {
+        const valor = campo.form?.querySelector('[data-filtro-valor]')
+        if (valor) valor.textContent = `S/ ${Number(campo.value).toLocaleString('es-PE')}`
+    })
+})
 
 // ---------------------------------------------------------------- buscador
 const buscador = document.getElementById('buscador')
