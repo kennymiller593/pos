@@ -164,7 +164,6 @@ function contraste(a, b) {
 // el que mejor se lee sobre el color elegido
 const textoSugerido = computed(() => (!colorValido.value || contraste(form.color_propio, TEXTOS.claro) >= contraste(form.color_propio, TEXTOS.oscuro) ? 'claro' : 'oscuro'))
 const textoElegido = computed(() => form.color_texto ?? textoSugerido.value)
-const seLeeMal = computed(() => colorValido.value && contraste(form.color_propio, TEXTOS[textoElegido.value]) < 3)
 
 function cambioElColor() {
     form.clearErrors('color_propio')
@@ -687,10 +686,7 @@ function guardarDescripcion() {
                                 data-muestra-boton
                             >Así se ve un botón</span>
                         </div>
-                        <p v-if="seLeeMal" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                            Ese texto casi no se lee sobre tu color. Prueba con el {{ textoElegido === 'claro' ? 'oscuro' : 'blanco' }}.
-                        </p>
-                        <p v-else :class="claseAyuda">Es el texto de los botones y de la franja del anuncio. Se elige solo el que mejor se lee; puedes cambiarlo.</p>
+                        <p :class="claseAyuda">Es el texto de los botones y de la franja del anuncio. Elige el que prefieras: el botón de muestra te enseña cómo queda.</p>
                     </fieldset>
                 </div>
             </section>
