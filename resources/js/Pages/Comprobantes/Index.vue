@@ -610,19 +610,17 @@ const claseInput =
                                         <a :href="`/comprobantes/${c.id}/a4`" target="_blank" rel="noopener" :class="claseAccion" title="PDF en A4" aria-label="PDF en A4" @click.stop>
                                             <FileText class="size-4" />
                                         </a>
-                                        <button type="button" :class="claseAccion" title="Enviar por correo" aria-label="Enviar por correo" @click.stop="abrirCorreo(c)">
-                                            <Mail class="size-4" />
-                                        </button>
-                                        <Link
-                                            v-if="puedeGuia(c)"
-                                            :href="`/guias/crear?comprobante=${c.id}`"
-                                            :class="claseAccion"
-                                            title="Generar guía de remisión para entregar esta venta"
-                                            aria-label="Generar guía de remisión"
-                                            @click.stop
+                                        <button
+                                            v-if="puedeAnular(c)"
+                                            type="button"
+                                            class="grid size-10 place-items-center rounded-xl border border-red-200 bg-white text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/30 dark:bg-neutral-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                                            title="Anular"
+                                            aria-label="Anular"
+                                            data-anular
+                                            @click.stop="abrirAnulacion(c)"
                                         >
-                                            <Navigation class="size-4" />
-                                        </Link>
+                                            <Ban class="size-4" />
+                                        </button>
                                         <span v-else class="size-10" aria-hidden="true" />
                                         <span class="mx-1 h-7 w-px bg-[#E2E8F0] dark:bg-neutral-700" />
                                         <button
@@ -674,8 +672,7 @@ const claseInput =
                     <div class="mt-3 flex items-center gap-1.5">
                         <button type="button" :class="claseAccion" aria-label="Imprimir ticket" @click="imprimirTicket(`/comprobantes/${c.id}/ticket`)"><Printer class="size-4" /></button>
                         <a :href="`/comprobantes/${c.id}/a4`" target="_blank" rel="noopener" :class="claseAccion" aria-label="PDF en A4"><FileText class="size-4" /></a>
-                        <button type="button" :class="claseAccion" aria-label="Enviar por correo" @click="abrirCorreo(c)"><Mail class="size-4" /></button>
-                        <Link v-if="puedeGuia(c)" :href="`/guias/crear?comprobante=${c.id}`" :class="claseAccion" aria-label="Generar guía de remisión"><Navigation class="size-4" /></Link>
+                        <button v-if="puedeAnular(c)" type="button" class="grid size-10 place-items-center rounded-xl border border-red-200 bg-white text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:bg-neutral-900 dark:text-red-400" aria-label="Anular" data-anular @click="abrirAnulacion(c)"><Ban class="size-4" /></button>
                         <button type="button" class="relative ml-auto grid size-10 place-items-center rounded-xl text-[#475569] hover:bg-slate-100 dark:text-neutral-300 dark:hover:bg-neutral-800" aria-label="Más acciones" @click.stop="abrirMenu(c, $event)">
                             <EllipsisVertical class="size-5" />
                             <span v-if="requiereAtencion(c)" class="absolute top-2 right-2 size-2 rounded-full bg-amber-500" />
@@ -820,6 +817,14 @@ const claseInput =
                     <Eye class="size-4 text-[#64748B]" />
                     Ver detalle
                 </button>
+                <button type="button" :class="claseItemMenu" role="menuitem" data-menu-correo @click="accion(abrirCorreo)">
+                    <Mail class="size-4 text-[#64748B]" />
+                    Enviar por correo
+                </button>
+                <Link v-if="puedeGuia(menu.c)" :href="`/guias/crear?comprobante=${menu.c.id}`" :class="claseItemMenu" role="menuitem" data-menu-guia @click="menu = null">
+                    <Navigation class="size-4 text-[#64748B]" />
+                    Generar guía de remisión
+                </Link>
                 <button v-if="puedeConvertir(menu.c)" type="button" :class="claseItemMenu" role="menuitem" @click="accion(abrirConversion)">
                     <ReceiptText class="size-4 text-emerald-600" />
                     Emitir boleta o factura
@@ -844,13 +849,6 @@ const claseInput =
                     <ShieldCheck class="size-4 text-[#64748B]" />
                     Descargar CDR
                 </a>
-                <template v-if="puedeAnular(menu.c)">
-                    <div class="my-1 h-px bg-[#F1F5F9] dark:bg-neutral-800" />
-                    <button type="button" :class="[claseItemMenu, '!text-red-600 hover:!bg-red-50 dark:!text-red-400 dark:hover:!bg-red-950/40']" role="menuitem" @click="accion(abrirAnulacion)">
-                        <Ban class="size-4" />
-                        Anular
-                    </button>
-                </template>
             </div>
         </Teleport>
 
