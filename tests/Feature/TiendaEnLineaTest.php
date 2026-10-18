@@ -950,7 +950,10 @@ class TiendaEnLineaTest extends TestCase
 
         // sin precios a la vista, el pedido no lleva precios
         $this->publicar(['mostrar_precios' => false]);
-        $this->assertStringNotContainsString('145', $this->tienda('/catalogo')->getContent());
+        // (se busca el precio como precio: "145" suelto puede aparecer en un id aleatorio de la página)
+        $sinPrecios = html_entity_decode($this->tienda('/catalogo')->getContent());
+        $this->assertStringNotContainsString('145.00', $sinPrecios);
+        $this->assertDoesNotMatchRegularExpression('/"precio":\s*145(\.0+)?[,}]/', $sinPrecios);
 
         // una tienda sin WhatsApp (solo teléfono) no tiene pedido
         $this->publicar(['whatsapp' => null, 'telefono' => '(062) 51 1234']);
