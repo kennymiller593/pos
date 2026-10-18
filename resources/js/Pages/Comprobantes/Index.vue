@@ -12,8 +12,8 @@ import {
     ChevronUp,
     Clock3,
     CloudUpload,
-    Download,
     EllipsisVertical,
+    FileSpreadsheet,
     Eye,
     FileCode2,
     FileText,
@@ -411,37 +411,48 @@ const claseInput =
 
 <template>
     <AppLayout titulo="Comprobantes">
-        <!-- Filtros -->
-        <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div class="relative w-full lg:max-w-sm">
-                <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
-                <input v-model="buscar" type="text" placeholder="Buscar por número, cliente o documento..." :class="[claseInput, 'w-full pl-10']" />
-            </div>
-            <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center">
-                <!-- rango de fechas de emision -->
-                <div class="col-span-2 flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 dark:border-neutral-800 dark:bg-neutral-900">
-                    <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
-                    <input v-model="desde" type="date" :max="hasta || undefined" aria-label="Desde" title="Desde" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
-                    <span class="text-xs text-[#94A3B8]">a</span>
-                    <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none sm:w-34 sm:flex-none" />
+        <!-- Filtros: arriba el buscador y Excel; abajo los filtros en una grilla que se acomoda al ancho -->
+        <div class="mb-4 space-y-2" data-filtros-comprobantes>
+            <div class="flex gap-2">
+                <div class="relative min-w-0 flex-1">
+                    <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
+                    <input v-model="buscar" type="text" placeholder="Buscar por número, cliente o documento..." :class="[claseInput, 'w-full pl-10']" />
                 </div>
-                <select v-model="tipo" :class="claseInput" aria-label="Tipo">
+                <a
+                    :href="urlExportar"
+                    class="grid size-10 shrink-0 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-emerald-600 transition-colors hover:border-emerald-300 hover:bg-emerald-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-emerald-400 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40"
+                    title="Exportar a Excel los comprobantes de la lista"
+                    aria-label="Exportar a Excel"
+                    data-exportar
+                >
+                    <FileSpreadsheet class="size-5" />
+                </a>
+            </div>
+            <div class="grid grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-[minmax(19rem,1.4fr)_repeat(4,minmax(0,1fr))_auto]">
+                <!-- rango de fechas de emision -->
+                <div class="col-span-2 flex min-w-0 items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 md:col-span-3 xl:col-span-1 2xl:col-span-1 dark:border-neutral-800 dark:bg-neutral-900">
+                    <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
+                    <input v-model="desde" type="date" :max="hasta || undefined" aria-label="Desde" title="Desde" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none" />
+                    <span class="text-xs text-[#94A3B8]">a</span>
+                    <input v-model="hasta" type="date" :min="desde || undefined" aria-label="Hasta" title="Hasta" class="h-10 min-w-0 flex-1 bg-transparent text-sm focus:outline-none" />
+                </div>
+                <select v-model="tipo" :class="[claseInput, 'w-full min-w-0']" aria-label="Tipo">
                     <option value="">Todos los tipos</option>
                     <option value="00">Notas de venta</option>
                     <option value="03">Boletas</option>
                     <option value="01">Facturas</option>
                 </select>
-                <select v-model="condicion" :class="claseInput" aria-label="Condición de pago" data-filtro-condicion>
+                <select v-model="condicion" :class="[claseInput, 'w-full min-w-0']" aria-label="Condición de pago" data-filtro-condicion>
                     <option value="">Contado y crédito</option>
                     <option value="contado">Al contado</option>
                     <option value="credito">Al crédito</option>
                 </select>
-                <select v-model="estado" :class="claseInput" aria-label="Estado">
+                <select v-model="estado" :class="[claseInput, 'w-full min-w-0']" aria-label="Estado">
                     <option value="">Todos los estados</option>
                     <option value="emitido">Emitidos</option>
                     <option value="anulado">Anulados</option>
                 </select>
-                <select v-model="sunat" :class="[claseInput, 'col-span-2 sm:col-span-1']" aria-label="Estado en SUNAT">
+                <select v-model="sunat" :class="[claseInput, 'w-full min-w-0']" aria-label="Estado en SUNAT">
                     <option value="">SUNAT: todos</option>
                     <option value="pendiente">Sin aceptar (pendientes y rechazados)</option>
                     <option value="aceptado">Aceptados</option>
@@ -453,21 +464,13 @@ const claseInput =
                 <button
                     v-if="hayFiltros"
                     type="button"
-                    class="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 sm:col-span-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                    class="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 md:col-span-1 dark:text-neutral-400 dark:hover:bg-neutral-800"
                     @click="limpiarFiltros"
                 >
                     <X class="size-4" />
                     Limpiar
                 </button>
             </div>
-            <a
-                :href="urlExportar"
-                class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm font-medium transition-colors hover:bg-slate-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-                title="Descargar en Excel los comprobantes de la lista"
-            >
-                <Download class="size-4" />
-                Exportar Excel
-            </a>
         </div>
 
         <!-- Aviso tras convertir una nota de venta -->
