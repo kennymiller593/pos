@@ -80,32 +80,58 @@
 @section('contenido')
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         @if ($portada)
-            {{-- Campaña: título, presentación y botones, con la foto de portada al lado --}}
-            <section class="mt-5 overflow-hidden rounded-2xl bg-(--mercado-fondo) text-(--sobre-fondo) sm:mt-6" data-portada="mercado">
-                <div class="relative grid {{ $fotoCampana ? 'lg:grid-cols-[1.1fr_1fr]' : '' }}">
-                    {{-- brillo suave del color de la tienda, para que la campaña no sea un bloque plano --}}
-                    <div class="pointer-events-none absolute -top-32 -left-24 size-96 rounded-full bg-(--marca) opacity-25 blur-3xl" aria-hidden="true"></div>
-                    <div class="relative px-6 py-10 sm:px-10 sm:py-14 lg:py-16">
-                        <p class="text-xs font-bold tracking-[0.2em] uppercase opacity-75">{{ $tienda['anuncio'] ? 'Campaña' : 'Tienda en línea' }}</p>
-                        <h1 class="mt-3 text-3xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">{{ $tienda['portada']['titulo'] }}</h1>
-                        <p class="mt-4 max-w-lg text-base leading-relaxed opacity-85 sm:text-lg">{{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}</p>
+            @php
+                // la campaña: a la derecha, hasta 3 destacados con foto como "ofertas"; si no hay, la foto de portada
+                $ofertas = $destacados ? $destacados['productos']->filter(fn ($p) => $p['imagen'])->take(3)->values() : collect();
+                $conLateral = $ofertas->isNotEmpty() || $fotoCampana;
+            @endphp
+            {{-- Campaña: panel en el color de la tienda con el título, los botones y los productos de la semana --}}
+            <section class="relative mt-4 overflow-hidden rounded-3xl bg-(--marca) text-(--sobre-marca) sm:mt-6" data-portada="mercado">
+                <div class="pointer-events-none absolute -top-24 -right-16 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
+                <div class="pointer-events-none absolute -bottom-32 left-1/3 size-96 rounded-full bg-black/10 blur-3xl" aria-hidden="true"></div>
+                <div class="relative grid gap-8 px-6 py-8 sm:px-10 sm:py-12 {{ $conLateral ? 'lg:grid-cols-[1fr_1.15fr] lg:items-center lg:gap-10' : 'lg:py-16' }}">
+                    <div class="{{ $conLateral ? '' : 'max-w-3xl' }}">
+                        <p class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase ring-1 ring-white/20">@include('tienda.mercado.icono', ['n' => 'chispa', 'clase' => 'size-3.5']){{ $tienda['anuncio'] ? 'Campaña' : 'Tienda en línea' }}</p>
+                        <h1 class="mt-4 text-3xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">{{ $tienda['portada']['titulo'] }}</h1>
+                        <p class="mt-4 max-w-lg text-base leading-relaxed opacity-90 sm:text-lg">{{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}</p>
                         <div class="mt-7 flex flex-wrap gap-3">
-                            <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-lg bg-(--marca) px-6 text-sm font-bold text-(--sobre-marca) shadow-sm ring-1 ring-white/20 transition hover:brightness-110">{{ $tienda['portada']['boton'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
+                            <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-bold text-(--marca-texto) shadow-lg shadow-black/10 transition hover:bg-slate-50">{{ $tienda['portada']['boton'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
                             @if ($whatsapp)
-                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-lg px-6 text-sm font-bold ring-1 ring-white/40 transition-colors hover:bg-white/10">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])Pedir por WhatsApp</a>
+                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-xl px-6 text-sm font-bold ring-1 ring-white/50 transition-colors hover:bg-white/10">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])Pedir por WhatsApp</a>
                             @endif
                         </div>
-                        {{-- lo que ofrece la tienda, de un vistazo --}}
-                        <ul class="mt-8 flex flex-wrap gap-2 text-xs font-semibold" data-beneficios>
-                            <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.mercado.icono', ['n' => 'camion', 'clase' => 'size-4'])Envíos a todo el Perú</li>
-                            <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.mercado.icono', ['n' => 'escudo', 'clase' => 'size-4'])Pago seguro</li>
+                        <ul class="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold opacity-90" data-beneficios>
+                            <li class="inline-flex items-center gap-1.5">@include('tienda.mercado.icono', ['n' => 'camion', 'clase' => 'size-4'])Envíos a todo el Perú</li>
+                            <li class="inline-flex items-center gap-1.5">@include('tienda.mercado.icono', ['n' => 'escudo', 'clase' => 'size-4'])Compra segura</li>
                             @if ($whatsapp)
-                                <li class="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/15">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4'])Asesoría por WhatsApp</li>
+                                <li class="inline-flex items-center gap-1.5">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4'])Asesoría por WhatsApp</li>
                             @endif
                         </ul>
                     </div>
-                    @if ($fotoCampana)
-                        <div class="relative min-h-56 bg-black/20 lg:min-h-full">
+
+                    @if ($ofertas->isNotEmpty())
+                        <div class="-mx-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-1 sm:-mx-10 sm:px-10 lg:mx-0 lg:grid lg:px-0 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden {{ $ofertas->count() === 1 ? 'lg:grid-cols-1 lg:justify-items-end' : ($ofertas->count() === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3') }}" data-ofertas>
+                            @foreach ($ofertas as $p)
+                                <a href="{{ $p['url'] }}" class="group flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl shadow-black/15 transition hover:-translate-y-1 sm:w-52 lg:w-auto {{ $ofertas->count() === 1 ? 'lg:max-w-xs' : '' }}">
+                                    <span class="relative block aspect-square overflow-hidden bg-white">
+                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" fetchpriority="high" width="400" height="400" class="size-full object-contain p-4 transition-transform duration-300 group-hover:scale-105">
+                                        <span class="absolute top-2.5 left-2.5 rounded-md bg-(--mercado-fondo) px-2 py-1 text-[10px] font-bold tracking-wider text-(--sobre-fondo) uppercase">{{ $destacados['origen'] === 'nuevos' ? 'Novedad' : ($destacados['origen'] === 'vendidos' ? 'Más pedido' : 'Destacado') }}</span>
+                                    </span>
+                                    <span class="flex flex-1 flex-col px-3.5 pt-2 pb-3.5">
+                                        <span class="line-clamp-2 text-sm leading-snug font-bold">{{ $p['nombre'] }}</span>
+                                        <span class="mt-auto pt-2">
+                                            @if ($p['precio'] !== null)
+                                                <span class="inline-block rounded-lg bg-(--marca-suave) px-2.5 py-1 text-base font-extrabold text-(--marca-texto)">S/ {{ number_format($p['precio'], 2) }}</span>
+                                            @else
+                                                <span class="text-xs font-semibold text-slate-500">Consultar precio</span>
+                                            @endif
+                                        </span>
+                                    </span>
+                                </a>
+                            @endforeach
+                        </div>
+                    @elseif ($fotoCampana)
+                        <div class="relative -mx-6 -mb-8 min-h-56 sm:-mx-10 sm:-mb-12 lg:mx-0 lg:mb-0 lg:min-h-80 lg:overflow-hidden lg:rounded-2xl lg:shadow-xl lg:shadow-black/15">
                             <img src="{{ $fotoCampana }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 size-full object-cover">
                         </div>
                     @endif
@@ -114,10 +140,10 @@
 
             {{-- Banners del dueño --}}
             @if ($bannersRestantes)
-                <section class="mt-6 grid gap-4 {{ count($bannersRestantes) > 1 ? 'sm:grid-cols-2' : '' }}" aria-label="Promociones" data-banners>
+                <section class="mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 [scrollbar-width:none] sm:grid [&::-webkit-scrollbar]:hidden {{ count($bannersRestantes) > 1 ? 'sm:grid-cols-2' : '' }}" aria-label="Promociones" data-banners>
                     @foreach ($bannersRestantes as $banner)
                         @php $etiqueta = $banner['enlace'] ? 'a' : 'div'; @endphp
-                        <{{ $etiqueta }} @if ($banner['enlace']) href="{{ $banner['enlace'] }}" @if ($banner['externo']) target="_blank" rel="noopener" @endif @endif class="group relative block overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200">
+                        <{{ $etiqueta }} @if ($banner['enlace']) href="{{ $banner['enlace'] }}" @if ($banner['externo']) target="_blank" rel="noopener" @endif @endif class="group relative block w-[85%] shrink-0 snap-start overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200 sm:w-auto">
                             <img src="{{ $banner['imagen'] }}" alt="{{ $banner['titulo'] ?? '' }}" width="1600" height="600" loading="lazy" class="aspect-[16/6] w-full object-cover transition-transform duration-500 {{ $banner['enlace'] ? 'group-hover:scale-[1.02]' : '' }}">
                             @if ($banner['titulo'])
                                 <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent px-5 pt-10 pb-4 text-lg font-bold text-white">{{ $banner['titulo'] }}</span>
@@ -126,26 +152,55 @@
                     @endforeach
                 </section>
             @endif
-            {{-- Compra por categoría --}}
+
+            {{-- Categorías en círculos, como en un mercado --}}
             @if ($categorias->count() >= 3)
                 <section class="mt-10" aria-labelledby="titulo-categorias" data-categorias>
                     <div class="flex flex-wrap items-end justify-between gap-3">
-                        <h2 id="titulo-categorias" class="text-2xl font-extrabold tracking-tight">Compra por categoría</h2>
-                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver todo @include('tienda.icono', ['n' => 'flecha'])</a>
+                        <div>
+                            <p class="text-[11px] font-bold tracking-[0.18em] text-(--marca-texto) uppercase">Explora</p>
+                            <h2 id="titulo-categorias" class="text-2xl font-extrabold tracking-tight">Compra por categoría</h2>
+                        </div>
+                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
                     </div>
-                    <div class="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
-                        @foreach ($categorias->take(6) as $cat)
-                            <a href="{{ $cat->url }}" class="group rounded-xl bg-white p-3 text-center ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/10 hover:ring-(--marca)">
-                                <span class="mx-auto grid size-16 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-xl font-extrabold text-(--marca-texto) sm:size-20">
+                    <div class="-mx-4 mt-5 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        @foreach ($categorias->take(8) as $cat)
+                            <a href="{{ $cat->url }}" class="group w-24 shrink-0 snap-start text-center sm:w-28 lg:w-auto">
+                                <span class="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-2xl font-extrabold text-(--marca-texto) ring-4 ring-white shadow-sm transition duration-300 group-hover:scale-105 group-hover:ring-(--marca) sm:size-24">
                                     @if ($cat->imagen)
-                                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="160" height="160" class="size-full object-contain p-2 mix-blend-multiply transition-transform duration-300 group-hover:scale-110">
+                                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="160" height="160" class="size-full object-contain p-3 mix-blend-multiply">
                                     @else
                                         {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($cat->nombre, 0, 1)) }}
                                     @endif
                                 </span>
-                                <span class="mt-2.5 block truncate text-sm font-bold group-hover:text-(--marca-texto)">{{ $cat->nombre }}</span>
-                                <span class="block text-xs text-slate-500">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
+                                <span class="mt-2.5 line-clamp-2 text-[13px] leading-tight font-bold group-hover:text-(--marca-texto)">{{ $cat->nombre }}</span>
+                                <span class="block text-[11px] text-slate-500">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
                             </a>
+                        @endforeach
+                    </div>
+                </section>
+            @endif
+
+            {{-- Destacados: los que eligió el dueño, los más pedidos o las novedades --}}
+            @if ($destacados && $destacados['productos']->isNotEmpty())
+                @php
+                    [$tituloDestacados, $etiquetaDestacados] = match ($destacados['origen']) {
+                        'nuevos' => ['Productos de lanzamiento', 'Novedades'],
+                        'vendidos' => ['Lo más pedido', 'Favoritos de nuestros clientes'],
+                        default => ['Productos destacados', 'Selección de la tienda'],
+                    };
+                @endphp
+                <section class="mt-12" aria-labelledby="titulo-destacados" data-destacados>
+                    <div class="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                            <p class="text-[11px] font-bold tracking-[0.18em] text-(--marca-texto) uppercase">{{ $etiquetaDestacados }}</p>
+                            <h2 id="titulo-destacados" class="text-2xl font-extrabold tracking-tight">{{ $tituloDestacados }}</h2>
+                        </div>
+                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
+                    </div>
+                    <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                        @foreach ($destacados['productos']->take(6) as $p)
+                            @include('tienda.mercado.tarjeta', ['p' => $p, 'insignia' => $destacados['origen'] === 'nuevos' ? 'nuevo' : null])
                         @endforeach
                     </div>
                 </section>
@@ -155,11 +210,11 @@
                 <a href="/" class="hover:text-(--marca-texto)">Inicio</a>
                 @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
                 @if ($categoria || $buscar !== '')
-                    <a href="/catalogo" class="hover:text-(--marca-texto)">Catálogo</a>
+                    <a href="/catalogo" class="hover:text-(--marca-texto)">Tienda</a>
                     @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5'])
                     <span class="text-slate-800">{{ $categoria ? $categoria->nombre : 'Búsqueda' }}</span>
                 @else
-                    <span class="text-slate-800">Catálogo</span>
+                    <span class="text-slate-800">Tienda</span>
                 @endif
             </nav>
         @endif
@@ -169,16 +224,16 @@
             @if (! $portada && $hayFiltros)
                 {{-- en el celular los filtros se abren con un toque; en pantalla grande van siempre a la vista --}}
                 <div class="min-w-0">
-                <details class="group rounded-xl bg-white ring-1 ring-slate-200 lg:hidden" {{ $marca !== '' || $hasta !== null ? 'open' : '' }} data-filtros>
+                <details class="group rounded-2xl bg-white ring-1 ring-slate-200 lg:hidden" {{ $marca !== '' || $hasta !== null ? 'open' : '' }} data-filtros>
                     <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold select-none [&::-webkit-details-marker]:hidden">
-                        <span class="flex items-center gap-2">@include('tienda.icono', ['n' => 'cuadricula', 'clase' => 'size-4 text-(--marca-texto)'])Filtros</span>
+                        <span class="flex items-center gap-2">@include('tienda.icono', ['n' => 'cuadricula', 'clase' => 'size-4 text-(--marca-texto)'])Filtrar productos</span>
                         @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-4 rotate-90 text-slate-400 transition-transform group-open:-rotate-90'])
                     </summary>
                     <div class="space-y-6 border-t border-slate-100 px-4 pt-4 pb-5">
                         @include('tienda.mercado.filtros', ['sufijo' => '-movil'])
                     </div>
                 </details>
-                <aside class="hidden self-start lg:sticky lg:top-32 lg:block lg:space-y-6" aria-label="Filtros" data-filtros-pc>
+                <aside class="hidden self-start rounded-2xl bg-white p-5 ring-1 ring-slate-200 lg:sticky lg:top-36 lg:block lg:space-y-6" aria-label="Filtros" data-filtros-pc>
                     @include('tienda.mercado.filtros')
                 </aside>
                 </div>
@@ -188,6 +243,9 @@
                 <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
                     <div class="min-w-0">
                         @php $etiquetaTitulo = $portada ? 'h2' : 'h1'; @endphp
+                        @if ($portada)
+                            <p class="text-[11px] font-bold tracking-[0.18em] text-(--marca-texto) uppercase">Catálogo</p>
+                        @endif
                         <{{ $etiquetaTitulo }} id="titulo-catalogo" class="text-2xl font-extrabold tracking-tight">
                             @if ($buscar !== '')
                                 Resultados para “{{ $buscar }}”
@@ -207,19 +265,19 @@
                     </div>
 
                     @if ($portada && $productos->hasMorePages())
-                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver todos @include('tienda.icono', ['n' => 'flecha'])</a>
+                        <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
                     @elseif (! $portada && $tienda['mostrar_precios'] && $productos->total() > 1)
                         <form action="{{ $base }}" method="get" class="flex items-center gap-2">
                             @foreach ($vigentes as $clave => $valor)
                                 @if ($clave !== 'orden') <input type="hidden" name="{{ $clave }}" value="{{ $valor }}"> @endif
                             @endforeach
                             <label for="orden" class="text-sm text-slate-500">Ordenar:</label>
-                            <select id="orden" name="orden" class="h-10 rounded-lg border border-slate-200 bg-white pr-8 pl-3 text-sm font-semibold focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
+                            <select id="orden" name="orden" class="h-10 rounded-xl border border-slate-200 bg-white pr-8 pl-3 text-sm font-semibold focus:border-(--marca) focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
                                 <option value="nombre" @selected($orden === 'nombre')>Nombre</option>
                                 <option value="menor" @selected($orden === 'menor')>Menor precio</option>
                                 <option value="mayor" @selected($orden === 'mayor')>Mayor precio</option>
                             </select>
-                            <noscript><button type="submit" class="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium">Aplicar</button></noscript>
+                            <noscript><button type="submit" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium">Aplicar</button></noscript>
                         </form>
                     @endif
                 </div>
@@ -237,24 +295,24 @@
                         </p>
                         <div class="mt-6 flex flex-wrap justify-center gap-2">
                             @if ($filtrando)
-                                <a href="/catalogo" class="inline-flex h-11 items-center rounded-lg bg-white px-5 text-sm font-bold ring-1 ring-slate-200 hover:ring-slate-300">Ver todo el catálogo</a>
+                                <a href="/catalogo" class="inline-flex h-11 items-center rounded-xl bg-white px-5 text-sm font-bold ring-1 ring-slate-200 hover:ring-slate-300">Ver toda la tienda</a>
                             @endif
                             @if ($whatsapp)
-                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-lg bg-(--mercado-fondo) px-5 text-sm font-bold text-(--sobre-fondo) hover:brightness-125">@include('tienda.icono', ['n' => 'whatsapp'])Preguntar por WhatsApp</a>
+                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl bg-(--mercado-fondo) px-5 text-sm font-bold text-(--sobre-fondo) hover:brightness-125">@include('tienda.icono', ['n' => 'whatsapp'])Preguntar por WhatsApp</a>
                             @endif
                         </div>
                     </div>
                 @else
-                    <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 {{ ! $portada && $hayFiltros ? 'xl:grid-cols-4' : 'lg:grid-cols-4' }}">
+                    <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 {{ ! $portada && $hayFiltros ? 'xl:grid-cols-4' : 'lg:grid-cols-4 xl:grid-cols-6' }}">
                         @foreach ($productos as $p)
-                            @include('tienda.mercado.tarjeta', ['p' => $p, 'prioritaria' => $loop->index < 4])
+                            @include('tienda.mercado.tarjeta', ['p' => $p, 'prioritaria' => ! $portada && $loop->index < 4])
                         @endforeach
                     </div>
 
                     @if ($portada)
                         @if ($productos->hasMorePages())
                             <div class="mt-8 text-center">
-                                <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-lg bg-(--mercado-fondo) px-6 text-sm font-bold text-(--sobre-fondo) shadow-sm transition hover:brightness-125">Ver los {{ number_format($productos->total()) }} productos @include('tienda.icono', ['n' => 'flecha'])</a>
+                                <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-(--mercado-fondo) px-6 text-sm font-bold text-(--sobre-fondo) shadow-sm transition hover:brightness-125">Ver los {{ number_format($productos->total()) }} productos @include('tienda.icono', ['n' => 'flecha'])</a>
                             </div>
                         @endif
                     @else
@@ -264,26 +322,27 @@
             </div>
         </section>
 
-        {{-- Destacados en la portada, después del catálogo --}}
-        @if ($portada && $destacados && $destacados['productos']->isNotEmpty())
-            <section class="mt-12" aria-labelledby="titulo-destacados">
-                <div class="flex flex-wrap items-end justify-between gap-3">
-                    <h2 id="titulo-destacados" class="text-2xl font-extrabold tracking-tight">Lo más pedido</h2>
-                    <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver todo el catálogo @include('tienda.icono', ['n' => 'flecha'])</a>
-                </div>
-                <div class="mt-5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-                    @foreach ($destacados['productos']->take(4) as $p)
-                        @include('tienda.mercado.tarjeta', ['p' => $p])
-                    @endforeach
-                </div>
+        {{-- Mosaico de categorías con foto --}}
+        @php $mosaico = $portada ? $categorias->filter(fn ($c) => $c->imagen)->take(3)->values() : collect(); @endphp
+        @if ($mosaico->count() >= 2)
+            <section class="mt-12 grid gap-4 sm:grid-cols-2 {{ $mosaico->count() === 3 ? 'lg:grid-cols-3' : '' }}" aria-label="Categorías destacadas" data-mosaico>
+                @foreach ($mosaico as $cat)
+                    <a href="{{ $cat->url }}" class="group relative flex min-h-56 flex-col justify-end overflow-hidden rounded-3xl bg-(--mercado-fondo) p-6 text-(--sobre-fondo) ring-1 ring-black/5 sm:min-h-64">
+                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="600" height="600" class="absolute -top-6 -right-6 size-44 rotate-6 object-contain opacity-90 drop-shadow-2xl transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3 sm:size-52">
+                        <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" aria-hidden="true"></div>
+                        <span class="relative inline-flex w-fit rounded-full bg-(--marca) px-2.5 py-1 text-[10px] font-bold tracking-wider text-(--sobre-marca) uppercase">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
+                        <span class="relative mt-2 text-2xl font-extrabold tracking-tight">{{ $cat->nombre }}</span>
+                        <span class="relative mt-1 line-clamp-2 text-sm opacity-80">{{ ($cat->texto ?? null) ? \Illuminate\Support\Str::limit(\Illuminate\Support\Str::squish($cat->texto), 90) : 'Ver la categoría completa' }}</span>
+                    </a>
+                @endforeach
             </section>
         @endif
 
         {{-- Sobre nosotros --}}
         @if ($portada && filled($nosotros))
-            <section class="mt-12 rounded-2xl bg-white p-6 ring-1 ring-slate-200 sm:p-8 lg:flex lg:items-center lg:gap-10" aria-labelledby="titulo-nosotros">
+            <section class="mt-12 rounded-3xl bg-white p-6 ring-1 ring-slate-200 sm:p-8 lg:flex lg:items-center lg:gap-10" aria-labelledby="titulo-nosotros">
                 <div class="lg:w-1/3">
-                    <p class="text-xs font-bold tracking-[0.2em] text-(--marca-texto) uppercase">Conócenos</p>
+                    <p class="text-[11px] font-bold tracking-[0.18em] text-(--marca-texto) uppercase">Conócenos</p>
                     <h2 id="titulo-nosotros" class="mt-1 text-2xl font-extrabold tracking-tight">Sobre {{ $tienda['nombre'] }}</h2>
                 </div>
                 <div class="mt-3 lg:mt-0 lg:flex-1">

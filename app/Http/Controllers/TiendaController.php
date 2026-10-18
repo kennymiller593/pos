@@ -342,6 +342,8 @@ class TiendaController extends Controller
             // páginas de texto que la tienda tiene llenas (para el pie y la portada)
             'paginas' => array_values(array_map(fn ($p) => ['url' => $p['url'], 'titulo' => $p['titulo']], $this->paginas($config))),
             'nosotros' => $config['nosotros'],
+            // marcas con productos en la tienda: el menú "Marcas" de la plantilla Mercado
+            'marcasTienda' => $config['plantilla'] === 'mercado' ? $this->catalogo->marcas($empresa) : collect(),
             // lo primero que el dueño escribió sobre envíos y pagos, para los sellos de la plantilla Mercado
             'entrega' => [
                 'envios' => Str::limit(Str::squish((string) (Tienda::lineas($config['envios'])[0] ?? '')), 90, '…') ?: null,
