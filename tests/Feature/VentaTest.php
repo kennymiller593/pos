@@ -262,6 +262,40 @@ class VentaTest extends TestCase
         $this->assertSame([1, 2], $buscar($serie));
     }
 
+    public function test_comprobantes_filtra_por_condicion_y_cuentas_por_cobrar_trae_lo_que_compro(): void
+    {
+        $producto = $this->crearProducto(precio: 20.00);
+        $this->darStock($producto, 50, 10.00);
+        $this->abrirCaja();
+        $presentacion = $producto->presentaciones->first();
+        $this->venderContado($presentacion, 1);
+
+        // una venta al crédito a un cliente con línea
+        $cliente = $this->crearCliente(limiteCredito: 500);
+        $this->actingAs($this->admin)->post('/pos/ventas', [
+            'tipo_comprobante_codigo' => '00',
+            'cliente_id' => $cliente->id,
+            'es_credito' => true,
+            'items' => [['presentacion_id' => $presentacion->id, 'cantidad' => 3]],
+            'pagos' => [],
+        ])->assertSessionHasNoErrors();
+
+        $lista = fn (string $url) => collect($this->actingAs($this->admin)->get($url)->assertOk()->viewData('page')['props']['comprobantes']['data']);
+        $this->assertCount(2, $lista('/comprobantes'));
+        $this->assertSame([true], $lista('/comprobantes?condicion=credito')->pluck('es_credito')->all());
+        $this->assertSame([false], $lista('/comprobantes?condicion=contado')->pluck('es_credito')->all());
+        $this->assertCount(2, $lista('/comprobantes?condicion=otra'));
+
+        // en Cuentas por cobrar viene el detalle de la venta y su id para el ticket
+        $props = $this->actingAs($this->admin)->get('/cuentas-por-cobrar')->assertOk()->viewData('page')['props'];
+        $cuenta = $props['cuentas']['data'][0];
+        $this->assertNotEmpty($cuenta['comprobante']['id']);
+        $this->assertCount(1, $cuenta['comprobante']['detalles']);
+        $this->assertEqualsWithDelta(3, $cuenta['comprobante']['detalles'][0]['cantidad'], 0.001);
+        $this->assertEqualsWithDelta(60, $cuenta['comprobante']['total'], 0.001);
+        $this->assertArrayHasKey('NIU', $props['unidades']);
+    }
+
     public function test_venta_sin_stock_suficiente_es_rechazada(): void
     {
         $producto = $this->crearProducto(precio: 5.00);

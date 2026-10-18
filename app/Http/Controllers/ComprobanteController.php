@@ -69,7 +69,7 @@ class ComprobanteController extends Controller
     /** La lista con sus filtros y orden (la comparten la pantalla y la exportacion). */
     private function consulta(Request $request): array
     {
-        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat']);
+        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat', 'condicion']);
         // rango de fechas de emision (AAAA-MM-DD); una fecha mal escrita se ignora
         foreach (['desde', 'hasta'] as $campo) {
             $valor = (string) $request->query($campo);
@@ -109,6 +109,8 @@ class ComprobanteController extends Controller
             ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('fecha_emision', '<=', $hasta))
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('tipo_comprobante_codigo', $tipo))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('estado', $estado))
+            // contado o crédito
+            ->when(in_array($filtros['condicion'] ?? null, ['contado', 'credito'], true), fn ($q) => $q->where('es_credito', $filtros['condicion'] === 'credito'))
             // "pendiente" agrupa lo que SUNAT aun no acepto: sin envio, pendiente o rechazado
             ->when($filtros['sunat'] ?? null, fn ($q, $sunat) => $sunat === 'pendiente'
                 ? $q->whereIn('tipo_comprobante_codigo', ['01', '03'])
@@ -183,7 +185,7 @@ class ComprobanteController extends Controller
     /** Columnas por las que se puede ordenar la lista. */
     private const ORDENES = [
         'numero' => null, 'tipo' => 'tipo_comprobante_codigo', 'fecha' => null, 'cliente' => 'cliente_nombre',
-        'total' => 'total', 'estado' => 'estado', 'sunat' => null, 'vendedor' => null,
+        'total' => 'total', 'condicion' => 'es_credito', 'estado' => 'estado', 'sunat' => null, 'vendedor' => null,
     ];
 
     private function ordenar($query, string $orden, string $dir): void

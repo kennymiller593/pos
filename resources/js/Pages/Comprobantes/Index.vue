@@ -48,6 +48,7 @@ import {
 import { usePermisos } from '@/composables/permisos'
 import { useSucursales } from '@/composables/sucursales'
 import { useImpresion } from '@/composables/impresion'
+import DetalleProductos from '@/Components/Comprobantes/DetalleProductos.vue'
 
 const { imprimirTicket } = useImpresion()
 
@@ -105,6 +106,7 @@ const COLUMNAS = computed(() => [
     ...(multisucursal.value ? [{ id: 'sucursal', titulo: 'Sucursal', sinOrden: true }] : []),
     { id: 'cliente', titulo: 'Cliente' },
     { id: 'total', titulo: 'Total', clase: 'text-right' },
+    { id: 'condicion', titulo: 'Condición' },
     { id: 'estado', titulo: 'Estado' },
     { id: 'sunat', titulo: 'SUNAT' },
     { id: 'vendedor', titulo: 'Vendedor' },
@@ -127,6 +129,7 @@ const hasta = ref(props.filtros.hasta ?? '')
 const tipo = ref(props.filtros.tipo ?? '')
 const estado = ref(props.filtros.estado ?? '')
 const sunat = ref(props.filtros.sunat ?? '')
+const condicion = ref(props.filtros.condicion ?? '')
 
 function aplicarFiltros() {
     router.get('/comprobantes', {
@@ -134,6 +137,7 @@ function aplicarFiltros() {
         tipo: tipo.value || undefined,
         estado: estado.value || undefined,
         sunat: sunat.value || undefined,
+        condicion: condicion.value || undefined,
         desde: desde.value || undefined,
         hasta: hasta.value || undefined,
         orden: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.columna : undefined,
@@ -144,7 +148,7 @@ function aplicarFiltros() {
 // Excel con lo que se ve en la lista (mismos filtros y orden), sin paginar
 const urlExportar = computed(() => {
     const parametros = new URLSearchParams()
-    for (const [clave, valor] of Object.entries({ buscar: buscar.value, tipo: tipo.value, estado: estado.value, sunat: sunat.value, desde: desde.value, hasta: hasta.value })) {
+    for (const [clave, valor] of Object.entries({ buscar: buscar.value, tipo: tipo.value, estado: estado.value, sunat: sunat.value, condicion: condicion.value, desde: desde.value, hasta: hasta.value })) {
         if (valor) parametros.set(clave, valor)
     }
     if (orden.value.columna !== 'fecha' || orden.value.dir !== 'desc') {
@@ -155,7 +159,7 @@ const urlExportar = computed(() => {
     return '/comprobantes/exportar' + (q ? `?${q}` : '')
 })
 
-const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || desde.value || hasta.value))
+const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || condicion.value || desde.value || hasta.value))
 function limpiarFiltros() {
     desde.value = ''
     hasta.value = ''
@@ -163,10 +167,11 @@ function limpiarFiltros() {
     tipo.value = ''
     estado.value = ''
     sunat.value = ''
+    condicion.value = ''
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([tipo, estado, sunat, desde, hasta], aplicarFiltros)
+watch([tipo, estado, sunat, condicion, desde, hasta], aplicarFiltros)
 
 // ---- detalle expandible ----
 
@@ -174,8 +179,6 @@ watch([tipo, estado, sunat, desde, hasta], aplicarFiltros)
 const verId = ref(null)
 const ver = computed(() => props.comprobantes.data.find((c) => c.id === verId.value) ?? null)
 const verDetalle = (c) => (verId.value = c.id)
-const nombreUnidad = (codigo) => props.unidades[(codigo ?? '').trim()] ?? (codigo ?? '').trim()
-const cantidadTexto = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
 
 const puedeGuia = (c) => puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)
 const puedeAnular = (c) => puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)
@@ -428,6 +431,11 @@ const claseInput =
                     <option value="03">Boletas</option>
                     <option value="01">Facturas</option>
                 </select>
+                <select v-model="condicion" :class="claseInput" aria-label="Condición de pago" data-filtro-condicion>
+                    <option value="">Contado y crédito</option>
+                    <option value="contado">Al contado</option>
+                    <option value="credito">Al crédito</option>
+                </select>
                 <select v-model="estado" :class="claseInput" aria-label="Estado">
                     <option value="">Todos los estados</option>
                     <option value="emitido">Emitidos</option>
@@ -517,7 +525,7 @@ const claseInput =
                     </thead>
                     <tbody class="divide-y divide-[#F1F5F9] dark:divide-neutral-800">
                         <tr v-if="!comprobantes.data.length">
-                            <td colspan="10" class="px-4 py-14 text-center text-neutral-500 dark:text-neutral-400">
+                            <td :colspan="COLUMNAS.length + 1" class="px-4 py-14 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <ReceiptText class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay comprobantes que mostrar.
@@ -561,6 +569,7 @@ const claseInput =
                                     </div>
                                 </td>
                                 <td class="px-3 py-4 text-right text-base font-bold whitespace-nowrap text-[#0F172A] tabular-nums dark:text-neutral-100">{{ soles(c.total) }}</td>
+                                <td class="px-3 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="c.es_credito ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-slate-100 text-[#475569] dark:bg-neutral-800 dark:text-neutral-300'" data-condicion>{{ c.es_credito ? 'Crédito' : 'Contado' }}</span></td>
                                 <td class="px-3 py-4">
                                     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="c.estado === 'emitido' ? ESTILO_OK : ESTILO_ERROR">
                                         {{ c.estado === 'emitido' ? 'Emitido' : 'Anulado' }}
@@ -659,6 +668,7 @@ const claseInput =
                         </span>
                         <span v-if="esElectronico(c)" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="badgeSunat(c)[1]">SUNAT: {{ badgeSunat(c)[0] }}
                         </span>
+                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="c.es_credito ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-slate-100 text-[#475569] dark:bg-neutral-800 dark:text-neutral-300'" data-condicion>{{ c.es_credito ? 'Crédito' : 'Contado' }}</span>
                         <span v-if="c.notas?.length" class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ c.notas.length }} N. crédito</span>
                     </div>
                     <div class="mt-3 flex items-center gap-1.5">
@@ -704,64 +714,7 @@ const claseInput =
         </div>
 
         <!-- Modal de detalle: productos y, si es electrónico, la respuesta de SUNAT -->
-        <Teleport to="body">
-            <div v-if="ver" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-3 sm:p-4">
-                <div class="fixed inset-0 bg-neutral-950/60" @click="verId = null" />
-                <div class="relative w-full max-w-3xl min-w-0 rounded-2xl border border-[#E2E8F0] bg-white text-[#0F172A] shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100" role="dialog" aria-modal="true">
-                    <div class="flex items-center justify-between gap-3 border-b border-[#E2E8F0] px-5 py-4 dark:border-neutral-800">
-                        <h3 class="font-semibold tracking-tight">Detalle de {{ numero(ver) }}</h3>
-                        <button type="button" class="rounded-lg p-1.5 text-neutral-400 hover:bg-slate-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200" aria-label="Cerrar" @click="verId = null">
-                            <X class="size-5" />
-                        </button>
-                    </div>
-                    <!-- celular: una fila por producto -->
-                    <div class="max-h-[70vh] divide-y divide-[#F1F5F9] overflow-y-auto sm:hidden dark:divide-neutral-800">
-                        <div v-for="(d, i) in ver.detalles" :key="d.id" class="flex gap-3 px-5 py-3 text-sm">
-                            <span class="w-5 shrink-0 text-[#94A3B8] tabular-nums">{{ i + 1 }}</span>
-                            <div class="min-w-0 flex-1">
-                                <p class="font-medium">{{ d.descripcion }}</p>
-                                <p class="text-xs text-[#64748B] dark:text-neutral-400">
-                                    {{ cantidadTexto(d.cantidad) }} {{ nombreUnidad(d.unidad_codigo) }} × {{ soles(d.precio_unitario) }}
-                                </p>
-                            </div>
-                            <span class="shrink-0 font-semibold tabular-nums">{{ soles(d.total) }}</span>
-                        </div>
-                        <div class="flex justify-between px-5 py-3">
-                            <span class="font-semibold">Total</span>
-                            <span class="text-base font-bold tabular-nums">{{ soles(ver.total) }}</span>
-                        </div>
-                    </div>
-                    <div class="hidden max-h-[70vh] overflow-auto sm:block">
-                        <table class="w-full text-left text-sm">
-                            <thead class="sticky top-0 border-b border-[#E2E8F0] bg-slate-50 text-[11px] text-[#64748B] uppercase dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
-                                <tr>
-                                    <th class="w-12 py-2.5 pl-5 font-semibold tracking-wider">Ítem</th>
-                                    <th class="px-3 py-2.5 font-semibold tracking-wider">Producto</th>
-                                    <th class="px-3 py-2.5 font-semibold tracking-wider">Unidad</th>
-                                    <th class="px-3 py-2.5 text-right font-semibold tracking-wider">Cantidad</th>
-                                    <th class="px-3 py-2.5 text-right font-semibold tracking-wider">P. unitario</th>
-                                    <th class="py-2.5 pr-5 text-right font-semibold tracking-wider">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-[#F1F5F9] dark:divide-neutral-800">
-                                <tr v-for="(d, i) in ver.detalles" :key="d.id">
-                                    <td class="py-3 pl-5 text-[#94A3B8] tabular-nums">{{ i + 1 }}</td>
-                                    <td class="px-3 py-3 font-medium">{{ d.descripcion }}</td>
-                                    <td class="px-3 py-3 whitespace-nowrap text-[#475569] dark:text-neutral-300">{{ nombreUnidad(d.unidad_codigo) }}</td>
-                                    <td class="px-3 py-3 text-right tabular-nums">{{ cantidadTexto(d.cantidad) }}</td>
-                                    <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums">{{ soles(d.precio_unitario) }}</td>
-                                    <td class="py-3 pr-5 text-right font-semibold whitespace-nowrap tabular-nums">{{ soles(d.total) }}</td>
-                                </tr>
-                            </tbody>
-                            <tfoot class="border-t border-[#E2E8F0] dark:border-neutral-800">
-                                <tr>
-                                    <td colspan="5" class="py-3 pl-5 text-right font-semibold">Total</td>
-                                    <td class="py-3 pr-5 text-right text-base font-bold whitespace-nowrap tabular-nums">{{ soles(ver.total) }}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-
+        <DetalleProductos v-if="ver" :titulo="`Detalle de ${numero(ver)}`" :detalles="ver.detalles" :total="ver.total" :unidades="unidades" @cerrar="verId = null">
                     <!-- pie: pago, SUNAT y notas de crédito (antes estaba en la fila desplegable) -->
                     <div
                         v-if="ver.pagos?.length || ver.estado === 'anulado' || ver.sunat_respuesta?.convertido_de || (esElectronico(ver) && (ver.sunat?.mensaje_sunat || ver.sunat?.xml_url || ver.sunat?.cdr_url)) || ver.notas?.length"
@@ -851,9 +804,7 @@ const claseInput =
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </Teleport>
+        </DetalleProductos>
 
         <!-- Menú de más acciones -->
         <Teleport to="body">

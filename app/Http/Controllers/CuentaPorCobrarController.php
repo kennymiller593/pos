@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\Cobro;
 use App\Models\CuentaPorCobrar;
 use App\Models\MedioPago;
+use App\Models\UnidadMedida;
 use App\Services\CajaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,8 +31,10 @@ class CuentaPorCobrarController extends Controller
             ->when($sucursalIds, fn ($q) => $q->whereHas('comprobante', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
             ->with([
                 'cliente:id,nombre,numero_documento,telefono',
-                'comprobante:id,serie,correlativo,fecha_emision,sucursal_id',
+                'comprobante:id,serie,correlativo,fecha_emision,sucursal_id,total,tipo_comprobante_codigo',
                 'comprobante.sucursal:id,nombre',
+                // lo que se compró, para verlo sin salir de la pantalla
+                'comprobante.detalles:id,comprobante_id,descripcion,unidad_codigo,cantidad,precio_unitario,total',
             ])
             ->when($filtros['buscar'] ?? null, fn ($q, $buscar) => $q->whereHas('cliente', fn ($c) => $c
                 ->where('nombre', 'ilike', "%{$buscar}%")
@@ -63,6 +66,8 @@ class CuentaPorCobrarController extends Controller
             'resumen' => $resumen,
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             'cajaAbierta' => $this->caja->aperturaDe($request->user()) !== null,
+            // nombre de cada unidad para el detalle de la venta (KGM -> Kilogramo)
+            'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
         ]);
     }
 

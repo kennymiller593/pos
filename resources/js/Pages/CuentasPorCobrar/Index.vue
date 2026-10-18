@@ -2,10 +2,12 @@
 import { ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { AlertCircle, Banknote, HandCoins, Search, X } from '@lucide/vue'
+import { AlertCircle, Banknote, Eye, HandCoins, Printer, Search, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermisos } from '@/composables/permisos'
 import { useSucursales } from '@/composables/sucursales'
+import { useImpresion } from '@/composables/impresion'
+import DetalleProductos from '@/Components/Comprobantes/DetalleProductos.vue'
 
 const props = defineProps({
     cuentas: { type: Object, required: true },
@@ -13,10 +15,16 @@ const props = defineProps({
     resumen: { type: Object, required: true },
     mediosPago: { type: Array, required: true },
     cajaAbierta: { type: Boolean, default: false },
+    // código de unidad -> nombre, para el detalle de la venta
+    unidades: { type: Object, default: () => ({}) },
 })
 
 const { puede } = usePermisos()
 const { multisucursal } = useSucursales()
+const { imprimirTicket } = useImpresion()
+
+// ---- lo que compró el cliente (la venta de la deuda) ----
+const cuentaVer = ref(null)
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
 const numero = (c) => c.comprobante ? `${c.comprobante.serie}-${String(c.comprobante.correlativo).padStart(6, '0')}` : '—'
@@ -177,6 +185,29 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 </span>
                             </td>
                             <td class="px-4 py-3 text-right">
+                                <div class="flex items-center justify-end gap-1">
+                                <button
+                                    v-if="c.comprobante"
+                                    type="button"
+                                    class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                    title="Ver lo que compró"
+                                    aria-label="Ver lo que compró"
+                                    data-ver-venta
+                                    @click="cuentaVer = c"
+                                >
+                                    <Eye class="size-4" />
+                                </button>
+                                <button
+                                    v-if="c.comprobante && puede('comprobantes.ver')"
+                                    type="button"
+                                    class="rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:text-emerald-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                    title="Imprimir o descargar el ticket"
+                                    aria-label="Imprimir o descargar el ticket"
+                                    data-ticket-venta
+                                    @click="imprimirTicket(`/comprobantes/${c.comprobante.id}/ticket`)"
+                                >
+                                    <Printer class="size-4" />
+                                </button>
                                 <button
                                     v-if="puede('cuentas_cobrar.cobrar') && c.estado !== 'pagado'"
                                     class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -187,6 +218,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <Banknote class="size-3.5" />
                                     Cobrar
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -310,5 +342,51 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </form>
             </div>
         </Teleport>
+        <!-- Lo que compró el cliente en esa venta -->
+        <DetalleProductos
+            v-if="cuentaVer"
+            :titulo="`Venta ${numero(cuentaVer)} · ${cuentaVer.cliente?.nombre ?? ''}`"
+            :detalles="cuentaVer.comprobante?.detalles ?? []"
+            :total="cuentaVer.comprobante?.total ?? cuentaVer.monto_total"
+            :unidades="unidades"
+            @cerrar="cuentaVer = null"
+        >
+            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F0] px-5 py-4 text-sm dark:border-neutral-800">
+                <p class="text-[#475569] dark:text-neutral-300">
+                    Pagado {{ soles(cuentaVer.monto_pagado) }} · <span class="font-semibold text-amber-600 dark:text-amber-400">Saldo {{ soles(saldoDe(cuentaVer)) }}</span>
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <button
+                        v-if="puede('comprobantes.ver')"
+                        type="button"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-xs font-semibold hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        @click="imprimirTicket(`/comprobantes/${cuentaVer.comprobante.id}/ticket`)"
+                    >
+                        <Printer class="size-3.5" />
+                        Ticket
+                    </button>
+                    <a
+                        v-if="puede('comprobantes.ver')"
+                        :href="`/comprobantes/${cuentaVer.comprobante.id}/a4`"
+                        target="_blank"
+                        rel="noopener"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-xs font-semibold hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    >
+                        PDF A4
+                    </a>
+                    <button
+                        v-if="puede('cuentas_cobrar.cobrar') && cuentaVer.estado !== 'pagado'"
+                        type="button"
+                        :disabled="!cajaAbierta"
+                        :title="!cajaAbierta ? 'Abre caja para cobrar' : undefined"
+                        class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        @click="abrirCobro(cuentaVer); cuentaVer = null"
+                    >
+                        <Banknote class="size-3.5" />
+                        Cobrar
+                    </button>
+                </div>
+            </div>
+        </DetalleProductos>
     </AppLayout>
 </template>
