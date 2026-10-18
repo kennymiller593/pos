@@ -66,6 +66,8 @@
         /* el tono oscuro (barra superior, pie, mosaicos) sale del color de la tienda mezclado con azul noche */
         :root { --mercado-fondo: #0f172a; --sobre-fondo: #ffffff; }
         @supports (color: color-mix(in srgb, red 50%, blue)) { :root { --mercado-fondo: color-mix(in srgb, var(--marca) 22%, #0b1627); } }
+        /* las vistas compartidas con la clásica (producto, páginas) se ensanchan igual que el resto de Mercado */
+        [data-plantilla="mercado"] .max-w-7xl { max-width: 100rem; }
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }
         html:not(.con-bot) [data-necesita-bot] { display: none !important; }</style>
     <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp'], 'asistente' => $asistente ? ['nombre' => $asistente['nombre'], 'saludo' => $asistente['saludo'], 'sugerencias' => $asistente['sugerencias']] : null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
@@ -77,7 +79,7 @@
 
     @if ($previa)
         <div class="sticky top-0 z-50 bg-amber-400 text-amber-950">
-            <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm sm:px-6 lg:px-8">
+            <div class="mx-auto flex max-w-[100rem] flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm sm:px-6 lg:px-8">
                 <p><span class="font-semibold">Vista previa.</span> Así se verá tu tienda. Tus clientes no ven estos cambios hasta que los guardes.</p>
                 <a href="/?previa=salir" class="font-semibold underline underline-offset-2 hover:no-underline">Salir de la vista previa</a>
             </div>
@@ -86,7 +88,7 @@
 
     {{-- Barra superior: beneficios y atención al cliente --}}
     <div class="bg-(--mercado-fondo) text-(--sobre-fondo)" data-franja>
-        <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-xs sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-[100rem] items-center justify-between gap-4 px-3 py-1.5 text-xs sm:px-6 lg:px-8">
             @if ($tienda['anuncio'])
                 <p class="min-w-0 truncate font-semibold">{{ $tienda['anuncio'] }}</p>
             @else
@@ -108,7 +110,7 @@
 
     {{-- Cabecera blanca: marca, buscador grande, WhatsApp y carrito --}}
     <header class="z-30 bg-white shadow-sm shadow-slate-900/5 {{ $previa ? '' : 'lg:sticky lg:top-0' }}">
-        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mx-auto max-w-[100rem] px-3 sm:px-6 lg:px-8">
             <div class="flex items-center gap-3 py-3 lg:gap-6">
                 <a href="/" class="flex min-w-0 items-center gap-2.5" aria-label="{{ $tienda['nombre'] }}: inicio">
                     @if ($tienda['logo'])
@@ -161,7 +163,7 @@
 
         {{-- Barra de categorías en el color de la tienda --}}
         <nav class="bg-(--marca) text-(--sobre-marca)" aria-label="Categorías">
-            <div class="mx-auto flex max-w-7xl items-stretch gap-1 px-2 text-sm font-semibold sm:px-4 lg:px-6">
+            <div class="mx-auto flex max-w-[100rem] items-stretch gap-1 px-2 text-sm font-semibold sm:px-4 lg:px-6">
                 @if ($categorias->isNotEmpty())
                     <details class="group relative shrink-0">
                         <summary class="flex h-11 cursor-pointer list-none items-center gap-2 px-3 whitespace-nowrap transition-colors select-none hover:bg-black/10 group-open:bg-black/15 group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden" data-menu-categorias>
@@ -216,7 +218,7 @@
     </main>
 
     {{-- Sellos de confianza --}}
-    <section class="mx-auto mt-14 max-w-7xl px-4 sm:px-6 lg:px-8" aria-label="Cómo te atendemos" data-sellos>
+    <section class="mx-auto mt-14 max-w-[100rem] px-3 sm:px-6 lg:px-8" aria-label="Cómo te atendemos" data-sellos>
         <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             @foreach ($sellos as [$icono, $tituloSello, $detalle])
                 <li class="flex items-start gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-200/80">
@@ -232,7 +234,7 @@
 
     {{-- Pie oscuro en columnas --}}
     <footer id="contacto" class="mt-10 bg-(--mercado-fondo) text-(--sobre-fondo)">
-        <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-12 lg:px-8">
+        <div class="mx-auto grid max-w-[100rem] gap-10 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-12 lg:px-8">
             <div class="lg:col-span-4">
                 <div class="flex items-center gap-3">
                     @if ($tienda['logo'])
@@ -315,7 +317,7 @@
             </div>
         </div>
         <div class="border-t border-white/10">
-            <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs opacity-70 sm:flex-row sm:px-6 lg:px-8">
+            <div class="mx-auto flex max-w-[100rem] flex-col items-center justify-between gap-2 px-4 py-4 text-xs opacity-70 sm:flex-row sm:px-6 lg:px-8">
                 <span>© {{ now()->year }} {{ $tienda['nombre'] }}. Todos los derechos reservados.</span>
                 <a href="{{ config('app.url') }}" target="_blank" rel="noopener" class="hover:underline">Tienda creada con <span class="font-bold">inkaPos</span></a>
             </div>

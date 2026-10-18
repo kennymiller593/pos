@@ -78,7 +78,7 @@
 @endif
 
 @section('contenido')
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto max-w-[100rem] px-3 sm:px-6 lg:px-8">
         @if ($portada)
             @php
                 // la campaña: a la derecha, hasta 3 destacados con foto como "ofertas"; si no hay, la foto de portada
@@ -89,15 +89,15 @@
             <section class="relative mt-4 overflow-hidden rounded-3xl bg-(--marca) text-(--sobre-marca) sm:mt-6" data-portada="mercado">
                 <div class="pointer-events-none absolute -top-24 -right-16 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
                 <div class="pointer-events-none absolute -bottom-32 left-1/3 size-96 rounded-full bg-black/10 blur-3xl" aria-hidden="true"></div>
-                <div class="relative grid gap-8 px-6 py-8 sm:px-10 sm:py-12 {{ $conLateral ? 'lg:grid-cols-[1fr_1.15fr] lg:items-center lg:gap-10' : 'lg:py-16' }}">
+                <div class="relative grid gap-7 px-5 py-7 sm:px-10 sm:py-12 {{ $conLateral ? 'lg:grid-cols-[1fr_1.15fr] lg:items-center lg:gap-10' : 'lg:py-16' }}">
                     <div class="{{ $conLateral ? '' : 'max-w-3xl' }}">
                         <p class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase ring-1 ring-white/20">@include('tienda.mercado.icono', ['n' => 'chispa', 'clase' => 'size-3.5']){{ $tienda['anuncio'] ? 'Campaña' : 'Tienda en línea' }}</p>
-                        <h1 class="mt-4 text-3xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">{{ $tienda['portada']['titulo'] }}</h1>
-                        <p class="mt-4 max-w-lg text-base leading-relaxed opacity-90 sm:text-lg">{{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}</p>
+                        <h1 class="mt-4 text-[1.9rem] leading-[1.05] font-extrabold tracking-tight text-balance sm:text-5xl">{{ $tienda['portada']['titulo'] }}</h1>
+                        <p class="mt-3 max-w-lg text-[15px] leading-relaxed opacity-90 sm:mt-4 sm:text-lg">{{ $tienda['descripcion'] ?: 'Mira nuestro catálogo, busca lo que necesitas y haz tu pedido en un momento.' }}</p>
                         <div class="mt-7 flex flex-wrap gap-3">
-                            <a href="/catalogo" class="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-6 text-sm font-bold text-(--marca-texto) shadow-lg shadow-black/10 transition hover:bg-slate-50">{{ $tienda['portada']['boton'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
+                            <a href="/catalogo" class="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-[13px] font-bold text-(--marca-texto) sm:h-12 sm:px-6 sm:text-sm shadow-lg shadow-black/10 transition hover:bg-slate-50">{{ $tienda['portada']['boton'] }} @include('tienda.icono', ['n' => 'flecha'])</a>
                             @if ($whatsapp)
-                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-12 items-center gap-2 rounded-xl px-6 text-sm font-bold ring-1 ring-white/50 transition-colors hover:bg-white/10">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])Pedir por WhatsApp</a>
+                                <a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-[13px] font-bold ring-1 ring-white/50 sm:h-12 sm:px-6 sm:text-sm transition-colors hover:bg-white/10">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4.5'])Pedir por WhatsApp</a>
                             @endif
                         </div>
                         <ul class="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold opacity-90" data-beneficios>
@@ -110,7 +110,7 @@
                     </div>
 
                     @if ($ofertas->isNotEmpty())
-                        <div class="-mx-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-1 sm:-mx-10 sm:px-10 lg:mx-0 lg:grid lg:px-0 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden {{ $ofertas->count() === 1 ? 'lg:grid-cols-1 lg:justify-items-end' : ($ofertas->count() === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3') }}" data-ofertas>
+                        <div class="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-1 sm:-mx-10 sm:px-10 lg:mx-0 lg:grid lg:px-0 lg:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden {{ $ofertas->count() === 1 ? 'lg:grid-cols-1 lg:justify-items-end' : ($ofertas->count() === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3') }}" data-ofertas>
                             @foreach ($ofertas as $p)
                                 <a href="{{ $p['url'] }}" class="group flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl shadow-black/15 transition hover:-translate-y-1 sm:w-52 lg:w-auto {{ $ofertas->count() === 1 ? 'lg:max-w-xs' : '' }}">
                                     <span class="relative block aspect-square overflow-hidden bg-white">
@@ -131,7 +131,7 @@
                             @endforeach
                         </div>
                     @elseif ($fotoCampana)
-                        <div class="relative -mx-6 -mb-8 min-h-56 sm:-mx-10 sm:-mb-12 lg:mx-0 lg:mb-0 lg:min-h-80 lg:overflow-hidden lg:rounded-2xl lg:shadow-xl lg:shadow-black/15">
+                        <div class="relative -mx-5 -mb-7 min-h-56 sm:-mx-10 sm:-mb-12 lg:mx-0 lg:mb-0 lg:min-h-80 lg:overflow-hidden lg:rounded-2xl lg:shadow-xl lg:shadow-black/15">
                             <img src="{{ $fotoCampana }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 size-full object-cover">
                         </div>
                     @endif
@@ -163,7 +163,7 @@
                         </div>
                         <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
                     </div>
-                    <div class="-mx-4 mt-5 flex snap-x gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div class="-mx-3 mt-5 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         @foreach ($categorias->take(8) as $cat)
                             <a href="{{ $cat->url }}" class="group w-24 shrink-0 snap-start text-center sm:w-28 lg:w-auto">
                                 <span class="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-2xl font-extrabold text-(--marca-texto) ring-4 ring-white shadow-sm transition duration-300 group-hover:scale-105 group-hover:ring-(--marca) sm:size-24">
