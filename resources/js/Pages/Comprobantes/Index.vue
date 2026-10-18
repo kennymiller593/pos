@@ -179,6 +179,8 @@ watch([tipo, estado, sunat, condicion, desde, hasta], aplicarFiltros)
 const verId = ref(null)
 const ver = computed(() => props.comprobantes.data.find((c) => c.id === verId.value) ?? null)
 const verDetalle = (c) => (verId.value = c.id)
+// el vendedor se muestra solo por su primer nombre (el completo sale al pasar el mouse)
+const primerNombre = (nombre) => (nombre ?? '').trim().split(/\s+/)[0] || '—'
 
 const puedeGuia = (c) => puede('guias.gestionar') && c.estado === 'emitido' && ['00', '01', '03'].includes(c.tipo_comprobante_codigo)
 const puedeAnular = (c) => puede('comprobantes.anular') && c.estado === 'emitido' && c.tipo_comprobante_codigo !== '07' && !bajaPendiente(c)
@@ -603,7 +605,7 @@ const claseInput =
                                     <span v-else class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[#94A3B8] dark:bg-neutral-800 dark:text-neutral-500" title="Las notas de venta no van a SUNAT">No aplica</span>
                                 </td>
                                 <td class="px-3 py-4">
-                                    <span class="block max-w-40 truncate text-[#475569] dark:text-neutral-300" :title="c.usuario?.nombre_completo ?? ''">{{ c.usuario?.nombre_completo ?? '—' }}</span>
+                                    <span class="block max-w-40 truncate text-[#475569] dark:text-neutral-300" :title="c.usuario?.nombre_completo ?? ''" data-vendedor>{{ primerNombre(c.usuario?.nombre_completo) }}</span>
                                 </td>
                                 <td class="py-4 pr-4">
                                     <div class="flex items-center justify-end gap-1.5">
@@ -660,7 +662,7 @@ const claseInput =
                                 <span class="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold" :class="estiloTipo(c).clase">{{ estiloTipo(c).texto }}</span>
                             </div>
                             <p class="mt-1 truncate text-sm text-[#475569] dark:text-neutral-300">{{ c.cliente_nombre ?? 'Público general' }}</p>
-                            <p class="text-xs text-[#94A3B8]">{{ fecha(c) }} · {{ hora(c) }} · {{ c.usuario?.nombre_completo ?? "—" }}</p>
+                            <p class="text-xs text-[#94A3B8]">{{ fecha(c) }} · {{ hora(c) }} · {{ primerNombre(c.usuario?.nombre_completo) }}</p>
                         </div>
                         <p class="shrink-0 text-lg font-bold text-[#0F172A] tabular-nums dark:text-neutral-100">{{ soles(c.total) }}</p>
                     </div>
