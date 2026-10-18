@@ -40,10 +40,15 @@ class SuperadminTest extends TestCase
 
         $this->artisan('superadmin:asignar', ['email' => $this->admin->email])->assertSuccessful();
 
-        $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertOk()
+        $this->crearProducto();
+        $this->crearProducto();
+        $lista = $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertOk()
             ->assertInertia(fn ($p) => $p->component('Admin/Empresas/Index')
                 ->where('auth.user.es_superadmin', true)
                 ->has('empresas.data'));
+        // la lista dice cuántos productos tiene registrados cada empresa
+        $fila = collect($lista->viewData('page')['props']['empresas']['data'])->firstWhere('id', $this->empresa->id);
+        $this->assertSame(2, $fila['productos']);
 
         $this->artisan('superadmin:asignar', ['email' => $this->admin->email, '--quitar' => true])->assertSuccessful();
         $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertForbidden();

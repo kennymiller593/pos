@@ -152,6 +152,7 @@ const claseInput =
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Empresa</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Plan</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Uso</th>
+                            <th class="px-4 py-3.5 text-right font-semibold tracking-wider">Productos</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">SUNAT</th>
                             <th class="px-4 py-3.5 font-semibold tracking-wider">Alta</th>
                             <th class="px-4 py-3.5 text-center font-semibold tracking-wider">Estado</th>
@@ -160,7 +161,7 @@ const claseInput =
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!empresas.data.length">
-                            <td colspan="6" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
+                            <td colspan="8" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <Building2 class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                                     No hay empresas que mostrar.
@@ -198,6 +199,7 @@ const claseInput =
                                 · <span :title="`${e.sucursales} sucursales`">{{ numero(e.sucursales) }} suc.</span>
                                 · <span :title="`${e.comprobantes_mes} comprobantes este mes`">{{ numero(e.comprobantes_mes) }} comp./mes</span>
                             </td>
+                            <td class="px-4 py-3 text-right font-semibold whitespace-nowrap tabular-nums" :class="e.productos ? '' : 'text-neutral-400'" data-productos-empresa>{{ numero(e.productos) }}</td>
                             <td class="px-4 py-3">
                                 <span
                                     v-if="e.facturacion_electronica"

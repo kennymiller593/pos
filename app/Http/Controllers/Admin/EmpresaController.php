@@ -35,6 +35,8 @@ class EmpresaController extends Controller
                 'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true)->where('es_superadmin', false),
                 'sucursales as sucursales_activas' => fn ($q) => $q->where('activo', true),
                 'comprobantes as comprobantes_mes' => fn ($q) => $q->where('fecha_emision', '>=', now()->startOfMonth()->toDateString()),
+                // productos registrados (sin los eliminados)
+                'productos',
             ])
             ->with(['suscripciones' => fn ($q) => $q->with('plan:id,codigo,nombre')->orderByDesc('fecha_fin')->limit(1)])
             ->when($buscar !== '', fn ($q) => $q->where(fn ($w) => $w
@@ -60,6 +62,7 @@ class EmpresaController extends Controller
                     'usuarios' => (int) $e->usuarios_activos,
                     'sucursales' => (int) $e->sucursales_activas,
                     'comprobantes_mes' => (int) $e->comprobantes_mes,
+                    'productos' => (int) $e->productos_count,
                     'suscripcion' => $resumen,
                 ];
             });

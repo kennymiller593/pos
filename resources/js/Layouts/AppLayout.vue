@@ -403,7 +403,8 @@ const avisoSuscripcion = computed(() => {
             enlace: 'Ver planes',
         }
     }
-    if (!s.es_prueba && s.vigente && dias <= 7) {
+    // el plan pagado se avisa recién 2 días antes de vencer (antes eran 7: muy pronto, molestaba)
+    if (!s.es_prueba && s.vigente && dias <= 2) {
         return {
             tono: 'suave',
             texto: `Tu plan${s.plan ? ` ${s.plan}` : ''} vence el ${fechaLarga(s.fecha_fin)}.`,
