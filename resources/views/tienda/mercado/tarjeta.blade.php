@@ -51,23 +51,28 @@
         </div>
     </a>
 
-    {{-- cantidad y agregar al carrito (el pedido completo sale por WhatsApp); si está agotado, consultar --}}
+    {{-- cantidad, agregar al carrito (el pedido completo sale por WhatsApp) y comprar este producto por WhatsApp; si está agotado, consultar --}}
     @if ($p['pedido'])
-        <div class="@container px-3.5 pt-3 pb-3.5" data-zona-pedido>
+        <div class="@container px-3 pt-3 pb-3 sm:px-3.5 sm:pb-3.5" data-zona-pedido>
             @if ($p['disponible'] !== false)
-                <div class="flex gap-1.5">
-                    <div class="flex h-10 shrink-0 items-center rounded-lg bg-slate-50 ring-1 ring-slate-200" data-necesita-js>
-                        <button type="button" data-elegir-menos aria-label="Uno menos" class="grid h-10 w-8 cursor-pointer place-items-center rounded-l-lg text-slate-600 transition-colors hover:bg-slate-200">@include('tienda.icono', ['n' => 'menos', 'clase' => 'size-3.5'])</button>
-                        <input type="text" inputmode="numeric" data-cantidad-elegida value="1" maxlength="3" aria-label="Cantidad" class="h-10 w-8 bg-transparent text-center text-sm font-bold tabular-nums focus:outline-none">
-                        <button type="button" data-elegir-mas aria-label="Uno más" class="grid h-10 w-8 cursor-pointer place-items-center rounded-r-lg text-slate-600 transition-colors hover:bg-slate-200">@include('tienda.icono', ['n' => 'mas', 'clase' => 'size-3.5'])</button>
+                {{-- en tarjetas angostas (celular) va todo apilado; en las anchas, cantidad y botón en una fila --}}
+                <div class="flex flex-col gap-1.5 @min-[17rem]:flex-row">
+                    <div class="flex h-10 items-center justify-between rounded-lg bg-slate-50 ring-1 ring-slate-200 @min-[17rem]:w-auto @min-[17rem]:shrink-0 @min-[17rem]:justify-start" data-necesita-js>
+                        <button type="button" data-elegir-menos aria-label="Uno menos" class="grid h-10 w-9 cursor-pointer place-items-center rounded-l-lg text-slate-600 transition-colors hover:bg-slate-200 @min-[17rem]:w-8">@include('tienda.icono', ['n' => 'menos', 'clase' => 'size-3.5'])</button>
+                        <input type="text" inputmode="numeric" data-cantidad-elegida value="1" maxlength="3" aria-label="Cantidad" class="h-10 min-w-0 flex-1 bg-transparent text-center text-sm font-bold tabular-nums focus:outline-none @min-[17rem]:w-8 @min-[17rem]:flex-none">
+                        <button type="button" data-elegir-mas aria-label="Uno más" class="grid h-10 w-9 cursor-pointer place-items-center rounded-r-lg text-slate-600 transition-colors hover:bg-slate-200 @min-[17rem]:w-8">@include('tienda.icono', ['n' => 'mas', 'clase' => 'size-3.5'])</button>
                     </div>
                     <button type="button" data-anadir="{{ json_encode($p['para_pedido'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}" data-necesita-js
-                        class="flex h-10 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-(--marca) px-2 text-[12px] font-bold text-(--sobre-marca) transition hover:brightness-110 sm:text-[13px]"
+                        class="flex h-10 w-full shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-(--marca) px-2 text-[13px] font-bold text-(--sobre-marca) transition hover:brightness-110 @min-[17rem]:min-w-0 @min-[17rem]:flex-1"
                         aria-label="Agregar al carrito: {{ $p['nombre'] }}">
-                        @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-4'])<span data-anadir-texto class="truncate">Agregar</span><span class="hidden @min-[17rem]:inline">al carrito</span>
+                        @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-4'])<span data-anadir-texto class="truncate">Agregar al carrito</span>
                     </button>
                 </div>
-                <noscript><a href="{{ $p['pedido'] }}" target="_blank" rel="noopener" class="flex h-10 w-full items-center justify-center rounded-lg bg-(--marca) text-sm font-bold text-(--sobre-marca)">Pedir por WhatsApp</a></noscript>
+                <a href="{{ $p['pedido'] }}" target="_blank" rel="noopener" data-comprar
+                    class="mt-1.5 flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-[#25D366] px-2 text-[13px] font-bold text-white transition-colors hover:bg-[#1eb957]"
+                    aria-label="Comprar {{ $p['nombre'] }} por WhatsApp">
+                    @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-4'])Comprar
+                </a>
             @else
                 <a href="{{ $p['pedido'] }}" target="_blank" rel="noopener"
                     class="flex h-10 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold text-slate-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-50"

@@ -279,6 +279,17 @@ if (panel && datos.whatsapp) {
             return
         }
 
+        // "Comprar" por WhatsApp desde la tarjeta: el mensaje lleva la cantidad elegida
+        const comprar = e.target.closest('[data-comprar]')
+        if (comprar) {
+            const campo = comprar.closest('[data-zona-pedido]')?.querySelector('[data-cantidad-elegida]')
+            const cantidad = Math.max(1, Math.min(999, parseInt(campo?.value, 10) || 1))
+            comprar.dataset.base ??= comprar.href
+            comprar.href = comprar.dataset.base + encodeURIComponent(`
+Cantidad: ${cantidad}`)
+            return
+        }
+
         // cantidad a añadir, en la página del producto
         const paso = e.target.closest('[data-elegir-menos], [data-elegir-mas]')
         if (paso) {
