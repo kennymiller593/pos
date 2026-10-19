@@ -136,7 +136,7 @@ class TiendaController extends Controller
         abort_if($productos->currentPage() > 1 && $productos->isEmpty(), 404);
 
         $filtrando = $buscar !== '' || $categoria !== null || $marca !== '' || $hasta !== null;
-        $destacados = $portada ? $this->catalogo->destacados($empresa) : null;
+        $destacados = $portada ? $this->catalogo->destacados($empresa, $config['destacados_origen']) : null;
 
         return view($mercado ? 'tienda.mercado.inicio' : 'tienda.inicio', [
             ...$contexto,
@@ -153,6 +153,8 @@ class TiendaController extends Controller
             'precioMaximo' => $mercado && ! $portada && $config['mostrar_precios'] ? ceil($this->catalogo->precioMaximo($empresa)) : 0,
             'destacados' => $destacados ? [
                 'origen' => $destacados['origen'],
+                // título que puso el dueño; sin él, cada plantilla pone el suyo según el origen
+                'titulo' => $config['destacados_titulo'],
                 'productos' => $destacados['productos']->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
             ] : null,
         ]);

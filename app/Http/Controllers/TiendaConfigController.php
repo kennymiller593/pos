@@ -14,6 +14,7 @@ use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -48,6 +49,8 @@ class TiendaConfigController extends Controller
                 ->orWhere('codigo_interno', 'ilike', "%{$filtros['buscar']}%")))
             ->when($filtros['ver'] === 'destacados', fn ($q) => $q->where('destacado', true))
             ->when($filtros['ver'] === 'ocultos', fn ($q) => $q->where('en_tienda', false))
+            // los destacados se listan como salen en la portada: en el orden que les dio el dueño
+            ->when($filtros['ver'] === 'destacados', fn ($q) => $q->orderByRaw('destacado_orden NULLS LAST'))
             ->orderBy('nombre')
             ->paginate(10)
             ->withQueryString()
@@ -86,7 +89,15 @@ class TiendaConfigController extends Controller
                     'origen' => config('tienda.origen'),
                 ],
                 'colores' => collect(config('tienda.colores'))->map(fn ($c) => $c[0])->all(),
-                'categorias' => $this->catalogo->categorias($empresa)->map(fn ($c) => ['id' => $c->id, 'nombre' => $c->nombre])->values(),
+                // las categorías con productos en la tienda, en el orden en que salen (orden del dueño; sin él, por nombre)
+                'categorias' => $this->catalogo->categorias($empresa)->map(fn ($c) => [
+                    'id' => $c->id,
+                    'nombre' => $c->nombre,
+                    'productos' => (int) $c->productos,
+                    'imagen' => $c->imagen,
+                    'imagen_propia' => $c->imagen_propia !== null,
+                    'ordenada' => $c->orden !== null,
+                ])->values(),
                 'limites' => ['banners' => Tienda::MAX_BANNERS, 'preguntas' => Tienda::MAX_PREGUNTAS],
             ],
             'resumen' => $this->catalogo->resumen($empresa),
@@ -223,6 +234,8 @@ class TiendaConfigController extends Controller
             'favicon_quitar' => ['nullable', 'boolean'],
             // para los buscadores
             'seo_titulo' => ['nullable', 'string', 'max:70'],
+            'destacados_origen' => ['sometimes', Rule::in(Tienda::ORIGENES)],
+            'destacados_titulo' => ['sometimes', 'nullable', 'string', 'max:60'],
             'seo_descripcion' => ['nullable', 'string', 'max:170'],
             'categorias_texto' => ['nullable', 'array'],
             'categorias_texto.*' => ['nullable', 'string', 'max:400'],
@@ -463,6 +476,97 @@ class TiendaConfigController extends Controller
         $this->purgarTienda($request->user()->empresa, [$this->catalogo->url($producto)]);
 
         return back();
+    }
+
+    /**
+     * La sección destacada de la portada: de dónde salen sus productos, cómo se titula y en qué
+     * orden van los que el dueño marcó con la estrella.
+     */
+    public function destacados(Request $request): RedirectResponse
+    {
+        $this->exigirAdicional($request);
+        $empresa = $request->user()->empresa;
+
+        $datos = $request->validate([
+            'origen' => ['sometimes', Rule::in(Tienda::ORIGENES)],
+            'titulo' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'orden' => ['sometimes', 'array', 'max:'.CatalogoTiendaService::DESTACADOS],
+            'orden.*' => ['uuid'],
+        ], [
+            'titulo.max' => 'El título no puede pasar de 60 caracteres.',
+        ]);
+
+        if (array_key_exists('origen', $datos) || array_key_exists('titulo', $datos)) {
+            $config = Tienda::config($empresa);
+            $config['destacados_origen'] = $datos['origen'] ?? $config['destacados_origen'];
+            if (array_key_exists('titulo', $datos)) {
+                $config['destacados_titulo'] = filled($datos['titulo']) ? trim($datos['titulo']) : null;
+            }
+            $empresa->update(['tienda_config' => $config]);
+        }
+
+        if (isset($datos['orden'])) {
+            $this->ordenar(Producto::where('empresa_id', $empresa->id)->where('destacado', true), 'destacado_orden', $datos['orden']);
+        }
+
+        $this->purgarTienda($empresa->fresh());
+
+        return back();
+    }
+
+    /** El orden en que las categorías salen en la tienda (menú, portada y filtros). */
+    public function ordenarCategorias(Request $request): RedirectResponse
+    {
+        $this->exigirAdicional($request);
+        $datos = $request->validate(['orden' => ['required', 'array', 'max:200'], 'orden.*' => ['uuid']]);
+
+        $this->ordenar(Categoria::where('empresa_id', $request->user()->empresa_id), 'orden', $datos['orden']);
+        $this->purgarTienda($request->user()->empresa);
+
+        return back();
+    }
+
+    /** La foto propia de una categoría (reemplaza a la de sus productos en la tienda). */
+    public function imagenCategoria(Request $request, Categoria $categoria, PortadaTiendaService $portada): RedirectResponse
+    {
+        $this->exigirAdicional($request);
+        abort_unless($categoria->empresa_id === $request->user()->empresa_id, 403);
+
+        $request->validate(['imagen' => ['required', 'image', 'max:8192']], [
+            'imagen.image' => 'Sube una imagen (JPG, PNG o WebP).',
+            'imagen.max' => 'La imagen no puede pasar de 8 MB.',
+        ]);
+
+        $anterior = $categoria->imagen_url;
+        $categoria->update(['imagen_url' => $portada->guardarCategoria($request->file('imagen'), $request->user()->empresa)]);
+        $portada->eliminar($anterior);
+        $this->purgarTienda($request->user()->empresa);
+
+        return back()->with('success', 'Foto de '.$categoria->nombre.' guardada.');
+    }
+
+    /** Quita la foto propia: la categoría vuelve a mostrar la de uno de sus productos. */
+    public function quitarImagenCategoria(Request $request, Categoria $categoria, PortadaTiendaService $portada): RedirectResponse
+    {
+        $this->exigirAdicional($request);
+        abort_unless($categoria->empresa_id === $request->user()->empresa_id, 403);
+
+        $portada->eliminar($categoria->imagen_url);
+        $categoria->update(['imagen_url' => null]);
+        $this->purgarTienda($request->user()->empresa);
+
+        return back();
+    }
+
+    /** Numera 1, 2, 3... las filas de la empresa en el orden recibido (los ids ajenos o repetidos se ignoran). */
+    private function ordenar(\Illuminate\Database\Eloquent\Builder $propias, string $columna, array $ids): void
+    {
+        $posicion = 0;
+        foreach (array_unique($ids) as $id) {
+            if ((clone $propias)->where('id', $id)->update([$columna => $posicion + 1])) {
+                $posicion++;
+            }
+        }
     }
 
     /** Pide a Cloudflare que olvide las páginas de la tienda que pudieron cambiar (en sus dos direcciones). */

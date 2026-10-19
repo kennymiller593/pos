@@ -209,6 +209,10 @@ Route::middleware('auth')->group(function () {
         Route::put('/tienda-en-linea', [TiendaConfigController::class, 'update'])->name('tienda-config.update');
         Route::post('/tienda-en-linea/vista-previa', [TiendaConfigController::class, 'vistaPrevia'])->middleware('throttle:20,1')->name('tienda-config.vista-previa');
         Route::patch('/tienda-en-linea/productos/{producto}', [TiendaConfigController::class, 'producto'])->name('tienda-config.producto');
+        Route::patch('/tienda-en-linea/destacados', [TiendaConfigController::class, 'destacados'])->name('tienda-config.destacados');
+        Route::patch('/tienda-en-linea/categorias/orden', [TiendaConfigController::class, 'ordenarCategorias'])->name('tienda-config.categorias.orden');
+        Route::post('/tienda-en-linea/categorias/{categoria}/imagen', [TiendaConfigController::class, 'imagenCategoria'])->name('tienda-config.categorias.imagen');
+        Route::delete('/tienda-en-linea/categorias/{categoria}/imagen', [TiendaConfigController::class, 'quitarImagenCategoria'])->name('tienda-config.categorias.imagen.quitar');
         // dominio propio de la tienda
         Route::post('/tienda-en-linea/dominio', [TiendaDominioController::class, 'guardar'])->middleware('throttle:10,1')->name('tienda-dominio.guardar');
         Route::post('/tienda-en-linea/dominio/verificar', [TiendaDominioController::class, 'verificar'])->middleware('throttle:10,1')->name('tienda-dominio.verificar');

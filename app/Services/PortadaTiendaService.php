@@ -30,6 +30,15 @@ class PortadaTiendaService
 
     public function __construct(private readonly ImagenProductoService $imagenes) {}
 
+    /** La foto de una categoría se ve en un círculo o un mosaico: basta con este lado. */
+    public const CATEGORIA = 600;
+
+    /** Guarda la foto de una categoría (reducida a lo que se ve) y devuelve su dirección. */
+    public function guardarCategoria(UploadedFile $archivo, Empresa $empresa): string
+    {
+        return $this->subir($this->preparar($archivo, self::CATEGORIA, self::CATEGORIA, 82), $empresa);
+    }
+
     /** Guarda una foto (banner) optimizada y devuelve su dirección. */
     public function guardar(UploadedFile $archivo, Empresa $empresa): string
     {

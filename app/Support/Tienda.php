@@ -53,6 +53,9 @@ class Tienda
         'seo_titulo' => null, // título de la portada en Google (si no, el nombre + "Catálogo y pedidos en línea")
         'seo_descripcion' => null, // descripción de la portada en Google (si no, la presentación)
         'categorias_texto' => [], // id de categoría => texto que presenta la categoría
+        // la sección de productos de la portada: qué productos lleva y cómo se titula
+        'destacados_origen' => 'auto', // auto (estrellas; si no, más vendidos; si no, nuevos), elegidos, vendidos o nuevos
+        'destacados_titulo' => null, // "Lo más pedido", "Ofertas de la semana"...; sin él, según el origen
         // "UREA 46% X 50 KG" se muestra como "Urea 46% x 50 kg"
         'nombres_bonitos' => true,
         // chatbot: el agente de IA de la empresa atendiendo a los clientes en la tienda
@@ -76,6 +79,9 @@ class Tienda
 
     /** Plantillas (diseño completo) que puede elegir la tienda. */
     public const PLANTILLAS = ['clasica', 'mercado'];
+
+    /** De dónde salen los productos de la sección destacada de la portada. */
+    public const ORIGENES = ['auto', 'elegidos', 'vendidos', 'nuevos'];
 
     public static function dominio(): ?string
     {

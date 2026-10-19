@@ -189,6 +189,7 @@
                         'vendidos' => ['Lo más pedido', 'Favoritos de nuestros clientes'],
                         default => ['Productos destacados', 'Selección de la tienda'],
                     };
+                    $tituloDestacados = $destacados['titulo'] ?? $tituloDestacados;
                 @endphp
                 <section class="mt-12" aria-labelledby="titulo-destacados" data-destacados>
                     <div class="flex flex-wrap items-end justify-between gap-3">

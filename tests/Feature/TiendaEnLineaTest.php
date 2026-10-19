@@ -1390,4 +1390,93 @@ class TiendaEnLineaTest extends TestCase
         $this->publicar(['plantilla' => 'mercado', 'mostrar_precios' => false]);
         $this->tienda('/catalogo?hasta=30')->assertOk()->assertSee('Urea 46% x 50 kg')->assertSee('Glifosato 480 SL')->assertDontSee('data-filtro-precio', false);
     }
+
+    public function test_las_categorias_se_ordenan_y_tienen_su_propia_foto(): void
+    {
+        Storage::fake('public');
+        $this->publicar();
+        $fertilizantes = Categoria::where('empresa_id', $this->empresa->id)->where('nombre', 'Fertilizantes')->first();
+        $abonos = Categoria::create(['empresa_id' => $this->empresa->id, 'nombre' => 'Abonos']);
+        $this->glifosato->update(['categoria_id' => $abonos->id, 'imagen_url' => '/storage/productos/glifo.jpg']);
+        $ajena = Categoria::create(['empresa_id' => Empresa::create(['ruc' => '20'.random_int(10000000, 99999999).'1', 'razon_social' => 'Otra', 'regimen_tributario' => 'MYPE', 'rubro_codigo' => $this->empresa->rubro_codigo, 'activo' => true])->id, 'nombre' => 'Ajena']);
+
+        // sin orden propio: por nombre; la foto de la categoría es la de uno de sus productos
+        $this->actingAs($this->admin)->get('/tienda-en-linea')->assertInertia(fn (Assert $pagina) => $pagina
+            ->where('tienda.categorias.0.nombre', 'Abonos')
+            ->where('tienda.categorias.0.imagen', '/storage/productos/glifo.jpg')
+            ->where('tienda.categorias.0.imagen_propia', false)
+            ->where('tienda.categorias.1.nombre', 'Fertilizantes'));
+
+        // el dueño pone Fertilizantes primero; una categoría ajena en la lista se ignora
+        $this->actingAs($this->admin)->patch('/tienda-en-linea/categorias/orden', ['orden' => [$fertilizantes->id, $ajena->id, $abonos->id]])->assertSessionHasNoErrors();
+        $this->assertSame([1, 2], [$fertilizantes->fresh()->orden, $abonos->fresh()->orden]);
+        $this->assertNull($ajena->fresh()->orden);
+        $this->actingAs($this->admin)->get('/tienda-en-linea')->assertInertia(fn (Assert $pagina) => $pagina
+            ->where('tienda.categorias.0.nombre', 'Fertilizantes')
+            ->where('tienda.categorias.1.nombre', 'Abonos'));
+        $portada = $this->tienda('/catalogo')->getContent();
+        $this->assertLessThan(strpos($portada, '/categoria/abonos'), strpos($portada, '/categoria/fertilizantes'));
+
+        // foto propia: se guarda reducida y manda sobre la de los productos
+        $this->actingAs($this->admin)->post("/tienda-en-linea/categorias/{$abonos->id}/imagen", ['imagen' => UploadedFile::fake()->create('foto.pdf', 10, 'application/pdf')])->assertSessionHasErrors('imagen');
+        $this->actingAs($this->admin)->post("/tienda-en-linea/categorias/{$abonos->id}/imagen", ['imagen' => UploadedFile::fake()->image('abonos.jpg', 2000, 1500)])->assertSessionHasNoErrors();
+        $propia = $abonos->fresh()->imagen_url;
+        $this->assertStringStartsWith('/storage/tienda/', $propia);
+        [$ancho] = getimagesizefromstring(Storage::disk('public')->get(substr($propia, strlen('/storage/'))));
+        $this->assertSame(600, $ancho);
+        $this->actingAs($this->admin)->get('/tienda-en-linea')->assertInertia(fn (Assert $pagina) => $pagina
+            ->where('tienda.categorias.1.imagen', $propia)
+            ->where('tienda.categorias.1.imagen_propia', true));
+        $this->tienda('/')->assertSee($propia, false);
+
+        // al quitarla se borra y vuelve la de los productos
+        $this->actingAs($this->admin)->delete("/tienda-en-linea/categorias/{$abonos->id}/imagen")->assertSessionHasNoErrors();
+        $this->assertNull($abonos->fresh()->imagen_url);
+        $this->assertSame([], Storage::disk('public')->allFiles('tienda'));
+
+        // una categoría de otra empresa no se toca
+        $this->actingAs($this->admin)->post("/tienda-en-linea/categorias/{$ajena->id}/imagen", ['imagen' => UploadedFile::fake()->image('x.jpg')])->assertForbidden();
+    }
+
+    public function test_la_seccion_destacada_se_configura_con_origen_titulo_y_orden(): void
+    {
+        $this->publicar(['plantilla' => 'mercado']);
+        $this->urea->update(['destacado' => true]);
+        $this->glifosato->update(['destacado' => true]);
+        $cambiar = fn (array $datos) => $this->actingAs($this->admin)->patch('/tienda-en-linea/destacados', $datos);
+
+        // automático con estrellas: los elegidos, por nombre
+        $portada = $this->tienda('/')->assertSee('Productos destacados')->getContent();
+        $this->assertLessThan(strpos($portada, 'Urea 46%'), strpos($portada, 'Glifosato 480'));
+
+        // el dueño los ordena a su gusto y le pone un título a la sección
+        $cambiar(['orden' => [$this->urea->id, $this->glifosato->id], 'titulo' => '  Ofertas de la semana  '])->assertSessionHasNoErrors();
+        $this->assertSame([1, 2], [$this->urea->fresh()->destacado_orden, $this->glifosato->fresh()->destacado_orden]);
+        $this->assertSame('Ofertas de la semana', $this->empresa->fresh()->tienda_config['destacados_titulo']);
+        $portada = $this->tienda('/')->assertSee('Ofertas de la semana')->assertDontSee('Productos destacados')->getContent();
+        $this->assertLessThan(strpos($portada, 'Glifosato 480'), strpos($portada, 'Urea 46%'));
+        $this->actingAs($this->admin)->get('/tienda-en-linea?ver=destacados')->assertInertia(fn (Assert $pagina) => $pagina
+            ->where('productos.data.0.nombre', 'Urea 46% x 50 kg')
+            ->where('productos.data.1.nombre', 'Glifosato 480 SL x 1 L'));
+
+        // "los más nuevos" manda aunque haya estrellas; sin título propio, el de la plantilla
+        $cambiar(['origen' => 'nuevos', 'titulo' => ''])->assertSessionHasNoErrors();
+        $this->assertSame('nuevos', $this->empresa->fresh()->tienda_config['destacados_origen']);
+        $this->tienda('/')->assertSee('Productos de lanzamiento')->assertDontSee('Ofertas de la semana');
+
+        // "los más vendidos" manda sobre las estrellas; mientras no haya ventas salen los más nuevos
+        $cambiar(['origen' => 'vendidos'])->assertSessionHasNoErrors();
+        $this->tienda('/')->assertSee('Productos de lanzamiento')->assertDontSee('Productos destacados');
+        $this->abrirCaja();
+        $this->venderContado($this->glifosato->presentaciones->first(), 2)->assertSessionHas('success');
+        Cache::flush();
+        $this->tienda('/')->assertSee('Lo más pedido')->assertDontSee('Productos de lanzamiento');
+
+        $cambiar(['origen' => 'cualquiera'])->assertSessionHasErrors('origen');
+        $cambiar(['titulo' => str_repeat('x', 61)])->assertSessionHasErrors('titulo');
+
+        // la plantilla clásica también obedece el título
+        $this->publicar(['destacados_origen' => 'elegidos', 'destacados_titulo' => 'Recomendados']);
+        $this->tienda('/')->assertSee('Recomendados')->assertDontSee('Productos destacados');
+    }
 }

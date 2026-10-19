@@ -19,6 +19,8 @@ class Categoria extends Model
         'empresa_id',
         'padre_id',
         'nombre',
+        'orden',
+        'imagen_url',
     ];
 
     public function empresa(): BelongsTo

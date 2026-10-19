@@ -234,7 +234,7 @@
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h2 id="titulo-destacados" class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-                        Productos destacados
+                        {{ $destacados['titulo'] ?? 'Productos destacados' }}
                     </h2>
                     <p class="mt-1 text-slate-500">{{ $subtitulos[$destacados['origen']] }}</p>
                 </div>

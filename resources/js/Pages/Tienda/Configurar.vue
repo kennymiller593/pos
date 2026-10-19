@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import {
+    ArrowDown,
+    ArrowUp,
     Check,
     Copy,
     ExternalLink,
@@ -16,12 +18,14 @@ import {
     Package,
     Pencil,
     Search,
+    Sparkles,
     Star,
     Trash2,
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import BannersTienda from '@/Components/Tienda/BannersTienda.vue'
+import CategoriasTienda from '@/Components/Tienda/CategoriasTienda.vue'
 import ContenidoTienda from '@/Components/Tienda/ContenidoTienda.vue'
 import DominioTienda from '@/Components/Tienda/DominioTienda.vue'
 import { claseArea, claseAyuda, claseError, claseInput, claseInterruptor, claseLabel, claseTarjeta } from '@/Components/Tienda/clases'
@@ -45,6 +49,7 @@ const SECCIONES = [
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
+    { valor: 'categorias', nombre: 'Categorías', campos: [] },
     { valor: 'dominio', nombre: 'Dominio', campos: [] },
 ]
 const seccion = ref('general')
@@ -398,6 +403,42 @@ function cambiar(producto, datos, alTerminar = null) {
     })
 }
 
+// la sección destacada de la portada: de dónde salen sus productos y cómo se titula
+const ORIGENES = [
+    { valor: 'auto', nombre: 'Automático', detalle: 'Los que marcas con la estrella; si no marcas ninguno, los más vendidos; y si aún no vendes, los más nuevos.' },
+    { valor: 'elegidos', nombre: 'Los que yo elijo', detalle: 'Solo los productos con estrella, en el orden que les des aquí.' },
+    { valor: 'vendidos', nombre: 'Los más vendidos', detalle: 'Se calcula con tus ventas de los últimos 90 días.' },
+    { valor: 'nuevos', nombre: 'Los más nuevos', detalle: 'Los últimos productos que registraste.' },
+]
+const TITULOS = { auto: 'según el origen', elegidos: 'Productos destacados', vendidos: 'Lo más pedido', nuevos: 'Productos de lanzamiento' }
+const formDestacados = useForm({
+    origen: props.tienda.config.destacados_origen ?? 'auto',
+    titulo: props.tienda.config.destacados_titulo ?? '',
+})
+const destacadosCambiados = computed(() => formDestacados.origen !== (props.tienda.config.destacados_origen ?? 'auto') || formDestacados.titulo.trim() !== (props.tienda.config.destacados_titulo ?? ''))
+function guardarDestacados() {
+    formDestacados.patch('/tienda-en-linea/destacados', { preserveScroll: true, preserveState: true, only: ['tienda', 'flash', 'errors'] })
+}
+
+// orden de los destacados: se mueven al instante y el servidor lo confirma
+const listaProductos = ref([...props.productos.data])
+watch(() => props.productos.data, (v) => (listaProductos.value = [...v]))
+const ordenando = ref(false)
+function moverDestacado(i, paso) {
+    const destino = i + paso
+    if (destino < 0 || destino >= listaProductos.value.length) return
+    const copia = [...listaProductos.value]
+    ;[copia[i], copia[destino]] = [copia[destino], copia[i]]
+    listaProductos.value = copia
+    ordenando.value = true
+    router.patch('/tienda-en-linea/destacados', { orden: copia.map((p) => p.id) }, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['productos', 'flash'],
+        onFinish: () => (ordenando.value = false),
+    })
+}
+
 // descripción del producto (sale en su página de la tienda)
 const editando = ref(null)
 const formDescripcion = useForm({ descripcion: '' })
@@ -505,7 +546,7 @@ function guardarDescripcion() {
             </div>
         </div>
 
-        <form v-show="seccion !== 'productos' && seccion !== 'dominio'" class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
+        <form v-show="seccion !== 'productos' && seccion !== 'dominio' && seccion !== 'categorias'" class="grid items-start gap-4 xl:grid-cols-2" @submit.prevent="guardar">
             <!-- Dirección y presentación -->
             <section v-show="seccion === 'general'" :class="[claseTarjeta, 'p-5']">
                 <h2 class="font-semibold tracking-tight">Dirección y presentación</h2>
@@ -957,6 +998,9 @@ function guardarDescripcion() {
         <!-- Dominio propio (fuera del formulario: se guarda por su cuenta) -->
         <DominioTienda v-if="seccion === 'dominio'" :tienda="tienda" />
 
+        <!-- Categorías: su orden y su foto (se guardan al momento) -->
+        <CategoriasTienda v-if="seccion === 'categorias'" :categorias="tienda.categorias" />
+
         <!-- Productos de la tienda -->
         <section v-show="seccion === 'productos'" :class="[claseTarjeta, 'overflow-hidden']" aria-label="Productos de la tienda">
             <div class="flex flex-col gap-3 border-b border-stone-200 p-5 dark:border-neutral-800">
@@ -1010,6 +1054,46 @@ function guardarDescripcion() {
                 </div>
             </div>
 
+            <form v-if="ver === 'destacados'" class="border-b border-stone-200 bg-stone-50/60 p-5 dark:border-neutral-800 dark:bg-neutral-950/40" data-seccion-destacada @submit.prevent="guardarDestacados">
+                <h3 class="flex items-center gap-2 text-sm font-semibold"><Sparkles class="size-4 text-amber-500" />Sección destacada de la portada</h3>
+                <p class="text-sm text-neutral-500 dark:text-neutral-400">Qué productos salen en el bloque principal de tu portada y con qué título.</p>
+                <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                    <label
+                        v-for="o in ORIGENES"
+                        :key="o.valor"
+                        class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors"
+                        :class="formDestacados.origen === o.valor
+                            ? 'border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-500 dark:bg-emerald-500/10'
+                            : 'border-stone-200 bg-white hover:bg-stone-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800'"
+                    >
+                        <input v-model="formDestacados.origen" type="radio" name="destacados_origen" :value="o.valor" class="mt-0.5 accent-emerald-600" />
+                        <span class="min-w-0">
+                            <span class="block text-sm font-semibold">{{ o.nombre }}</span>
+                            <span class="block text-xs text-neutral-500 dark:text-neutral-400">{{ o.detalle }}</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div class="min-w-0 flex-1 sm:max-w-md">
+                        <label :class="claseLabel" for="destacados_titulo">Título de la sección</label>
+                        <input id="destacados_titulo" v-model="formDestacados.titulo" type="text" maxlength="60" :class="claseInput" :placeholder="formDestacados.origen === 'auto' ? 'Lo más pedido, Productos destacados...' : TITULOS[formDestacados.origen]" />
+                        <p v-if="formDestacados.errors.titulo" :class="claseError">{{ formDestacados.errors.titulo }}</p>
+                        <p v-else :class="claseAyuda">Vacío: {{ formDestacados.origen === 'auto' ? 'el título va según de dónde salgan los productos' : `"${TITULOS[formDestacados.origen]}"` }}.</p>
+                    </div>
+                    <button
+                        type="submit"
+                        :disabled="formDestacados.processing || !destacadosCambiados"
+                        class="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-guardar-destacados
+                    >
+                        {{ formDestacados.processing ? 'Guardando...' : 'Guardar sección' }}
+                    </button>
+                </div>
+                <p v-if="formDestacados.origen !== 'vendidos' && formDestacados.origen !== 'nuevos' && listaProductos.length > 1" class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+                    Con las flechas ordenas los destacados tal como saldrán en la portada.
+                </p>
+            </form>
+
             <p v-if="!productos.data.length" class="px-5 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
                 <Package class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
                 {{ ver === 'destacados' ? 'Aún no destacas ningún producto. Mientras tanto, la tienda muestra los que más vendes.' : ver === 'ocultos' ? 'No tienes productos ocultos.' : 'No hay productos que mostrar.' }}
@@ -1017,18 +1101,23 @@ function guardarDescripcion() {
 
             <ul class="divide-y divide-stone-100 dark:divide-neutral-800">
                 <li
-                    v-for="p in productos.data"
+                    v-for="(p, i) in listaProductos"
                     :key="p.id"
                     class="flex items-center gap-3 px-5 py-3 transition-opacity"
                     :class="guardando === p.id ? 'opacity-60' : ''"
+                    :data-producto-tienda="p.id"
                 >
+                    <div v-if="ver === 'destacados'" class="flex shrink-0 flex-col gap-0.5">
+                        <button type="button" class="grid size-7 place-items-center rounded-lg text-neutral-500 hover:bg-stone-100 disabled:opacity-30 dark:text-neutral-400 dark:hover:bg-neutral-800" :disabled="i === 0 || ordenando" :aria-label="`Subir ${p.nombre}`" data-subir @click="moverDestacado(i, -1)"><ArrowUp class="size-4" /></button>
+                        <button type="button" class="grid size-7 place-items-center rounded-lg text-neutral-500 hover:bg-stone-100 disabled:opacity-30 dark:text-neutral-400 dark:hover:bg-neutral-800" :disabled="i === listaProductos.length - 1 || ordenando" :aria-label="`Bajar ${p.nombre}`" data-bajar @click="moverDestacado(i, 1)"><ArrowDown class="size-4" /></button>
+                    </div>
                     <div class="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-neutral-700" :class="p.en_tienda ? '' : 'opacity-40'">
                         <img v-if="p.imagen" :src="p.imagen" :alt="p.nombre" class="size-full object-contain" loading="lazy" />
                         <Package v-else class="size-5 text-neutral-300" />
                     </div>
 
                     <div class="min-w-0 flex-1" :class="p.en_tienda ? '' : 'opacity-50'">
-                        <p class="truncate text-sm font-medium">{{ p.nombre }}</p>
+                        <p class="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:truncate">{{ p.nombre }}</p>
                         <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">
                             {{ p.codigo }}<template v-if="p.categoria"> · {{ p.categoria }}</template>
                             <template v-if="p.precio !== null"> · {{ soles(p.precio) }}</template>

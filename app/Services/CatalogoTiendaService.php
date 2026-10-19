@@ -124,12 +124,14 @@ class CatalogoTiendaService
             ->whereExists(fn ($q) => $q->selectRaw('1')->from('producto_presentaciones')
                 ->whereColumn('producto_presentaciones.producto_id', 'productos.id')
                 ->where('producto_presentaciones.activo', true))
-            ->groupBy('categorias.id', 'categorias.nombre')
+            ->groupBy('categorias.id', 'categorias.nombre', 'categorias.orden', 'categorias.imagen_url')
+            // primero las que el dueño ordenó; el resto por nombre
+            ->orderByRaw('categorias.orden NULLS LAST')
             ->orderBy('categorias.nombre')
             // dos categorías con el mismo nombre: siempre en el mismo orden, para que su dirección no se alterne
             ->orderBy('categorias.id')
-            // la foto es la de cualquiera de sus productos que tenga una
-            ->selectRaw('categorias.id, categorias.nombre, COUNT(*) as productos, MAX(productos.imagen_url) as imagen')
+            // la foto es la propia de la categoría o, si no subió una, la de cualquiera de sus productos
+            ->selectRaw('categorias.id, categorias.nombre, categorias.orden, categorias.imagen_url AS imagen_propia, COUNT(*) as productos, COALESCE(categorias.imagen_url, MAX(productos.imagen_url)) as imagen')
             ->toBase()
             ->get()
             ->pipe(fn (Collection $categorias) => $this->conEnlace($categorias));
@@ -157,17 +159,26 @@ class CatalogoTiendaService
     }
 
     /**
-     * Productos destacados: los que el dueño marcó. Si no marcó ninguno, los más vendidos de los
-     * últimos 90 días; y si la tienda es nueva y aún no vende, los más recientes.
+     * Productos de la sección destacada de la portada. Con origen "auto": los que el dueño marcó con la
+     * estrella; si no marcó ninguno, los más vendidos de los últimos 90 días; y si la tienda es nueva y
+     * aún no vende, los más recientes. El dueño también puede fijar uno de esos orígenes.
      *
      * @return array{origen: string, productos: Collection<int, Producto>}
      */
-    public function destacados(Empresa $empresa): array
+    public function destacados(Empresa $empresa, string $origen = 'auto'): array
     {
-        $marcados = $this->productos($empresa)->where('productos.destacado', true)->orderBy('productos.nombre')->limit(self::DESTACADOS)->get();
+        if ($origen === 'nuevos') {
+            return $this->nuevos($empresa);
+        }
 
-        if ($marcados->isNotEmpty()) {
-            return ['origen' => 'elegidos', 'productos' => $marcados];
+        if ($origen !== 'vendidos') {
+            // en el orden que el dueño les dio; los que no ordenó, por nombre
+            $marcados = $this->productos($empresa)->where('productos.destacado', true)
+                ->orderByRaw('productos.destacado_orden NULLS LAST')->orderBy('productos.nombre')->limit(self::DESTACADOS)->get();
+
+            if ($marcados->isNotEmpty() || $origen === 'elegidos') {
+                return ['origen' => 'elegidos', 'productos' => $marcados];
+            }
         }
 
         // el calculo recorre las ventas: se guarda unos minutos para no repetirlo en cada visita
@@ -194,6 +205,12 @@ class CatalogoTiendaService
             }
         }
 
+        return $this->nuevos($empresa);
+    }
+
+    /** Los últimos productos que entraron a la tienda. */
+    private function nuevos(Empresa $empresa): array
+    {
         return [
             'origen' => 'nuevos',
             'productos' => $this->productos($empresa)->orderByDesc('productos.creado_en')->limit(self::DESTACADOS)->get(),
