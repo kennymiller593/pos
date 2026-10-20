@@ -1479,4 +1479,30 @@ class TiendaEnLineaTest extends TestCase
         $this->publicar(['destacados_origen' => 'elegidos', 'destacados_titulo' => 'Recomendados']);
         $this->tienda('/')->assertSee('Recomendados')->assertDontSee('Productos destacados');
     }
+
+    public function test_el_buscador_tolera_tildes_abreviaturas_y_errores_y_ordena_por_relevancia(): void
+    {
+        $this->publicar();
+        $semillas = Categoria::create(['empresa_id' => $this->empresa->id, 'nombre' => 'Semillas']);
+        $dekalb = $this->crearProducto(45, ['nombre' => 'Maíz DEKALB-7508 x kg', 'codigo_interno' => 'P0100', 'categoria_id' => $semillas->id]);
+        $choclo = $this->crearProducto(18, ['nombre' => 'Maiz choclo diente de mula x kg', 'codigo_interno' => 'P0101', 'categoria_id' => $semillas->id]);
+        $this->darStock($dekalb, 5, 30);
+        $this->darStock($choclo, 5, 10);
+
+        // como lo escribe un cliente: con "semilla" (es la categoría), la abreviatura DK y el número pegado
+        // "dk" no aparece en ningún lado: se exige una palabra menos y sale solo el que coincide con las otras tres
+        $this->tienda('/catalogo?q=Semilla+Maiz+DK7508')->assertOk()->assertSee('Maíz DEKALB-7508 x kg')->assertDontSee('Maiz choclo');
+
+        // sin tilde encuentra con tilde y al revés; un error de tipeo también
+        $this->tienda('/catalogo?q=maiz')->assertSee('Maíz DEKALB-7508 x kg')->assertSee('Maiz choclo diente de mula x kg');
+        $this->tienda('/catalogo?q=ma%C3%ADz+choclo')->assertSee('Maiz choclo diente de mula x kg');
+        $this->tienda('/catalogo?q=dekalv')->assertSee('Maíz DEKALB-7508 x kg')->assertDontSee('Maiz choclo');
+        // el relleno no cuenta
+        $this->tienda('/catalogo?q=quiero+el+precio+de+la+urea')->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato');
+        // y lo que no existe sigue sin existir
+        $this->tienda('/catalogo?q=zapatillas+rojas')->assertSee('No encontramos productos con esa búsqueda');
+
+        // las sugerencias del buscador van en el mismo orden
+        $this->tienda('/buscar?q=maiz+7508')->assertOk()->assertJsonPath('productos.0.nombre', 'Maíz DEKALB-7508 x kg');
+    }
 }

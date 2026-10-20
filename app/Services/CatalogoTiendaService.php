@@ -7,6 +7,7 @@ use App\Models\ComprobanteDetalle;
 use App\Models\Empresa;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
+use App\Services\BusquedaProductos;
 use App\Support\Tienda;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -57,23 +58,16 @@ class CatalogoTiendaService
         'HUAMANGA' => 'Huamanga', 'BAGUA' => 'Bagua', 'ANDAHUAYLAS' => 'Andahuaylas', 'AMARILIS' => 'Amarilis', 'PILLCO MARCA' => 'Pillco Marca',
     ];
 
-    /** Cada palabra buscada debe aparecer en el nombre, la marca, el código o el código de barras. */
+    /**
+     * Busca por palabras (nombre, marca, código, código de barras), con tolerancia a tildes, abreviaturas y
+     * errores de tipeo, ordenando por relevancia. Se exigen todas las palabras; si así no sale nada, una menos.
+     */
     public function buscar(Builder $consulta, string $texto): Builder
     {
-        $palabras = collect(preg_split('/\s+/', trim($texto)))->filter()->take(6);
+        $palabras = BusquedaProductos::palabras($texto);
+        $busqueda = app(BusquedaProductos::class);
 
-        foreach ($palabras as $palabra) {
-            // % y _ son comodines de LIKE: se buscan como texto
-            $patron = '%'.addcslashes($palabra, '%_\\').'%';
-
-            $consulta->where(fn ($q) => $q
-                ->where('productos.nombre', 'ilike', $patron)
-                ->orWhere('productos.codigo_interno', 'ilike', $patron)
-                ->orWhereHas('marca', fn ($m) => $m->where('nombre', 'ilike', $patron))
-                ->orWhereHas('presentaciones', fn ($p) => $p->where('activo', true)->where('codigo_barras', $palabra)));
-        }
-
-        return $consulta;
+        return $busqueda->aplicar($consulta, $palabras, $busqueda->minimo($consulta, $palabras));
     }
 
     /** Marcas con productos visibles en la tienda (en una categoría, si se indica), con cuántos productos cada una. */

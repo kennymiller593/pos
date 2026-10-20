@@ -214,6 +214,24 @@ class AgentesIaTest extends TestCase
 
         $this->assertStringContainsString('No hay productos', $buscar->handle(new ToolRequest(['consulta' => 'fungicida roya'])));
 
+        // como escribe un cliente: palabras genéricas, abreviatura y número pegado; la herramienta encuentra igual y avisa qué no apareció
+        $semillas = Categoria::create(['empresa_id' => $this->empresa->id, 'nombre' => 'Semillas']);
+        $this->crearProducto(45, ['nombre' => 'Maíz DEKALB-7508 x kg', 'categoria_id' => $semillas->id]);
+        $this->crearProducto(18, ['nombre' => 'Maiz choclo diente de mula x kg', 'categoria_id' => $semillas->id]);
+        $r = $buscar->handle(new ToolRequest(['consulta' => 'Semilla Maiz DK7508']));
+        $this->assertStringContainsString('Maíz DEKALB-7508 x kg', $r);
+        $this->assertStringContainsString('"dk" no aparece', $r);
+        $this->assertStringNotContainsString('Maiz choclo', $r); // coincide con menos palabras: no entra
+        // solo con lo genérico salen los dos
+        $r = $buscar->handle(new ToolRequest(['consulta' => 'semilla de maíz']));
+        $this->assertStringContainsString('DEKALB-7508', $r);
+        $this->assertStringContainsString('Maiz choclo', $r);
+        // con lo distintivo no hay aviso
+        $r = $buscar->handle(new ToolRequest(['consulta' => 'dekalb 7508']));
+        $this->assertStringContainsString('DEKALB-7508', $r);
+        $this->assertStringNotContainsString('no aparece', $r);
+        $this->assertStringNotContainsString('Maiz choclo', $r);
+
         // otra empresa no ve este catálogo
         $otra = Empresa::create(['ruc' => '20'.random_int(10000000, 99999999).'1', 'razon_social' => 'Otra SAC', 'regimen_tributario' => 'RUS', 'rubro_codigo' => $this->empresa->rubro_codigo, 'activo' => true]);
         $this->assertStringContainsString('No hay productos', (new BuscarProductos($otra))->handle(new ToolRequest(['consulta' => 'clorpirifos'])));
