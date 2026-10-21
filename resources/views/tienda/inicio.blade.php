@@ -115,7 +115,7 @@
     @if ($portada)
         {{-- Portada: el dueño elige entre vitrina de productos, foto grande o solo texto --}}
         @if ($tienda['portada']['estilo'] === 'foto')
-            <section class="relative isolate overflow-hidden bg-slate-900" data-portada="foto">
+            <section class="relative isolate overflow-hidden bg-(--secundario)" data-portada="foto">
                 {{-- en el celular se descarga la versión chica --}}
                 <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover"
                     @if ($tienda['portada']['imagen_movil']) srcset="{{ $tienda['portada']['imagen_movil'] }} 900w, {{ $tienda['portada']['imagen'] }} 1600w" sizes="100vw" @endif>

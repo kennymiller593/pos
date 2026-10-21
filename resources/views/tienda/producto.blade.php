@@ -152,7 +152,7 @@
                                 <button type="button" data-elegir-mas aria-label="Uno más" class="grid h-13 w-11 cursor-pointer place-items-center rounded-r-xl text-slate-600 transition-colors hover:bg-slate-100">@include('tienda.icono', ['n' => 'mas'])</button>
                             </div>
                             <button type="button" data-anadir="{{ json_encode($producto['para_pedido'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}"
-                                class="inline-flex h-13 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-base font-semibold text-white transition-colors hover:bg-slate-700">
+                                class="inline-flex h-13 min-w-0 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-(--secundario) px-5 text-base font-semibold text-white transition-colors hover:bg-slate-700">
                                 @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-5'])<span data-anadir-texto>Añadir al pedido</span>
                             </button>
                         </div>
@@ -160,7 +160,7 @@
 
                     <div class="{{ $pedido && $producto['disponible'] !== false ? 'mt-2' : 'mt-5' }} flex flex-col gap-2 sm:flex-row">
                         @if ($pedido)
-                            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-13 shrink-0 items-center sm:flex-1 justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
+                            <a href="{{ $pedido }}" target="_blank" rel="noopener" data-pedir-producto class="inline-flex h-13 shrink-0 items-center sm:flex-1 justify-center gap-2 rounded-xl bg-(--marca) px-6 text-base font-semibold text-(--sobre-marca) shadow-sm transition-colors hover:bg-(--marca-oscuro)">
                                 @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5']){{ $textoPedido }}
                             </a>
                         @endif
@@ -256,7 +256,7 @@
                 @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-5'])
                 <span data-pedido-cuenta class="absolute -top-1.5 -right-1.5 hidden min-w-5 rounded-full bg-(--marca) px-1 text-center text-[11px] leading-5 font-semibold text-(--sobre-marca) ring-2 ring-white"></span>
             </button>
-            <a href="{{ $pedido }}" target="_blank" rel="noopener" class="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-(--sobre-marca)">
+            <a href="{{ $pedido }}" target="_blank" rel="noopener" data-pedir-producto class="inline-flex h-12 shrink-0 items-center gap-2 rounded-xl bg-(--marca) px-5 text-sm font-semibold text-(--sobre-marca)">
                 @include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-5'])Pedir
             </a>
         </div>

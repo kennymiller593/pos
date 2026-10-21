@@ -7,6 +7,7 @@ use App\Models\Empresa;
 use App\Models\Reclamacion;
 use App\Services\CatalogoTiendaService;
 use App\Services\IA\AsistenteIaService;
+use App\Support\Medicion;
 use App\Support\Tienda;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -147,6 +148,8 @@ class TiendaController extends Controller
             ...$contexto,
             'portada' => $portada,
             'buscar' => $buscar,
+            // evento "búsqueda" para las herramientas de medición
+            'medicionEvento' => $buscar !== '' ? ['tipo' => 'busqueda', 'termino' => $buscar] : null,
             'categoria' => $categoria,
             'orden' => $orden,
             'filtrando' => $filtrando,
@@ -212,6 +215,8 @@ class TiendaController extends Controller
                 "Hola, me interesa este producto de {$contexto['tienda']['nombre']}:\n{$producto->nombre}\n{$enlace}",
             ),
             'relacionados' => $this->catalogo->relacionados($empresa, $producto)->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
+            // evento "vio un producto" para las herramientas de medición
+            'medicionEvento' => ['tipo' => 'producto', 'id' => (string) $producto->id, 'nombre' => $producto->nombre, 'precio' => $tarjeta['precio'], 'categoria' => $tarjeta['categoria']],
         ]);
     }
 
@@ -401,6 +406,9 @@ class TiendaController extends Controller
                 'descripcion' => $config['descripcion'],
                 'url' => (string) Tienda::urlDe($empresa),
                 'colores' => Tienda::colores($config),
+                // [color, más oscuro, texto encima]; true si lo eligió el dueño (la plantilla Mercado lo usa tal cual)
+                'secundario' => Tienda::secundario($config),
+                'secundario_propio' => Tienda::esColor((string) $config['color_secundario']),
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
                 'anuncio' => $config['anuncio'],
@@ -418,6 +426,8 @@ class TiendaController extends Controller
             'legal' => ['ruc' => $empresa->ruc, 'razon_social' => $empresa->razon_social],
             // true cuando el dueño está mirando un borrador con su enlace de vista previa
             'previa' => (bool) $request->attributes->get('tienda_previa', false),
+            // herramientas de medición conectadas por el dueño (en la vista previa no se cargan)
+            'medicion' => $request->attributes->get('tienda_previa') ? [] : Medicion::activas($config),
             // la plantilla elegida decide con qué cabecera y pie se arman las páginas
             'layoutTienda' => $config['plantilla'] === 'mercado' ? 'tienda.mercado.layout' : 'tienda.layout',
             'contactos' => $this->catalogo->contactos($empresa, $config),

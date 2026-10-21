@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Medicion;
+use App\Support\Tienda;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,13 +24,16 @@ class CabecerasTienda
         // la tienda no usa cámara ni nada del sistema: permisos cerrados y una política de contenido propia
         // (todo es propio del sitio; las fotos pueden venir de la nube; Cloudflare puede inyectar su medición)
         $respuesta->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        // las herramientas de medición que el dueño conectó (Analytics, píxeles, Clarity) necesitan sus dominios
+        $empresa = $request->attributes->get('tienda');
+        $medicion = $empresa && ! $request->attributes->get('tienda_previa') ? Medicion::dominiosCsp(Tienda::config($empresa)) : ['script' => [], 'conexion' => []];
         $respuesta->headers->set('Content-Security-Policy', implode('; ', [
             "default-src 'self'",
-            "script-src 'self' https://static.cloudflareinsights.com",
+            trim("script-src 'self' https://static.cloudflareinsights.com ".implode(' ', $medicion['script'])),
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https:",
             "font-src 'self'",
-            "connect-src 'self' https://cloudflareinsights.com",
+            trim("connect-src 'self' https://cloudflareinsights.com ".implode(' ', $medicion['conexion'])),
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",

@@ -17,6 +17,7 @@ class Tienda
         'color' => 'esmeralda', // uno de la paleta, o "propio"
         'color_propio' => null, // #RRGGBB, cuando color es "propio"
         'color_texto' => null, // texto encima del color propio: "claro" u "oscuro" (sin elegir, el que mejor se lea)
+        'color_secundario' => null, // #RRGGBB: pie, franjas y botones oscuros (sin él, un gris azulado oscuro)
         'mostrar_precios' => false,
         // apagado: la tienda es un catálogo y no mira el stock (nada sale como "Agotado") salvo que el dueño lo pida
         'mostrar_stock' => false,
@@ -53,6 +54,12 @@ class Tienda
         'seo_titulo' => null, // título de la portada en Google (si no, el nombre + "Catálogo y pedidos en línea")
         'seo_descripcion' => null, // descripción de la portada en Google (si no, la presentación)
         'categorias_texto' => [], // id de categoría => texto que presenta la categoría
+        // medición: solo el identificador de cada herramienta (ver App\Support\Medicion)
+        'medicion_ga4' => null, // G-XXXXXXXXXX
+        'medicion_meta' => null, // id del píxel de Meta
+        'medicion_tiktok' => null, // id del píxel de TikTok
+        'medicion_clarity' => null, // id del proyecto de Clarity
+        'medicion_google_verificacion' => null, // content de la etiqueta de Search Console
         // la sección de productos de la portada: qué productos lleva y cómo se titula
         'destacados_origen' => 'auto', // auto (estrellas; si no, más vendidos; si no, nuevos), elegidos, vendidos o nuevos
         'destacados_titulo' => null, // "Lo más pedido", "Ofertas de la semana"...; sin él, según el origen
@@ -384,6 +391,26 @@ class Tienda
         $paleta = config('tienda.colores')[$config['color']] ?? config('tienda.colores')[self::CONFIG['color']];
 
         return [...$paleta, self::SOBRE['claro'], $paleta[0]];
+    }
+
+    /**
+     * El color secundario: pie, franjas y botones oscuros de la tienda. Siempre lleva texto blanco encima,
+     * así que uno claro se oscurece hasta que se lea. Sin color elegido, el gris azulado oscuro de siempre.
+     *
+     * @return array{0: string, 1: string, 2: string} color, su versión más oscura y el texto encima
+     */
+    public static function secundario(array $config): array
+    {
+        if (! self::esColor((string) ($config['color_secundario'] ?? ''))) {
+            return ['#0F172A', '#020617', '#FFFFFF'];
+        }
+
+        $color = strtoupper($config['color_secundario']);
+        for ($i = 0; $i < 12 && self::contraste($color, '#FFFFFF') < 4.5; $i++) {
+            $color = self::mezclar($color, '#000000', 0.12);
+        }
+
+        return [$color, self::mezclar($color, '#000000', 0.3), '#FFFFFF'];
     }
 
     public static function esColor(string $color): bool

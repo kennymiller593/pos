@@ -10,6 +10,7 @@ use App\Services\CatalogoTiendaService;
 use App\Services\CloudflareService;
 use App\Services\DominioTiendaService;
 use App\Services\PortadaTiendaService;
+use App\Support\Medicion;
 use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -206,6 +207,11 @@ class TiendaConfigController extends Controller
                 }
             }],
             'color_texto' => ['nullable', Rule::in(['claro', 'oscuro'])],
+            'color_secundario' => ['nullable', 'string', function (string $atributo, mixed $valor, \Closure $falla) {
+                if (filled($valor) && ! Tienda::esColor((string) $valor)) {
+                    $falla('Escribe el color secundario como #RRGGBB, por ejemplo #1E3A8A.');
+                }
+            }],
             'mostrar_precios' => ['required', 'boolean'],
             'mostrar_stock' => ['required', 'boolean'],
             'whatsapp' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s()-]{6,20}$/'],
@@ -240,6 +246,12 @@ class TiendaConfigController extends Controller
             'categorias_texto' => ['nullable', 'array'],
             'categorias_texto.*' => ['nullable', 'string', 'max:400'],
             'nombres_bonitos' => ['sometimes', 'boolean'],
+            // medición: se acepta el código completo pegado o solo el identificador; se guarda el identificador
+            ...collect(Medicion::HERRAMIENTAS)->mapWithKeys(fn ($h, $clave) => [$clave => ['nullable', 'string', 'max:6000', function (string $atributo, mixed $valor, \Closure $falla) use ($h, $clave) {
+                if (Medicion::extraer($clave, (string) $valor) === false) {
+                    $falla("No reconocimos el identificador de {$h['nombre']}. Pega el código completo que te da la plataforma o solo su ID.");
+                }
+            }]])->all(),
             // banners (solo cuentan si el formulario avisa que los manda: una lista vacía no viaja)
             'con_banners' => ['sometimes', 'boolean'],
             'banners' => ['nullable', 'array', 'max:'.Tienda::MAX_BANNERS],
@@ -356,6 +368,7 @@ class TiendaConfigController extends Controller
             [$config['mapa_lat'], $config['mapa_lng']] = $config['mapa_url'] ? ($this->coordenadas($config['mapa_url']) ?? [null, null]) : [null, null];
         }
         $config['color_texto'] = $config['color'] === 'propio' ? $config['color_texto'] : null;
+        $config['color_secundario'] = $config['color_secundario'] ? strtoupper($config['color_secundario']) : null;
 
         if ($request->boolean('con_banners')) {
             $config['banners'] = array_values(array_map(function (array $banner) use ($fotoNueva) {
@@ -397,6 +410,12 @@ class TiendaConfigController extends Controller
                 ->map(fn ($t) => trim((string) $t))
                 ->filter()
                 ->all();
+        }
+        // medición: de lo pegado queda solo el identificador
+        foreach (array_keys(Medicion::HERRAMIENTAS) as $clave) {
+            if (array_key_exists($clave, $datos)) {
+                $config[$clave] = Medicion::extraer($clave, $datos[$clave]) ?: null;
+            }
         }
         $config['favicon'] = match (true) {
             $request->hasFile('favicon') => $iconoNuevo($request->file('favicon')),

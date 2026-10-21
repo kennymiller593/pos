@@ -605,3 +605,97 @@ if (bot && datos.asistente) {
     document.documentElement.classList.add('con-bot')
     vigilar()
 }
+
+// ---------------- medición: Google Analytics, Meta Pixel, TikTok Pixel y Microsoft Clarity ----------------
+// El dueño conecta cada herramienta desde su panel; aquí solo llegan los identificadores (#medicion-datos).
+// Los scripts de cada plataforma se cargan desde este archivo (la CSP no permite código en línea) y las
+// acciones del cliente (ver producto, buscar, agregar al carrito, pedir por WhatsApp) se envían como eventos.
+const medicion = JSON.parse(document.getElementById('medicion-datos')?.textContent || 'null')
+if (medicion && (medicion.ga4 || medicion.meta || medicion.tiktok || medicion.clarity)) {
+    const cargar = (src) => {
+        const s = document.createElement('script')
+        s.async = true
+        s.src = src
+        document.head.appendChild(s)
+    }
+
+    // Google Analytics 4 (gtag.js)
+    if (medicion.ga4) {
+        window.dataLayer = window.dataLayer || []
+        window.gtag = function () { window.dataLayer.push(arguments) }
+        window.gtag('js', new Date())
+        window.gtag('config', medicion.ga4)
+        cargar(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(medicion.ga4)}`)
+    }
+
+    // Meta Pixel: el mismo arranque que da Meta, sin código en línea
+    if (medicion.meta && !window.fbq) {
+        const n = (window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments) })
+        if (!window._fbq) window._fbq = n
+        n.push = n
+        n.loaded = true
+        n.version = '2.0'
+        n.queue = []
+        cargar('https://connect.facebook.net/en_US/fbevents.js')
+        window.fbq('init', medicion.meta)
+        window.fbq('track', 'PageView')
+    }
+
+    // TikTok Pixel: el mismo arranque que da TikTok
+    if (medicion.tiktok && !window.ttq) {
+        window.TiktokAnalyticsObject = 'ttq'
+        const ttq = (window.ttq = [])
+        ttq.methods = ['page', 'track', 'identify', 'instances', 'debug', 'on', 'off', 'once', 'ready', 'alias', 'group', 'enableCookie', 'disableCookie', 'holdConsent', 'revokeConsent', 'grantConsent']
+        ttq.setAndDefer = (t, e) => { t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } }
+        ttq.methods.forEach((m) => ttq.setAndDefer(ttq, m))
+        ttq.instance = (t) => { const e = ttq._i[t] || []; ttq.methods.forEach((m) => ttq.setAndDefer(e, m)); return e }
+        ttq.load = (e, n) => {
+            const r = 'https://analytics.tiktok.com/i18n/pixel/events.js'
+            ttq._i = ttq._i || {}; ttq._i[e] = []; ttq._i[e]._u = r
+            ttq._t = ttq._t || {}; ttq._t[e] = +new Date()
+            ttq._o = ttq._o || {}; ttq._o[e] = n || {}
+            cargar(`${r}?sdkid=${encodeURIComponent(e)}&lib=ttq`)
+        }
+        ttq.load(medicion.tiktok)
+        ttq.page()
+    }
+
+    // Microsoft Clarity
+    if (medicion.clarity && !window.clarity) {
+        window.clarity = function () { (window.clarity.q = window.clarity.q || []).push(arguments) }
+        cargar(`https://www.clarity.ms/tag/${encodeURIComponent(medicion.clarity)}`)
+    }
+
+    // un evento, en el "idioma" de cada herramienta
+    const articulo = (p, cantidad = 1) => ({ item_id: String(p.id ?? ''), item_name: p.nombre ?? '', price: p.precio ?? undefined, quantity: cantidad, item_category: p.categoria ?? undefined })
+    const enviar = (ga4, meta, tiktok, p = {}, cantidad = 1) => {
+        const valor = p.precio != null ? Math.round(p.precio * cantidad * 100) / 100 : undefined
+        try {
+            if (medicion.ga4) window.gtag('event', ga4, { currency: 'PEN', value: valor, items: p.id ? [articulo(p, cantidad)] : undefined, search_term: p.termino })
+            if (medicion.meta) window.fbq('track', meta, { content_ids: p.id ? [String(p.id)] : undefined, content_name: p.nombre, content_type: p.id ? 'product' : undefined, value: valor, currency: 'PEN', search_string: p.termino })
+            if (medicion.tiktok) window.ttq.track(tiktok, { contents: p.id ? [{ content_id: String(p.id), content_name: p.nombre, price: p.precio, quantity: cantidad }] : undefined, content_type: 'product', value: valor, currency: 'PEN', query: p.termino })
+        } catch {
+            // una herramienta que aún no cargó no debe romper la tienda
+        }
+    }
+
+    // lo que pasó en esta página (ver un producto o buscar)
+    if (medicion.evento?.tipo === 'producto') enviar('view_item', 'ViewContent', 'ViewContent', medicion.evento)
+    if (medicion.evento?.tipo === 'busqueda') enviar('search', 'Search', 'Search', { termino: medicion.evento.termino })
+
+    document.addEventListener('click', (e) => {
+        const anadir = e.target.closest('[data-anadir]')
+        if (anadir) {
+            const campo = anadir.closest('[data-zona-pedido]')?.querySelector('[data-cantidad-elegida]')
+            return enviar('add_to_cart', 'AddToCart', 'AddToCart', JSON.parse(anadir.dataset.anadir), Math.max(1, parseInt(campo?.value, 10) || 1))
+        }
+        // "Comprar" de una tarjeta o "Pedir por WhatsApp" de la ficha
+        if (e.target.closest('[data-comprar], [data-pedir-producto]')) return enviar('generate_lead', 'Contact', 'Contact', medicion.evento?.tipo === 'producto' ? medicion.evento : {})
+        // el carrito completo se envía por WhatsApp
+        if (e.target.closest('[data-pedido-enviar]')) {
+            const items = JSON.parse(localStorage.getItem('pedido:v1') || '[]')
+            const total = items.reduce((s, i) => s + (i.precio ?? 0) * (i.cantidad ?? 1), 0)
+            return enviar('begin_checkout', 'InitiateCheckout', 'PlaceAnOrder', { precio: total, id: undefined }, 1)
+        }
+    })
+}

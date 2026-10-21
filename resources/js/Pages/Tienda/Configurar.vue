@@ -27,6 +27,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import BannersTienda from '@/Components/Tienda/BannersTienda.vue'
 import CategoriasTienda from '@/Components/Tienda/CategoriasTienda.vue'
 import ContenidoTienda from '@/Components/Tienda/ContenidoTienda.vue'
+import MedicionTienda from '@/Components/Tienda/MedicionTienda.vue'
 import DominioTienda from '@/Components/Tienda/DominioTienda.vue'
 import { claseArea, claseAyuda, claseError, claseInput, claseInterruptor, claseLabel, claseTarjeta } from '@/Components/Tienda/clases'
 
@@ -44,10 +45,11 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 // ---- secciones de la pantalla ----
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
-    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
+    { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'color_secundario', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
     { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
+    { valor: 'medicion', nombre: 'Medición', campos: ['medicion_ga4', 'medicion_meta', 'medicion_tiktok', 'medicion_clarity', 'medicion_google_verificacion'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
     { valor: 'categorias', nombre: 'Categorías', campos: [] },
     { valor: 'dominio', nombre: 'Dominio', campos: [] },
@@ -93,6 +95,7 @@ const form = useForm({
     descripcion: props.tienda.config.descripcion ?? '',
     color: props.tienda.config.color,
     color_propio: props.tienda.config.color_propio ?? '#0F766E',
+    color_secundario: props.tienda.config.color_secundario ?? '',
     color_texto: props.tienda.config.color_texto ?? null, // "claro" u "oscuro"; null = el que mejor se lea
     mostrar_precios: props.tienda.config.mostrar_precios,
     mostrar_stock: props.tienda.config.mostrar_stock,
@@ -123,6 +126,12 @@ const form = useForm({
     devoluciones: props.tienda.config.devoluciones ?? '',
     pagos: props.tienda.config.pagos ?? '',
     preguntas: preguntasGuardadas(),
+    // medición: identificadores guardados (el dueño puede pegar el código completo; se guarda el ID)
+    medicion_ga4: props.tienda.config.medicion_ga4 ?? '',
+    medicion_meta: props.tienda.config.medicion_meta ?? '',
+    medicion_tiktok: props.tienda.config.medicion_tiktok ?? '',
+    medicion_clarity: props.tienda.config.medicion_clarity ?? '',
+    medicion_google_verificacion: props.tienda.config.medicion_google_verificacion ?? '',
     // para los buscadores
     seo_titulo: props.tienda.config.seo_titulo ?? '',
     seo_descripcion: props.tienda.config.seo_descripcion ?? '',
@@ -153,6 +162,9 @@ function aFormulario(cuerpo, clave, valor) {
 // ---- color propio: qué texto se lee encima ----
 const TEXTOS = { claro: '#FFFFFF', oscuro: '#0F172A' }
 const colorValido = computed(() => /^#[0-9a-f]{6}$/i.test(form.color_propio ?? ''))
+// color secundario (pie, franjas y botones oscuros): opcional; vacío = el gris azulado oscuro de siempre
+const secundarioValido = computed(() => /^#[0-9a-f]{6}$/i.test(form.color_secundario ?? ''))
+const colorPrincipal = computed(() => (form.color === 'propio' ? (colorValido.value ? form.color_propio : '#e7e5e4') : props.tienda.colores[form.color]))
 
 function contraste(a, b) {
     const luminancia = (hex) => {
@@ -730,6 +742,24 @@ function guardarDescripcion() {
                         <p :class="claseAyuda">Es el texto de los botones y de la franja del anuncio. Elige el que prefieras: el botón de muestra te enseña cómo queda.</p>
                     </fieldset>
                 </div>
+
+                <div class="mt-6 border-t border-stone-100 pt-5 dark:border-neutral-800" data-color-secundario>
+                    <label :class="claseLabel" for="tienda_color_secundario">Color secundario <span class="font-normal text-neutral-400">(opcional)</span></label>
+                    <p class="mb-2 text-sm text-neutral-500 dark:text-neutral-400">El fondo del pie, la franja superior y los botones oscuros. Si no eliges uno, va un gris azulado oscuro.</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <input :value="secundarioValido ? form.color_secundario : '#0F172A'" type="color" aria-label="Elegir el color secundario" class="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" @input="form.color_secundario = $event.target.value.toUpperCase()" />
+                        <input id="tienda_color_secundario" v-model="form.color_secundario" type="text" maxlength="7" spellcheck="false" autocomplete="off" :class="[claseInput, 'max-w-36 font-mono uppercase']" placeholder="#1E3A8A" />
+                        <button v-if="form.color_secundario" type="button" class="h-10 rounded-xl px-3 text-sm font-medium text-neutral-500 hover:bg-stone-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800" @click="form.color_secundario = ''">Quitar</button>
+                    </div>
+                    <p v-if="form.errors.color_secundario" :class="claseError">{{ form.errors.color_secundario }}</p>
+                    <p v-else :class="claseAyuda">Combina bien un tono oscuro de tu marca (azul marino, verde bosque, vino). Si eliges uno claro, lo oscurecemos para que el texto blanco se lea.</p>
+                    <!-- muestra: cómo se ven juntos el principal y el secundario -->
+                    <div class="mt-3 max-w-md overflow-hidden rounded-xl border border-stone-200 dark:border-neutral-800" data-muestra-colores aria-hidden="true">
+                        <div class="flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-white" :style="{ backgroundColor: secundarioValido ? form.color_secundario : '#0F172A' }"><span>Envíos a todo el Perú</span><span>Atención al cliente</span></div>
+                        <div class="flex items-center gap-2 bg-white px-3 py-2 dark:bg-neutral-950"><span class="h-6 flex-1 rounded-full bg-stone-100 dark:bg-neutral-800" /><span class="h-7 rounded-lg px-3 text-xs leading-7 font-semibold" :style="{ backgroundColor: colorPrincipal, color: form.color === 'propio' ? TEXTOS[textoElegido] : '#fff' }">Agregar al carrito</span></div>
+                        <div class="px-3 py-2 text-[11px] text-white/80" :style="{ backgroundColor: secundarioValido ? form.color_secundario : '#020617' }">© Tu tienda · RUC · Libro de Reclamaciones</div>
+                    </div>
+                </div>
             </section>
 
             <section v-show="seccion === 'apariencia'" :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-muestra">
@@ -967,6 +997,9 @@ function guardarDescripcion() {
                 :max-preguntas="tienda.limites.preguntas"
                 :nombre="tienda.nombre_tienda"
             />
+
+            <!-- Medición: Analytics, píxeles, Clarity y Search Console -->
+            <MedicionTienda v-show="seccion === 'medicion'" class="xl:col-span-2" :form="form" :guardado="tienda.config" />
 
             <!-- Guardar y vista previa: siempre a la mano, en cualquier sección -->
             <div

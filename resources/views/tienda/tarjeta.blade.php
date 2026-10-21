@@ -11,7 +11,7 @@
             @endif
 
             @if ($p['disponible'] === false)
-                <span class="absolute top-3 left-3 rounded-md bg-slate-900 px-2 py-1 text-[11px] font-semibold tracking-wide text-white uppercase">Agotado</span>
+                <span class="absolute top-3 left-3 rounded-md bg-(--secundario) px-2 py-1 text-[11px] font-semibold tracking-wide text-white uppercase">Agotado</span>
             @elseif ($p['destacado'] && ($conInsignia ?? false))
                 <span class="absolute top-3 left-3 inline-flex items-center gap-1 rounded-md bg-amber-400 px-2 py-1 text-[11px] font-semibold tracking-wide text-amber-950 uppercase">
                     @include('tienda.icono', ['n' => 'estrella', 'clase' => 'size-3', 'relleno' => true])Destacado

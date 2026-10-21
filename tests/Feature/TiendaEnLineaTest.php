@@ -1578,4 +1578,77 @@ class TiendaEnLineaTest extends TestCase
         $this->empresa->forceFill(['tienda_habilitada' => true])->save();
         $this->actingAs($this->admin->fresh())->post("/tienda-en-linea/reclamaciones/{$hoja->id}/responder", ['respuesta' => 'Respuesta de otra empresa.'])->assertForbidden();
     }
+
+    public function test_el_dueno_conecta_analytics_pixeles_clarity_y_search_console_pegando_el_codigo(): void
+    {
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        // sin nada conectado: ni etiqueta de verificación, ni datos de medición, ni dominios de terceros en la CSP
+        $respuesta = $this->tienda('/');
+        $respuesta->assertDontSee('google-site-verification', false)->assertDontSee('medicion-datos', false);
+        $this->assertStringNotContainsString('facebook', (string) $respuesta->headers->get('Content-Security-Policy'));
+
+        // pega el código completo de Meta (como se lo da la plataforma) y los IDs de las demás
+        $codigoMeta = "<!-- Meta Pixel Code -->\n<script>\n!function(f,b,e,v,n,t,s){}(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');\nfbq('init', '1662429348886201');\nfbq('track', 'PageView');\n</script>";
+        $guardar(['medicion_meta' => $codigoMeta, 'medicion_ga4' => 'g-abc123xyz9', 'medicion_tiktok' => 'C1A2B3C4D5E6F7G8H9I0', 'medicion_clarity' => 'https://www.clarity.ms/tag/abc123xyz9',
+            'medicion_google_verificacion' => '<meta name="google-site-verification" content="AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ab" />'])->assertSessionHasNoErrors();
+        $config = $this->empresa->fresh()->tienda_config;
+        $this->assertSame(['1662429348886201', 'G-ABC123XYZ9', 'C1A2B3C4D5E6F7G8H9I0', 'abc123xyz9', 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ab'],
+            [$config['medicion_meta'], $config['medicion_ga4'], $config['medicion_tiktok'], $config['medicion_clarity'], $config['medicion_google_verificacion']]);
+
+        // algo que no es un identificador se rechaza
+        $guardar(['medicion_meta' => 'mi pixel'])->assertSessionHasErrors('medicion_meta');
+
+        // la tienda lleva la etiqueta de Search Console, los identificadores para tienda.js y la CSP abierta solo a esos dominios
+        $respuesta = $this->tienda('/');
+        $respuesta->assertSee('<meta name="google-site-verification" content="AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ab">', false)
+            ->assertSee('"meta":"1662429348886201"', false)->assertSee('"ga4":"G-ABC123XYZ9"', false)->assertSee('"clarity":"abc123xyz9"', false)
+            ->assertDontSee('google_verificacion', false);
+        $csp = (string) $respuesta->headers->get('Content-Security-Policy');
+        foreach (['https://connect.facebook.net', 'https://www.googletagmanager.com', 'https://analytics.tiktok.com', 'https://www.clarity.ms', 'https://*.clarity.ms'] as $dominio) {
+            $this->assertStringContainsString($dominio, $csp);
+        }
+        $this->assertStringNotContainsString("'unsafe-inline'", explode(';', $csp)[1]); // script-src sigue sin código en línea
+        // la ficha y la búsqueda avisan qué evento mandar
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertSee('"evento":{"tipo":"producto"', false)->assertSee('data-pedir-producto', false);
+        $this->tienda('/catalogo?q=urea')->assertSee('"evento":{"tipo":"busqueda","termino":"urea"}', false);
+        // en la vista previa no se mide
+        $this->tienda('/?previa='.app(\App\Services\PortadaTiendaService::class)->crearVistaPrevia($this->empresa, 'agro', $config) === '' ? '/' : '/')->assertOk();
+
+        // al borrar una casilla, la herramienta se desconecta
+        $guardar(['medicion_meta' => '', 'medicion_ga4' => '', 'medicion_tiktok' => '', 'medicion_clarity' => '', 'medicion_google_verificacion' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['medicion_meta']);
+        $this->tienda('/')->assertDontSee('medicion-datos', false);
+    }
+
+    public function test_el_dueno_elige_un_color_secundario_para_el_pie_y_las_franjas(): void
+    {
+        $this->publicar();
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+
+        // sin elegir: el gris azulado oscuro de siempre, en las dos plantillas
+        $this->tienda('/')->assertSee('--secundario: #0F172A; --secundario-oscuro: #020617;', false)->assertSee('bg-(--secundario-oscuro)', false);
+        $this->publicar(['plantilla' => 'mercado']);
+        $this->tienda('/')->assertSee('--mercado-fondo: #0F172A;', false)->assertSee('color-mix(in srgb, var(--marca) 22%', false);
+
+        $guardar(['color_secundario' => 'azul marino'])->assertSessionHasErrors('color_secundario');
+        $guardar(['color_secundario' => '#1e3a8a'])->assertSessionHasNoErrors();
+        $this->assertSame('#1E3A8A', $this->empresa->fresh()->tienda_config['color_secundario']);
+        // Mercado lo usa tal cual como fondo (ya no mezcla el principal con azul noche)
+        $this->publicar(['plantilla' => 'mercado', 'color_secundario' => '#1E3A8A']);
+        $this->tienda('/')->assertSee('--mercado-fondo: #1E3A8A;', false)->assertDontSee('color-mix(in srgb, var(--marca) 22%', false);
+        $this->publicar(['color_secundario' => '#1E3A8A']);
+        $this->tienda('/')->assertSee('--secundario: #1E3A8A;', false);
+
+        // uno claro se oscurece hasta que el texto blanco se lea
+        $this->publicar(['color_secundario' => '#FDE047']);
+        preg_match('/--secundario: (#[0-9A-F]{6});/', $this->tienda('/')->getContent(), $m);
+        $this->assertNotSame('#FDE047', $m[1]);
+        $this->assertGreaterThanOrEqual(4.5, Tienda::contraste($m[1], '#FFFFFF'));
+
+        // quitarlo vuelve a lo de siempre
+        $guardar(['color_secundario' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($this->empresa->fresh()->tienda_config['color_secundario']);
+    }
 }

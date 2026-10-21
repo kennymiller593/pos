@@ -66,14 +66,21 @@
     @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
         /* el tono oscuro (barra superior, pie, mosaicos) sale del color de la tienda mezclado con azul noche */
-        :root { --mercado-fondo: #0f172a; --sobre-fondo: #ffffff; }
-        @supports (color: color-mix(in srgb, red 50%, blue)) { :root { --mercado-fondo: color-mix(in srgb, var(--marca) 22%, #0b1627); } }
+        :root { --mercado-fondo: {{ $tienda['secundario'][0] }}; --sobre-fondo: {{ $tienda['secundario'][2] }}; }
+        @if (! $tienda['secundario_propio'])@supports (color: color-mix(in srgb, red 50%, blue)) { :root { --mercado-fondo: color-mix(in srgb, var(--marca) 22%, #0b1627); } }@endif
         /* las vistas compartidas con la clásica (producto, páginas) se ensanchan igual que el resto de Mercado */
         [data-plantilla="mercado"] .max-w-7xl { max-width: 100rem; }
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }
         html:not(.con-bot) [data-necesita-bot] { display: none !important; }</style>
     <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp'], 'asistente' => $asistente ? ['nombre' => $asistente['nombre'], 'saludo' => $asistente['saludo'], 'sugerencias' => $asistente['sugerencias']] : null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     <script type="application/ld+json">{!! $sitioEsquema !!}</script>
+    @if ($medicion['google_verificacion'] ?? null)
+        <meta name="google-site-verification" content="{{ $medicion['google_verificacion'] }}">
+    @endif
+    @if (array_diff_key($medicion ?? [], ['google_verificacion' => 1]))
+        {{-- identificadores de Analytics / píxeles / Clarity: tienda.js carga sus scripts (nada en línea, por la CSP) --}}
+        <script type="application/json" id="medicion-datos">{!! json_encode([...array_diff_key($medicion, ['google_verificacion' => 1]), 'evento' => $medicionEvento ?? null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
+    @endif
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-[#f5f8fa] font-sans text-slate-900 antialiased" data-plantilla="mercado">
@@ -348,7 +355,7 @@
             <span data-pedido-cuenta class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-(--marca) px-1.5 text-center text-xs leading-6 font-semibold text-(--sobre-marca) ring-2 ring-white"></span>
         </button>
 
-        <div id="pedido-aviso" class="fixed inset-x-4 bottom-4 z-50 mx-auto hidden max-w-md items-center gap-3 rounded-2xl bg-slate-900 py-3 pr-3 pl-4 text-sm text-white shadow-2xl [&:not(.hidden)]:flex" role="status" aria-live="polite">
+        <div id="pedido-aviso" class="fixed inset-x-4 bottom-4 z-50 mx-auto hidden max-w-md items-center gap-3 rounded-2xl bg-(--mercado-fondo) py-3 pr-3 pl-4 text-sm text-white shadow-2xl [&:not(.hidden)]:flex" role="status" aria-live="polite">
             @include('tienda.icono', ['n' => 'check', 'clase' => 'size-5 text-emerald-400'])
             <span data-aviso-texto class="min-w-0 flex-1 truncate"></span>
             <button type="button" data-pedido-abrir class="h-9 shrink-0 cursor-pointer rounded-xl bg-white px-3.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100">Ver carrito</button>

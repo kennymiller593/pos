@@ -49,13 +49,20 @@
     @fonts
     @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     {{-- color de marca elegido por la tienda --}}
-    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
+    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; --secundario: {{ $tienda['secundario'][0] }}; --secundario-oscuro: {{ $tienda['secundario'][1] }}; --sobre-secundario: {{ $tienda['secundario'][2] }}; }
         /* lo que solo sirve con el pedido activo (necesita JavaScript) no aparece hasta que carga */
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }
         html:not(.con-bot) [data-necesita-bot] { display: none !important; }</style>
     <script type="application/json" id="tienda-datos">{!! json_encode(['nombre' => $tienda['nombre'], 'whatsapp' => $contactos['whatsapp'], 'asistente' => $asistente ? ['nombre' => $asistente['nombre'], 'saludo' => $asistente['saludo'], 'sugerencias' => $asistente['sugerencias']] : null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
     {{-- el sitio y su buscador, para que Google entienda la tienda como un todo --}}
     <script type="application/ld+json">{!! $sitioEsquema !!}</script>
+    @if ($medicion['google_verificacion'] ?? null)
+        <meta name="google-site-verification" content="{{ $medicion['google_verificacion'] }}">
+    @endif
+    @if (array_diff_key($medicion ?? [], ['google_verificacion' => 1]))
+        {{-- identificadores de Analytics / píxeles / Clarity: tienda.js carga sus scripts (nada en línea, por la CSP) --}}
+        <script type="application/json" id="medicion-datos">{!! json_encode([...array_diff_key($medicion, ['google_verificacion' => 1]), 'evento' => $medicionEvento ?? null], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) !!}</script>
+    @endif
     @stack('cabecera')
 </head>
 <body class="flex min-h-screen flex-col bg-white font-sans text-slate-900 antialiased">
@@ -78,7 +85,7 @@
 
     {{-- Franja superior: datos de atención --}}
     @if ($contactos['horario'] || $contactos['direccion'] || $contactos['telefono'] || $whatsapp)
-        <div class="bg-slate-950 text-slate-300">
+        <div class="bg-(--secundario-oscuro) text-slate-300">
             <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2 text-xs sm:px-6 lg:px-8">
                 <p class="flex min-w-0 items-center gap-x-5">
                     @if ($contactos['horario'])
@@ -153,7 +160,7 @@
                 <span class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-slate-400">@include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4.5'])</span>
                 <input id="buscador" type="search" name="q" value="{{ $buscar ?? '' }}" placeholder="¿Qué producto buscas?" autocomplete="off" maxlength="80"
                     class="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pr-28 pl-11 text-[15px] placeholder-slate-400 transition-colors focus:border-(--marca) focus:bg-white focus:ring-4 focus:ring-(--marca)/10 focus:outline-none">
-                <button type="submit" class="absolute top-1/2 right-1.5 h-9 -translate-y-1/2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">Buscar</button>
+                <button type="submit" class="absolute top-1/2 right-1.5 h-9 -translate-y-1/2 rounded-lg bg-(--secundario) px-4 text-sm font-semibold text-white transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">Buscar</button>
                 {{-- sugerencias mientras se escribe (las llena tienda.js) --}}
                 <div id="sugerencias" class="absolute inset-x-0 top-full z-40 mt-2 hidden overflow-hidden rounded-2xl bg-white text-left shadow-2xl ring-1 shadow-slate-900/15 ring-slate-200" aria-live="polite"></div>
             </form>
@@ -243,7 +250,7 @@
     </section>
 
     {{-- Pie: quiénes somos y contactos --}}
-    <footer id="contacto" class="bg-slate-950 text-slate-400 lg:scroll-mt-32">
+    <footer id="contacto" class="bg-(--secundario-oscuro) text-slate-400 lg:scroll-mt-32">
         <div class="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 sm:px-6 lg:grid-cols-12 lg:px-8">
             <div class="lg:col-span-4">
                 <div class="flex items-center gap-3">
@@ -403,12 +410,12 @@
         {{-- acceso al pedido mientras se baja por la página: aparece cuando ya hay algo añadido.
              En celular va a la izquierda, para no apilarse con el de WhatsApp encima de los productos --}}
         <button type="button" data-pedido-abrir data-pedido-flotante data-necesita-js aria-label="Ver mi pedido"
-            class="fixed left-4 z-40 hidden size-14 cursor-pointer place-items-center rounded-full bg-slate-900 text-white shadow-lg ring-4 shadow-black/25 ring-white transition-colors hover:bg-slate-700 sm:right-6 sm:bottom-[6.5rem] sm:left-auto [&:not(.hidden)]:grid bottom-4 {{ $__env->hasSection('barra_movil') ? 'max-sm:!hidden' : '' }}">
+            class="fixed left-4 z-40 hidden size-14 cursor-pointer place-items-center rounded-full bg-(--secundario) text-white shadow-lg ring-4 shadow-black/25 ring-white transition-colors hover:bg-slate-700 sm:right-6 sm:bottom-[6.5rem] sm:left-auto [&:not(.hidden)]:grid bottom-4 {{ $__env->hasSection('barra_movil') ? 'max-sm:!hidden' : '' }}">
             @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-6'])
             <span data-pedido-cuenta class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-(--marca) px-1.5 text-center text-xs leading-6 font-semibold text-(--sobre-marca) ring-2 ring-white"></span>
         </button>
 
-        <div id="pedido-aviso" class="fixed inset-x-4 bottom-4 z-50 mx-auto hidden max-w-md items-center gap-3 rounded-2xl bg-slate-900 py-3 pr-3 pl-4 text-sm text-white shadow-2xl [&:not(.hidden)]:flex" role="status" aria-live="polite">
+        <div id="pedido-aviso" class="fixed inset-x-4 bottom-4 z-50 mx-auto hidden max-w-md items-center gap-3 rounded-2xl bg-(--secundario) py-3 pr-3 pl-4 text-sm text-white shadow-2xl [&:not(.hidden)]:flex" role="status" aria-live="polite">
             @include('tienda.icono', ['n' => 'check', 'clase' => 'size-5 text-emerald-400'])
             <span data-aviso-texto class="min-w-0 flex-1 truncate"></span>
             <button type="button" data-pedido-abrir class="h-9 shrink-0 cursor-pointer rounded-xl bg-white px-3.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100">Ver pedido</button>
