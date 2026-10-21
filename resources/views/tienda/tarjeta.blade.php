@@ -4,7 +4,7 @@
         {{-- las fotos traen fondo blanco: con "multiply" se funden con el gris y el producto queda flotando --}}
         <div class="relative aspect-[4/3] overflow-hidden bg-slate-50">
             @if ($p['imagen'])
-                <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="800" height="600"
+                <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="800" height="600" @if ($p['miniatura'] ?? null) srcset="{{ $p['miniatura'] }} 400w, {{ $p['imagen'] }} 800w" sizes="(min-width: 1280px) 16vw, (min-width: 768px) 30vw, 48vw"@endif
                     class="size-full object-contain p-3 mix-blend-multiply transition-transform duration-300 group-hover:scale-105 {{ $p['disponible'] === false ? 'opacity-40 grayscale' : '' }}">
             @else
                 <div class="grid size-full place-items-center text-slate-300">@include('tienda.icono', ['n' => 'paquete', 'clase' => 'size-12', 'grosor' => 1.25])</div>

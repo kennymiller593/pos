@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Jobs\GenerarMiniaturaProducto;
+use App\Services\ImagenProductoService;
 use App\Support\Tienda;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -40,6 +42,23 @@ class Producto extends Model
         static::saving(function (Producto $producto) {
             if (blank($producto->slug) || $producto->isDirty('nombre')) {
                 $producto->slug = static::slugLibre((string) $producto->empresa_id, (string) $producto->nombre, $producto->id);
+            }
+            // otra foto: la miniatura anterior ya no corresponde
+            if ($producto->isDirty('imagen_url')) {
+                $producto->imagen_miniatura = null;
+            }
+        });
+
+        // la miniatura de la foto (tarjetas de la tienda) se crea en la cola; la anterior se borra
+        static::saved(function (Producto $producto) {
+            if (! $producto->wasChanged('imagen_url') && ! $producto->wasRecentlyCreated) {
+                return;
+            }
+            if ($anterior = $producto->getOriginal('imagen_miniatura')) {
+                app(ImagenProductoService::class)->eliminar($anterior);
+            }
+            if ($producto->imagen_url) {
+                GenerarMiniaturaProducto::dispatch($producto->id, $producto->imagen_url)->afterCommit();
             }
         });
     }

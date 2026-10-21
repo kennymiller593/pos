@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\ReclamacionRegistrada;
 use App\Models\Empresa;
+use App\Models\Reclamacion;
 use App\Services\CatalogoTiendaService;
 use App\Services\IA\AsistenteIaService;
 use App\Support\Tienda;
@@ -12,6 +14,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 /** Catálogo público de una empresa en su propia dirección. No usa sesión ni cookies. */
@@ -221,6 +226,83 @@ class TiendaController extends Controller
         return view('tienda.pagina', [...$this->contexto($request, $empresa, $config), 'pagina' => $contenido]);
     }
 
+    /** Libro de Reclamaciones virtual: el formulario (Ley 29571). */
+    public function libroReclamaciones(Request $request): View
+    {
+        $empresa = $this->empresa($request);
+
+        return view('tienda.reclamaciones', $this->contexto($request, $empresa, Tienda::config($empresa)));
+    }
+
+    /**
+     * Registra una hoja del Libro de Reclamaciones, le da su número correlativo y envía la copia al
+     * consumidor y el aviso a la tienda. La tienda no tiene sesión: si falta algo, se vuelve a mostrar
+     * el formulario con los errores y lo que escribió.
+     */
+    public function registrarReclamacion(Request $request): View|Response
+    {
+        $empresa = $this->empresa($request);
+        $config = Tienda::config($empresa);
+        $contexto = $this->contexto($request, $empresa, $config);
+
+        // un robot llena el campo escondido: se le muestra la confirmación sin guardar nada
+        if (filled($request->input('sitio_web'))) {
+            return response(view('tienda.reclamaciones', $contexto), 422);
+        }
+
+        $validador = Validator::make($request->all(), [
+            'tipo' => ['required', 'in:reclamo,queja'],
+            'nombre' => ['required', 'string', 'max:150'],
+            'documento_tipo' => ['required', 'in:DNI,CE,PASAPORTE,RUC'],
+            'documento_numero' => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9-]{6,20}$/'],
+            'domicilio' => ['required', 'string', 'max:250'],
+            'telefono' => ['nullable', 'string', 'max:30'],
+            'email' => ['required', 'email', 'max:150'],
+            'menor_de_edad' => ['nullable', 'boolean'],
+            'apoderado' => ['nullable', 'required_if:menor_de_edad,1', 'string', 'max:150'],
+            'bien_tipo' => ['required', 'in:producto,servicio'],
+            'monto' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'bien_descripcion' => ['required', 'string', 'max:500'],
+            'detalle' => ['required', 'string', 'min:10', 'max:3000'],
+            'pedido' => ['required', 'string', 'max:1500'],
+            'acepto' => ['accepted'],
+        ], [
+            'required' => 'Este dato es obligatorio.',
+            'required_if' => 'Si eres menor de edad, indica el nombre de tu padre, madre o apoderado.',
+            'email' => 'Escribe un correo válido: ahí te llegará la copia y la respuesta.',
+            'documento_numero.regex' => 'Escribe solo el número del documento.',
+            'detalle.min' => 'Cuéntanos un poco más.',
+            'monto.numeric' => 'Escribe solo el monto, por ejemplo 45.50.',
+            'acepto.accepted' => 'Marca la casilla para enviar.',
+        ]);
+
+        if ($validador->fails()) {
+            return response(view('tienda.reclamaciones', [...$contexto, 'errores' => $validador->errors()->toArray(), 'anterior' => $request->except('sitio_web')]), 422);
+        }
+
+        $datos = $validador->validated();
+        $reclamacion = DB::transaction(function () use ($empresa, $datos, $request) {
+            // número correlativo por empresa: dos envíos a la vez no pueden tomar el mismo
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', ["reclamaciones:{$empresa->id}"]);
+            $numero = (int) Reclamacion::where('empresa_id', $empresa->id)->max('numero') + 1;
+
+            return Reclamacion::create([
+                ...collect($datos)->except('acepto')->map(fn ($v) => is_string($v) ? trim($v) : $v)->all(),
+                'menor_de_edad' => (bool) ($datos['menor_de_edad'] ?? false),
+                'empresa_id' => $empresa->id,
+                'numero' => $numero,
+                'ip' => $request->ip(),
+            ]);
+        });
+
+        Mail::to($reclamacion->email)->queue(new ReclamacionRegistrada($reclamacion, 'cliente'));
+        if ($correoTienda = $config['email']) {
+            Mail::to($correoTienda)->queue(new ReclamacionRegistrada($reclamacion, 'tienda'));
+        }
+
+        return view('tienda.reclamaciones', [...$contexto, 'registrada' => $reclamacion]);
+    }
+
     /**
      * Las páginas de texto que la tienda tiene llenas, por nombre:
      * [url, titulo, secciones: [[subtitulo, texto]], preguntas: [[pregunta, respuesta]]].
@@ -332,6 +414,8 @@ class TiendaController extends Controller
                     'boton' => $config['portada_boton'] ?: 'Ver catálogo',
                 ],
             ],
+            // quién vende: va en el pie, en el Libro de Reclamaciones y en los datos del negocio
+            'legal' => ['ruc' => $empresa->ruc, 'razon_social' => $empresa->razon_social],
             // true cuando el dueño está mirando un borrador con su enlace de vista previa
             'previa' => (bool) $request->attributes->get('tienda_previa', false),
             // la plantilla elegida decide con qué cabecera y pie se arman las páginas
@@ -348,8 +432,8 @@ class TiendaController extends Controller
             'marcasTienda' => $config['plantilla'] === 'mercado' ? $this->catalogo->marcas($empresa) : collect(),
             // lo primero que el dueño escribió sobre envíos y pagos, para los sellos de la plantilla Mercado
             'entrega' => [
-                'envios' => Str::limit(Str::squish((string) (Tienda::lineas($config['envios'])[0] ?? '')), 90, '…') ?: null,
-                'pagos' => Str::limit(Str::squish((string) (Tienda::lineas($config['pagos'])[0] ?? '')), 90, '…') ?: null,
+                'envios' => Str::limit(Str::squish((string) (Tienda::lineas($config['envios'])[0] ?? '')), 110, '…', preserveWords: true) ?: null,
+                'pagos' => Str::limit(Str::squish((string) (Tienda::lineas($config['pagos'])[0] ?? '')), 110, '…', preserveWords: true) ?: null,
             ],
             // chatbot: null si el dueño no lo encendió o el agente ya no está activo
             'asistente' => $this->asistente($empresa, $config),

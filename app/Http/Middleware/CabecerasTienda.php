@@ -44,7 +44,7 @@ class CabecerasTienda
             && ! str_contains((string) $respuesta->headers->get('Content-Type'), 'json');
 
         if ($cacheable) {
-            $respuesta->headers->set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
+            $respuesta->headers->set('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
         }
 
         return $respuesta;

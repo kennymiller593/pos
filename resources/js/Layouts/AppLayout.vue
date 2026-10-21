@@ -17,11 +17,11 @@ import {
     CheckCircle2,
     ChevronDown,
     CreditCard,
-    CirclePlay,
     Compass,
     FileText,
     Bot,
     BrainCircuit,
+    BookOpen,
     Globe,
     HandCoins,
     LayoutDashboard,
@@ -64,6 +64,15 @@ defineProps({
 const page = usePage()
 const usuario = computed(() => page.props.auth?.user ?? null)
 const empresa = computed(() => usuario.value?.empresa ?? null)
+
+// soporte de inkaPos por WhatsApp: el mensaje ya dice de qué empresa escriben
+const numeroSoporte = computed(() => String(page.props.soporteWhatsapp ?? '').replace(/^51(?=\d{9}$)/, '').replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3'))
+const enlaceSoporte = computed(() => {
+    const numero = String(page.props.soporteWhatsapp ?? '').replace(/\D/g, '')
+    if (!numero) return null
+    const quien = empresa.value?.nombre_comercial || empresa.value?.razon_social
+    return `https://wa.me/${numero}?text=${encodeURIComponent(`Hola, necesito ayuda con inkaPos${quien ? ` (${quien})` : ''}.`)}`
+})
 // sesión "entrar como" del superadmin: franja superior fija con el botón para volver
 const impersonacion = computed(() => page.props.impersonacion ?? null)
 const volviendo = ref(false)
@@ -142,7 +151,8 @@ const menuBase = [
                     { label: 'Consultar al asistente', href: '/asistente/consultas', icon: Sparkles, si: () => !!empresa.value?.ia_habilitada },
                     { label: 'Chats de la tienda', href: '/asistente/tienda', icon: MessageCircle, si: () => !!empresa.value?.ia_habilitada && !!empresa.value?.tienda_habilitada },
                     // adicional de pago: solo aparece si la plataforma lo activó para la empresa
-                    { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
+                    { label: 'Tienda en línea', href: '/tienda-en-linea', icon: Globe, exact: true, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
+                    { label: 'Libro de Reclamaciones', href: '/tienda-en-linea/reclamaciones', icon: BookOpen, permiso: 'empresa.gestionar', si: () => !!empresa.value?.tienda_habilitada },
                     { label: 'Sucursales', href: '/sucursales', icon: Store, permiso: 'sucursales.gestionar' },
                     { label: 'Usuarios', href: '/usuarios', icon: UserCog, permiso: 'usuarios.gestionar' },
                     { label: 'Suscripción', href: '/suscripcion', icon: CreditCard, permiso: 'empresa.gestionar' },
@@ -326,9 +336,9 @@ const pasosRecorrido = computed(() => [
         texto: 'La campanita te avisa cuando un producto se está acabando, está por vencer o tienes cuentas pendientes.',
     },
     {
-        objetivo: '[data-recorrido="tutorial"]', zona: 'menu',
-        titulo: '¿Prefieres verlo en video?',
-        texto: 'Aquí tienes el tutorial completo. Y puedes repetir este recorrido cuando quieras desde el menú con tu nombre, arriba a la derecha.',
+        objetivo: '[data-recorrido="soporte"]', zona: 'menu',
+        titulo: '¿Necesitas ayuda?',
+        texto: 'Escríbenos por WhatsApp con este botón y te ayudamos. Y puedes repetir este recorrido cuando quieras desde el menú con tu nombre, arriba a la derecha.',
     },
 ])
 
@@ -570,14 +580,20 @@ watch(
                 </div>
             </nav>
 
-            <!-- Tutorial en video (Google Drive) -->
-            <div v-if="!esPlataforma" class="shrink-0 border-t border-[#E2E8F0] px-3 py-2 dark:border-neutral-800">
-                <a href="https://drive.google.com/file/d/1hYoMYGBuDAQrONiq-qCskFmwnAArj1G8/view?usp=sharing"
-                    target="_blank" rel="noopener noreferrer" data-recorrido="tutorial"
-                    class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#64748B] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                    :title="colapsado && !abiertoMovil ? 'Tutorial' : undefined">
-                    <CirclePlay class="size-4.5 shrink-0" />
-                    <span v-if="!colapsado || abiertoMovil" class="truncate">Tutorial</span>
+            <!-- Soporte de inkaPos por WhatsApp -->
+            <div v-if="!esPlataforma && enlaceSoporte" class="shrink-0 border-t border-[#E2E8F0] px-3 py-2.5 dark:border-neutral-800">
+                <a :href="enlaceSoporte" target="_blank" rel="noopener noreferrer" data-recorrido="soporte" data-soporte
+                    class="group flex items-center gap-2.5 rounded-xl bg-[#25D366] text-white shadow-md shadow-[#25D366]/30 transition hover:bg-[#1eb957] hover:shadow-lg hover:shadow-[#25D366]/40"
+                    :class="colapsado && !abiertoMovil ? 'justify-center p-2.5' : 'px-3 py-2'"
+                    :title="colapsado && !abiertoMovil ? `Soporte por WhatsApp: ${numeroSoporte}` : undefined">
+                    <span class="relative shrink-0">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="size-5" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.5h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.05 21.79h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88a9.82 9.82 0 0 1 6.99 2.9 9.82 9.82 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.81 11.81 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.9c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.9a11.82 11.82 0 0 0-3.48-8.41"/></svg>
+                        <span class="absolute -top-0.5 -right-0.5 flex size-2"><span class="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-75" /><span class="relative inline-flex size-2 rounded-full bg-white" /></span>
+                    </span>
+                    <span v-if="!colapsado || abiertoMovil" class="min-w-0 leading-tight">
+                        <span class="block text-sm font-bold">Soporte</span>
+                        <span class="block text-[11px] font-medium text-white/85 tabular-nums">{{ numeroSoporte }}</span>
+                    </span>
                 </a>
             </div>
 

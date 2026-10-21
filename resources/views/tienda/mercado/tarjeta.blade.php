@@ -7,7 +7,7 @@
     <a href="{{ $p['url'] }}" class="flex flex-1 flex-col focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--marca)">
         <div class="relative aspect-square overflow-hidden bg-white">
             @if ($p['imagen'])
-                <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="600" height="600"
+                <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="600" height="600" @if ($p['miniatura'] ?? null) srcset="{{ $p['miniatura'] }} 400w, {{ $p['imagen'] }} 800w" sizes="(min-width: 1280px) 16vw, (min-width: 768px) 30vw, 48vw"@endif
                     class="size-full object-contain p-5 transition-transform duration-300 group-hover:scale-105 {{ $p['disponible'] === false ? 'opacity-40 grayscale' : '' }}">
             @else
                 <div class="grid size-full place-items-center bg-slate-50 text-slate-300">@include('tienda.icono', ['n' => 'paquete', 'clase' => 'size-12', 'grosor' => 1.25])</div>

@@ -45,6 +45,7 @@ use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\SuscripcionController;
+use App\Http\Controllers\ReclamacionController;
 use App\Http\Controllers\TiendaConfigController;
 use App\Http\Controllers\TiendaController;
 use App\Http\Controllers\TiendaDominioController;
@@ -73,6 +74,9 @@ if (Tienda::dominio()) {
         foreach (TiendaController::PAGINAS as $ruta => $pagina) {
             Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
         }
+        // Libro de Reclamaciones virtual (obligatorio para vender en línea en Perú)
+        Route::get('/libro-de-reclamaciones', [TiendaController::class, 'libroReclamaciones'])->name('reclamaciones');
+        Route::post('/libro-de-reclamaciones', [TiendaController::class, 'registrarReclamacion'])->middleware('throttle:5,1,reclamaciones')->name('reclamaciones.registrar');
         Route::get('/sitemap.xml', [TiendaController::class, 'sitemap'])->name('sitemap');
         Route::get('/robots.txt', [TiendaController::class, 'robots'])->name('robots');
         // chatbot de la tienda (sin sesión; el límite por IP evita que un visitante consuma el tope de la empresa)
@@ -210,6 +214,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/tienda-en-linea/vista-previa', [TiendaConfigController::class, 'vistaPrevia'])->middleware('throttle:20,1')->name('tienda-config.vista-previa');
         Route::patch('/tienda-en-linea/productos/{producto}', [TiendaConfigController::class, 'producto'])->name('tienda-config.producto');
         Route::patch('/tienda-en-linea/destacados', [TiendaConfigController::class, 'destacados'])->name('tienda-config.destacados');
+        Route::get('/tienda-en-linea/reclamaciones', [ReclamacionController::class, 'index'])->name('reclamaciones.index');
+        Route::post('/tienda-en-linea/reclamaciones/{reclamacion}/responder', [ReclamacionController::class, 'responder'])->name('reclamaciones.responder');
         Route::patch('/tienda-en-linea/categorias/orden', [TiendaConfigController::class, 'ordenarCategorias'])->name('tienda-config.categorias.orden');
         Route::post('/tienda-en-linea/categorias/{categoria}/imagen', [TiendaConfigController::class, 'imagenCategoria'])->name('tienda-config.categorias.imagen');
         Route::delete('/tienda-en-linea/categorias/{categoria}/imagen', [TiendaConfigController::class, 'quitarImagenCategoria'])->name('tienda-config.categorias.imagen.quitar');

@@ -373,7 +373,8 @@
 
         <div class="border-t border-white/10">
             <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8">
-                <span>© {{ now()->year }} {{ $tienda['nombre'] }}. Todos los derechos reservados.</span>
+                <span class="text-center sm:text-left">© {{ now()->year }} {{ $legal['razon_social'] }} · RUC {{ $legal['ruc'] }}</span>
+                <a href="/libro-de-reclamaciones" class="inline-flex items-center gap-1.5 font-semibold text-slate-300 transition-colors hover:text-white" data-libro-enlace>@include('tienda.icono', ['n' => 'libro', 'clase' => 'size-4'])Libro de Reclamaciones</a>
                 <a href="{{ config('app.url') }}" target="_blank" rel="noopener" class="transition-colors hover:text-slate-300">Tienda creada con <span class="font-semibold text-slate-300">inkaPos</span></a>
             </div>
         </div>

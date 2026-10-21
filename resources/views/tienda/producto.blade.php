@@ -15,6 +15,10 @@
         mb_strlen(trim($producto['descripcion'])) < 80 => rtrim(trim($producto['descripcion']), '.').'. '.$complemento,
         default => $producto['descripcion'],
     };
+    // para el buscador, la descripción del producto sin precio ni invitación a escribir (eso ya va en la oferta)
+    $descripcionDatos = \Illuminate\Support\Str::squish(filled($producto['descripcion'])
+        ? $producto['descripcion']
+        : $producto['nombre'].($producto['marca'] ? " de {$producto['marca']}" : '').($producto['categoria'] ? ", {$producto['categoria']}" : '').'.');
     $imagen = $producto['imagen'] ? (str_starts_with($producto['imagen'], 'http') ? $producto['imagen'] : rtrim($tienda['url'], '/').$producto['imagen']) : null;
     $variasPresentaciones = count($producto['presentaciones']) > 1;
     $cantidad = fn (float $n) => rtrim(rtrim(number_format($n, 3), '0'), '.');
@@ -27,7 +31,7 @@
         '@type' => 'Product',
         'name' => $producto['nombre'],
         'sku' => $producto['codigo'],
-        'description' => \Illuminate\Support\Str::squish($descripcion),
+        'description' => $descripcionDatos,
         'image' => $imagen,
         'brand' => $producto['marca'] ? ['@type' => 'Brand', 'name' => $producto['marca']] : null,
         'category' => $producto['categoria'],
@@ -36,10 +40,10 @@
             'url' => $enlace,
             'priceCurrency' => 'PEN',
             'price' => number_format($producto['precio'], 2, '.', ''),
-            // si la tienda no marca lo agotado, lo que está publicado se vende
-            'availability' => 'https://schema.org/'.($producto['disponible'] === false ? 'OutOfStock' : 'InStock'),
+            // el stock real, aunque la tienda no muestre la disponibilidad en la página
+            'availability' => 'https://schema.org/'.(($producto['hay_stock'] ?? true) ? 'InStock' : 'OutOfStock'),
             'itemCondition' => 'https://schema.org/NewCondition',
-            'seller' => ['@type' => 'Store', '@id' => rtrim($tienda['url'], '/').'/#negocio', 'name' => $tienda['nombre']],
+            'seller' => ['@type' => 'Organization', 'name' => $tienda['nombre'], 'url' => $tienda['url']],
         ]) : null,
     ]);
 

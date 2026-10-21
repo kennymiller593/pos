@@ -50,6 +50,8 @@
         'hasMap' => $contactos['mapa'],
         'geo' => $contactos['coordenadas'] ? ['@type' => 'GeoCoordinates', 'latitude' => $contactos['coordenadas'][0], 'longitude' => $contactos['coordenadas'][1]] : null,
         'openingHoursSpecification' => $contactos['horario_estructurado'] ?: null,
+        'legalName' => $legal['razon_social'],
+        'taxID' => $legal['ruc'],
         'currenciesAccepted' => 'PEN',
         'sameAs' => array_values(array_filter([$contactos['facebook'], $contactos['instagram'], $contactos['tiktok']])) ?: null,
         'department' => $otrasSedes ?: null,
@@ -94,10 +96,10 @@
     @section('resumen', $resumenListado)
 @endif
 
-@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre} · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
+@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre}".($pagina > 1 ? " · página {$pagina}" : '')." · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
 @section('canonica', $canonica)
 {{-- los resultados de búsqueda no se indexan: son infinitas combinaciones de la misma tienda --}}
-@section('robots', $buscar !== '' ? 'noindex,follow' : 'index,follow')
+@section('robots', $buscar !== '' || $orden !== 'nombre' ? 'noindex,follow' : 'index,follow')
 
 @if ($portada)
     @push('cabecera')

@@ -4,12 +4,14 @@
         $base = 'inline-flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl border px-3 text-sm font-medium transition-colors';
         $normal = 'border-slate-200 bg-white text-slate-700 hover:border-(--marca) hover:text-(--marca-texto)';
         $apagado = 'border-slate-100 bg-white text-slate-300';
+        // la página 1 es la dirección sin ?page=1 (no una copia de ella)
+        $sinPagina1 = fn (?string $url) => $url ? rtrim((string) preg_replace('/([?&])page=1(?=&|$)&?/', '$1', $url), '?&') : $url;
     @endphp
     <nav class="mt-10 flex flex-wrap items-center justify-center gap-1.5" aria-label="Páginas">
         @if ($paginator->onFirstPage())
             <span class="{{ $base }} {{ $apagado }}" aria-disabled="true">@include('tienda.icono', ['n' => 'izquierda'])<span class="hidden sm:inline">Anterior</span></span>
         @else
-            <a href="{{ $paginator->previousPageUrl() }}" rel="prev" class="{{ $base }} {{ $normal }}">@include('tienda.icono', ['n' => 'izquierda'])<span class="hidden sm:inline">Anterior</span></a>
+            <a href="{{ $sinPagina1($paginator->previousPageUrl()) }}" rel="prev" class="{{ $base }} {{ $normal }}">@include('tienda.icono', ['n' => 'izquierda'])<span class="hidden sm:inline">Anterior</span></a>
         @endif
 
         @foreach ($elements as $elemento)
@@ -21,7 +23,7 @@
                     @if ($numero === $paginator->currentPage())
                         <span class="{{ $base }} border-(--marca) bg-(--marca) text-(--sobre-marca)" aria-current="page">{{ $numero }}</span>
                     @else
-                        <a href="{{ $url }}" class="{{ $base }} {{ $normal }}" aria-label="Página {{ $numero }}">{{ $numero }}</a>
+                        <a href="{{ $sinPagina1($url) }}" class="{{ $base }} {{ $normal }}" aria-label="Página {{ $numero }}">{{ $numero }}</a>
                     @endif
                 @endforeach
             @endif

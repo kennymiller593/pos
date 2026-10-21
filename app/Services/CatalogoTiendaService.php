@@ -278,6 +278,8 @@ class CatalogoTiendaService
             'categoria' => $producto->categoria?->nombre,
             'categoria_id' => $producto->categoria_id,
             'imagen' => $producto->imagen_url,
+            // foto chica para las tarjetas (null mientras no exista: se usa la grande)
+            'miniatura' => $producto->imagen_miniatura,
             'descripcion' => $producto->descripcion,
             'destacado' => (bool) $producto->destacado,
             'url' => $this->url($producto),
@@ -294,6 +296,8 @@ class CatalogoTiendaService
                 'imagen' => $producto->imagen_url,
                 'url' => $this->url($producto),
             ],
+            // hay para vender (sin importar si la tienda lo muestra): para los datos del buscador
+            'hay_stock' => ! $producto->controla_stock || (float) $producto->stock_total > 0,
             'disponible' => $config['mostrar_stock']
                 ? (! $producto->controla_stock || (float) $producto->stock_total > 0)
                 : null,

@@ -6,6 +6,7 @@ use App\Models\Usuario;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
@@ -41,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.force_https')) {
             URL::forceScheme('https');
         }
+
+        // @fonts de Vite declara cada peso en woff2 y en woff, y el navegador baja los dos: se deja solo woff2
+        Blade::directive('fonts', fn ($argumentos) => "<?php echo \\App\\Support\\Fuentes::soloWoff2(app(\\Illuminate\\Foundation\\Vite::class)->fonts({$argumentos})); ?>");
 
         // Politica de contrasenas unica para registro, usuarios y recuperacion
         Password::defaults(function () {

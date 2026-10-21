@@ -17,8 +17,21 @@
     $fotoCampana = $portada ? ($tienda['portada']['imagen'] ?: ($banners[0]['imagen'] ?? null)) : null;
     $bannersRestantes = $portada ? array_values(array_filter($banners, fn ($b) => $b['imagen'] !== $fotoCampana || $tienda['portada']['imagen'])) : [];
 
-    // datos estructurados: el negocio en la portada, la lista de productos en el catálogo y las categorías
-    $direccionPostal = fn (string $calle) => array_filter(['@type' => 'PostalAddress', 'streetAddress' => $calle, 'addressLocality' => $contactos['ciudad'], 'addressRegion' => $contactos['region'], 'addressCountry' => 'PE']);
+    // datos estructurados: los mismos de la plantilla clásica (negocio con sus sedes y coordenadas; lista de productos con su ruta)
+    // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección, horario y mapa
+    $direccionPostal = fn (string $calle) => array_filter([
+        '@type' => 'PostalAddress',
+        'streetAddress' => $calle,
+        'addressLocality' => $contactos['ciudad'],
+        'addressRegion' => $contactos['region'],
+        'addressCountry' => 'PE',
+    ]);
+    $telefonoNegocio = $contactos['telefono'] ?: ($contactos['whatsapp'] ? '+'.$contactos['whatsapp'] : null);
+    // los demás locales (direcciones escritas por el dueño y sucursales con dirección)
+    $otrasSedes = array_merge(
+        array_map(fn ($d) => ['@type' => 'Store', 'name' => $tienda['nombre'], 'address' => $direccionPostal($d['texto']), 'hasMap' => $d['mapa']], array_slice($contactos['direcciones'], 1)),
+        array_map(fn ($l) => array_filter(['@type' => 'Store', 'name' => "{$tienda['nombre']} · {$l['nombre']}", 'address' => $direccionPostal($l['direccion']), 'telephone' => $l['telefono'], 'hasMap' => $l['mapa']]), $contactos['locales']),
+    );
     $negocio = array_filter([
         '@context' => 'https://schema.org',
         '@type' => 'Store',
@@ -27,26 +40,41 @@
         'url' => $tienda['url'],
         'description' => $tienda['descripcion'],
         'image' => $tienda['logo'] ? (str_starts_with($tienda['logo'], 'http') ? $tienda['logo'] : rtrim($tienda['url'], '/').$tienda['logo']) : null,
-        'telephone' => $contactos['telefono'] ?: ($contactos['whatsapp'] ? '+'.$contactos['whatsapp'] : null),
+        'telephone' => $telefonoNegocio,
         'email' => $contactos['email'],
         'address' => $contactos['direccion'] ? $direccionPostal($contactos['direccion']) : null,
         'hasMap' => $contactos['mapa'],
+        'geo' => $contactos['coordenadas'] ? ['@type' => 'GeoCoordinates', 'latitude' => $contactos['coordenadas'][0], 'longitude' => $contactos['coordenadas'][1]] : null,
         'openingHoursSpecification' => $contactos['horario_estructurado'] ?: null,
+        'legalName' => $legal['razon_social'],
+        'taxID' => $legal['ruc'],
         'currenciesAccepted' => 'PEN',
         'sameAs' => array_values(array_filter([$contactos['facebook'], $contactos['instagram'], $contactos['tiktok']])) ?: null,
+        'department' => $otrasSedes ?: null,
     ]);
+
+    // la lista de productos de la página (catálogo y categorías), con su ruta de navegación
     $listaProductos = $portada ? null : [
         '@context' => 'https://schema.org',
         '@type' => 'CollectionPage',
         'name' => $categoria ? $categoria->nombre : 'Catálogo',
         'url' => $canonica,
         'isPartOf' => ['@id' => rtrim($tienda['url'], '/').'/#sitio'],
+        'breadcrumb' => [
+            '@type' => 'BreadcrumbList',
+            'itemListElement' => array_values(array_filter([
+                ['@type' => 'ListItem', 'position' => 1, 'name' => 'Inicio', 'item' => $tienda['url']],
+                ['@type' => 'ListItem', 'position' => 2, 'name' => 'Catálogo', 'item' => rtrim($tienda['url'], '/').'/catalogo'],
+                $categoria ? ['@type' => 'ListItem', 'position' => 3, 'name' => $categoria->nombre, 'item' => rtrim($tienda['url'], '/').$categoria->url] : null,
+            ])),
+        ],
         'mainEntity' => [
             '@type' => 'ItemList',
             'numberOfItems' => $productos->total(),
             'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
         ],
     ];
+
     $lugar = $contactos['ciudad'] ? " en {$contactos['ciudad']}" : '';
     $resumenListado = match (true) {
         $buscar !== '' => null,
@@ -63,15 +91,15 @@
 @if ($resumenListado)
     @section('resumen', $resumenListado)
 @endif
-@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre} · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
+@section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre}".($pagina > 1 ? " · página {$pagina}" : '')." · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
 @section('canonica', $canonica)
-@section('robots', $buscar !== '' || $marca !== '' || $hasta !== null ? 'noindex,follow' : 'index,follow')
+@section('robots', $buscar !== '' || $marca !== '' || $hasta !== null || $orden !== 'nombre' ? 'noindex,follow' : 'index,follow')
 
 @if ($portada)
     @push('cabecera')
         <script type="application/ld+json">{!! json_encode($negocio, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
     @endpush
-@elseif ($listaProductos && ! $filtrando)
+@elseif ($listaProductos && $buscar === '' && $marca === '' && $hasta === null)
     @push('cabecera')
         <script type="application/ld+json">{!! json_encode($listaProductos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>
     @endpush
@@ -114,7 +142,7 @@
                             @foreach ($ofertas as $p)
                                 <a href="{{ $p['url'] }}" class="group flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl shadow-black/15 transition hover:-translate-y-1 sm:w-52 lg:w-auto {{ $ofertas->count() === 1 ? 'lg:max-w-xs' : '' }}">
                                     <span class="relative block aspect-square overflow-hidden bg-white">
-                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" fetchpriority="high" width="400" height="400" class="size-full object-contain p-4 transition-transform duration-300 group-hover:scale-105">
+                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" @if ($loop->first) fetchpriority="high" @else loading="lazy" @endif width="400" height="400" class="size-full object-contain p-4 transition-transform duration-300 group-hover:scale-105">
                                         <span class="absolute top-2.5 left-2.5 rounded-md bg-(--mercado-fondo) px-2 py-1 text-[10px] font-bold tracking-wider text-(--sobre-fondo) uppercase">{{ $destacados['origen'] === 'nuevos' ? 'Novedad' : ($destacados['origen'] === 'vendidos' ? 'Más pedido' : 'Destacado') }}</span>
                                     </span>
                                     <span class="flex flex-1 flex-col px-3.5 pt-2 pb-3.5">
@@ -251,7 +279,7 @@
                             @if ($buscar !== '')
                                 Resultados para “{{ $buscar }}”
                             @elseif ($categoria)
-                                {{ $categoria->nombre }}
+                                {{ $categoria->nombre }}@if ($contactos['ciudad']) <span class="font-semibold text-slate-500">en {{ $contactos['ciudad'] }}</span>@endif
                             @else
                                 Todos los productos
                             @endif

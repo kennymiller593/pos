@@ -1,7 +1,7 @@
 {{-- Plantilla Mercado: filtros del catálogo (categoría, marca y precio tope). Se usa dos veces: plegado en el celular y fijo en pantalla grande --}}
                         @if ($categorias->isNotEmpty())
                             <div>
-                                <h2 class="text-sm font-bold">Categoría</h2>
+                                <p class="text-sm font-bold">Categoría</p>
                                 <ul class="mt-2.5 space-y-2 text-sm">
                                     <li>
                                         <a href="{{ $enlace('/catalogo', ['marca' => null]) }}" class="flex items-center gap-2.5 text-slate-700 hover:text-(--marca-texto)">
@@ -25,7 +25,7 @@
 
                         @if ($marcas->isNotEmpty())
                             <div data-filtro-marcas>
-                                <h2 class="text-sm font-bold">Marca</h2>
+                                <p class="text-sm font-bold">Marca</p>
                                 <ul class="mt-2.5 max-h-64 space-y-2 overflow-y-auto text-sm">
                                     @foreach ($marcas as $m)
                                         @php $activa = $marca === $m['nombre']; @endphp
@@ -46,7 +46,7 @@
                                 @foreach ($vigentes as $clave => $valor)
                                     @if ($clave !== 'hasta') <input type="hidden" name="{{ $clave }}" value="{{ $valor }}"> @endif
                                 @endforeach
-                                <h2 class="text-sm font-bold">Precio</h2>
+                                <p class="text-sm font-bold">Precio</p>
                                 <label for="hasta{{ $sufijo ?? '' }}" class="mt-2.5 flex items-center justify-between text-xs text-slate-500">
                                     <span>Hasta</span><output data-filtro-valor class="font-semibold text-slate-900">S/ {{ number_format($filtroPrecio, 0, '.', ',') }}</output>
                                 </label>

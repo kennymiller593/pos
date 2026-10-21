@@ -43,6 +43,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => config('app.name'),
+            // WhatsApp de soporte de inkaPos (botón "Soporte" del menú)
+            'soporteWhatsapp' => config('app.soporte_whatsapp'),
             // sesion "entrar como" del superadmin (franja superior con el boton para volver)
             'impersonacion' => fn () => app(ImpersonacionService::class)->activa($request),
             'flash' => [

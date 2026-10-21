@@ -22,6 +22,9 @@ class ImagenProductoService
 
     public const ALTO = 600;
 
+    /** Ancho de la miniatura de las tarjetas (4:3): alcanza para una tarjeta de celular con pantalla de alta densidad. */
+    public const ANCHO_MINIATURA = 400;
+
     private const CARPETA = 'productos';
 
     /** Disco de las fotos en la nube (si no está configurado, van al disco public del servidor). */
@@ -108,6 +111,30 @@ class ImagenProductoService
         }
     }
 
+    /**
+     * Crea la miniatura de una foto ya guardada (nuestra o de una dirección externa) y devuelve su
+     * dirección; null si no se pudo leer o procesar.
+     */
+    public function miniatura(string $url, string $empresaId): ?string
+    {
+        try {
+            $contenido = match (true) {
+                str_starts_with($url, '/storage/') => Storage::disk('public')->get(substr($url, strlen('/storage/'))),
+                $this->enNube() && str_starts_with($url, $this->baseNube().'/') => Storage::disk(self::DISCO)->get(substr($url, strlen($this->baseNube()) + 1)),
+                str_starts_with($url, 'https://') => \Illuminate\Support\Facades\Http::timeout(15)->get($url)->throw()->body(),
+                default => null,
+            };
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+
+        $reducida = $contenido ? $this->optimizar($contenido, self::ANCHO_MINIATURA, 78) : null;
+
+        return $reducida ? $this->subir($reducida[0], $reducida[1], $empresaId) : null;
+    }
+
     /** true si la imagen ya tiene el formato final (para no reprocesarla). */
     public function yaOptimizada(string $contenido): bool
     {
@@ -124,7 +151,7 @@ class ImagenProductoService
     /**
      * @return array{0: string, 1: string}|null  [binario, extension] o null si no se pudo procesar
      */
-    public function optimizar(string $contenido): ?array
+    public function optimizar(string $contenido, int $anchoMaximo = self::ANCHO, int $calidad = 82): ?array
     {
         if (! function_exists('imagecreatefromstring')) {
             Log::warning('ImagenProductoService: el servidor no tiene la extension GD; se guarda la imagen original.');
@@ -143,7 +170,7 @@ class ImagenProductoService
 
         // la caja 4:3 mas chica que contiene la foto; se reduce a 800x600 si es mas grande (nunca se agranda)
         $cajaAncho = max($w, $h * 4 / 3);
-        $factor = min(1, self::ANCHO / $cajaAncho);
+        $factor = min(1, $anchoMaximo / $cajaAncho);
         $lienzoAncho = max(4, (int) round($cajaAncho * $factor));
         $lienzoAlto = max(3, (int) round($lienzoAncho * 3 / 4));
         $nuevoAncho = max(1, (int) round($w * $factor));
@@ -160,10 +187,10 @@ class ImagenProductoService
         imagedestroy($origen);
 
         ob_start();
-        $webp = function_exists('imagewebp') && imagewebp($lienzo, null, 82);
+        $webp = function_exists('imagewebp') && imagewebp($lienzo, null, $calidad);
         if (! $webp) {
             ob_clean();
-            imagejpeg($lienzo, null, 85);
+            imagejpeg($lienzo, null, $calidad + 3);
         }
         $binario = (string) ob_get_clean();
         imagedestroy($lienzo);

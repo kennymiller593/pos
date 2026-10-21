@@ -33,7 +33,9 @@
         $whatsapp
             ? ['audifonos', 'Asesoría especializada', 'Te orientamos por WhatsApp antes de realizar tu compra.']
             : ['audifonos', 'Asesoría especializada', $contactos['telefono'] ? 'Llámanos al '.$contactos['telefono'].' y te orientamos.' : 'Escríbenos y te orientamos antes de comprar.'],
-        ['sello', 'Productos originales', 'Catálogo real de nuestra tienda, con precios al día.'],
+        $whatsapp
+            ? ['sello', 'Pedido fácil', 'Arma tu carrito y envíalo por WhatsApp en un solo mensaje.']
+            : ['sello', 'Catálogo en línea', 'Mira precios y presentaciones antes de comprar.'],
     ];
 @endphp
 <!DOCTYPE html>
@@ -95,7 +97,7 @@
                 <ul class="flex min-w-0 items-center gap-x-5 overflow-hidden whitespace-nowrap">
                     <li class="flex items-center gap-1.5 font-semibold">@include('tienda.mercado.icono', ['n' => 'camion', 'clase' => 'size-3.5'])Envíos a todo el Perú</li>
                     <li class="hidden items-center gap-1.5 sm:flex">@include('tienda.mercado.icono', ['n' => 'audifonos', 'clase' => 'size-3.5'])Asesoría especializada</li>
-                    <li class="hidden items-center gap-1.5 md:flex">@include('tienda.mercado.icono', ['n' => 'sello', 'clase' => 'size-3.5'])Productos originales</li>
+                    <li class="hidden items-center gap-1.5 md:flex">@include('tienda.mercado.icono', ['n' => 'sello', 'clase' => 'size-3.5']){{ $whatsapp ? 'Pedidos por WhatsApp' : 'Catálogo en línea' }}</li>
                 </ul>
             @endif
             @if ($whatsapp || $contactos['telefono'])
@@ -318,7 +320,8 @@
         </div>
         <div class="border-t border-white/10">
             <div class="mx-auto flex max-w-[100rem] flex-col items-center justify-between gap-2 px-4 py-4 text-xs opacity-70 sm:flex-row sm:px-6 lg:px-8">
-                <span>© {{ now()->year }} {{ $tienda['nombre'] }}. Todos los derechos reservados.</span>
+                <span class="text-center sm:text-left">© {{ now()->year }} {{ $legal['razon_social'] }} · RUC {{ $legal['ruc'] }}</span>
+                <a href="/libro-de-reclamaciones" class="inline-flex items-center gap-1.5 font-semibold hover:underline" data-libro-enlace>@include('tienda.icono', ['n' => 'libro', 'clase' => 'size-4'])Libro de Reclamaciones</a>
                 <a href="{{ config('app.url') }}" target="_blank" rel="noopener" class="hover:underline">Tienda creada con <span class="font-bold">inkaPos</span></a>
             </div>
         </div>

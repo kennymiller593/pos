@@ -1070,7 +1070,8 @@ class TiendaEnLineaTest extends TestCase
         $esquemas = collect($bloques[1])->map(fn ($j) => json_decode($j, true))->keyBy('@type');
         $oferta = $esquemas['Product']['offers'];
         $this->assertSame(['https://schema.org/InStock', 'https://schema.org/NewCondition', '145.00'], [$oferta['availability'], $oferta['itemCondition'], $oferta['price']]);
-        $this->assertSame('http://agro.tienda.test/#negocio', $oferta['seller']['@id']);
+        // el vendedor va completo en la ficha (la referencia #negocio solo existe en la portada)
+        $this->assertSame(['@type' => 'Organization', 'name' => 'Agro Campo', 'url' => 'http://agro.tienda.test/'], $oferta['seller']);
         $this->assertSame(['Inicio', 'Catálogo', 'Fertilizantes', 'Urea 46% x 50 kg'], array_column($esquemas['BreadcrumbList']['itemListElement'], 'name'));
         // la descripción automática dice qué es, de quién, cuánto y dónde
         $this->assertStringContainsString('content="Urea 46% x 50 kg de Farmex, Fertilizantes. Precio S/ 145.00. Pídelo por WhatsApp en Agro Campo, Huánuco."', $html);
@@ -1140,9 +1141,9 @@ class TiendaEnLineaTest extends TestCase
     {
         $this->publicar();
 
-        $this->tienda('/')->assertOk()->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
-        $this->tienda('/catalogo/urea-46-x-50-kg')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
-        $this->tienda('/sitemap.xml')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=60, stale-while-revalidate=600');
+        $this->tienda('/')->assertOk()->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=300, stale-while-revalidate=600');
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=300, stale-while-revalidate=600');
+        $this->tienda('/sitemap.xml')->assertHeader('Cache-Control', 'max-age=0, public, s-maxage=300, stale-while-revalidate=600');
         // el buscador en vivo y lo que no existe, no
         $this->assertStringContainsString('no-store', (string) $this->tienda('/buscar?q=ur')->headers->get('Cache-Control'));
         $this->assertStringNotContainsString('public', (string) $this->tienda('/catalogo/no-existe')->headers->get('Cache-Control'));
@@ -1504,5 +1505,77 @@ class TiendaEnLineaTest extends TestCase
 
         // las sugerencias del buscador van en el mismo orden
         $this->tienda('/buscar?q=maiz+7508')->assertOk()->assertJsonPath('productos.0.nombre', 'Maíz DEKALB-7508 x kg');
+    }
+
+    public function test_las_tarjetas_usan_la_miniatura_y_las_categorias_traen_su_lista_de_productos(): void
+    {
+        $this->publicar(['plantilla' => 'mercado']);
+        // la miniatura se guarda aparte; la ficha sigue usando la foto grande
+        $this->urea->forceFill(['imagen_url' => '/storage/productos/urea.webp'])->saveQuietly();
+        \App\Models\Producto::whereKey($this->urea->id)->update(['imagen_miniatura' => '/storage/productos/urea-chica.webp']);
+
+        $this->tienda('/catalogo')->assertSee('srcset="/storage/productos/urea-chica.webp 400w, /storage/productos/urea.webp 800w"', false);
+        $this->publicar(['plantilla' => 'clasica']);
+        $this->tienda('/catalogo')->assertSee('/storage/productos/urea-chica.webp 400w', false);
+
+        // categoría (Mercado): lista de productos con su ruta y el H1 con la ciudad; con filtro de marca, sin lista
+        $this->publicar(['plantilla' => 'mercado', 'direccion' => 'Jr. Lima 123, Huánuco']);
+        $html = $this->tienda('/categoria/fertilizantes')->assertOk()->getContent();
+        $this->assertStringContainsString('"@type":"CollectionPage"', $html);
+        $this->assertStringContainsString('"@type":"BreadcrumbList"', $html);
+        $this->assertStringNotContainsString('"@type":"CollectionPage"', $this->tienda('/catalogo?marca=Farmex')->getContent());
+        // solo woff2: el woff duplicado ya no se declara
+        $this->assertStringNotContainsString('format("woff")', $html);
+    }
+
+    public function test_el_libro_de_reclamaciones_registra_numera_avisa_y_se_responde(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+        $this->publicar(['plantilla' => 'mercado', 'email' => 'ventas@agrocampo.pe']);
+
+        // RUC y razón social en el pie, el enlace al libro y los datos legales del negocio
+        $this->tienda('/')->assertSee("RUC {$this->empresa->ruc}")->assertSee('href="/libro-de-reclamaciones"', false)->assertSee('"taxID":"'.$this->empresa->ruc.'"', false);
+        $this->publicar(['plantilla' => 'clasica', 'email' => 'ventas@agrocampo.pe']);
+        $this->tienda('/')->assertSee("RUC {$this->empresa->ruc}")->assertSee('href="/libro-de-reclamaciones"', false);
+
+        $this->tienda('/libro-de-reclamaciones')->assertOk()->assertSee('Libro de Reclamaciones')->assertSee($this->empresa->razon_social);
+
+        $datos = [
+            'tipo' => 'reclamo', 'nombre' => 'Rosa Huamán', 'documento_tipo' => 'DNI', 'documento_numero' => '45678912',
+            'domicilio' => 'Jr. Huallaga 123, Huánuco', 'email' => 'rosa@correo.pe', 'bien_tipo' => 'producto', 'monto' => '145',
+            'bien_descripcion' => 'Urea 46% x 50 kg', 'detalle' => 'Llegó el saco roto y con menos peso.', 'pedido' => 'Cambio del saco.', 'acepto' => '1',
+        ];
+        $enviar = function (array $cambios = []) use ($datos) {
+            $respuesta = $this->post('http://agro.tienda.test/libro-de-reclamaciones', [...$datos, ...$cambios]);
+            \Illuminate\Support\Facades\URL::setRequest(\Illuminate\Http\Request::create(config('app.url')));
+
+            return $respuesta;
+        };
+
+        // faltan datos: vuelve el formulario con los errores y lo escrito
+        $enviar(['email' => 'no-es-correo', 'acepto' => null])->assertStatus(422)->assertSee('Escribe un correo válido')->assertSee('Rosa Huamán');
+        // un robot (campo trampa) no registra nada
+        $enviar(['sitio_web' => 'http://spam'])->assertStatus(422);
+        $this->assertSame(0, \App\Models\Reclamacion::where('empresa_id', $this->empresa->id)->count());
+
+        // dos hojas: números correlativos, copia al cliente y aviso a la tienda
+        $enviar()->assertOk()->assertSee('Hoja N.º 000001-'.now()->year);
+        $enviar(['tipo' => 'queja'])->assertOk()->assertSee('Hoja N.º 000002-'.now()->year);
+        \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\ReclamacionRegistrada::class, fn ($m) => $m->para === 'cliente' && $m->hasTo('rosa@correo.pe'));
+        \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\ReclamacionRegistrada::class, fn ($m) => $m->para === 'tienda' && $m->hasTo('ventas@agrocampo.pe'));
+
+        // el dueño las ve y responde; la respuesta le llega al cliente
+        $hoja = \App\Models\Reclamacion::where('empresa_id', $this->empresa->id)->where('numero', 1)->firstOrFail();
+        $this->actingAs($this->admin)->get('/tienda-en-linea/reclamaciones')->assertInertia(fn (Assert $p) => $p
+            ->component('Tienda/Reclamaciones')->where('pendientes', 2)->where('hojas.data.0.tipo', 'queja'));
+        $this->actingAs($this->admin)->post("/tienda-en-linea/reclamaciones/{$hoja->id}/responder", ['respuesta' => 'corta'])->assertSessionHasErrors('respuesta');
+        $this->actingAs($this->admin)->post("/tienda-en-linea/reclamaciones/{$hoja->id}/responder", ['respuesta' => 'Te enviamos un saco nuevo mañana sin costo.'])->assertSessionHas('success');
+        $this->assertSame('respondido', $hoja->fresh()->estado);
+        \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\ReclamacionRegistrada::class, fn ($m) => $m->para === 'respuesta' && $m->hasTo('rosa@correo.pe'));
+
+        // otra empresa no ve ni responde estas hojas
+        $this->crearEscenarioBase();
+        $this->empresa->forceFill(['tienda_habilitada' => true])->save();
+        $this->actingAs($this->admin->fresh())->post("/tienda-en-linea/reclamaciones/{$hoja->id}/responder", ['respuesta' => 'Respuesta de otra empresa.'])->assertForbidden();
     }
 }

@@ -74,7 +74,9 @@ class ImagenesEnNubeTest extends TestCase
             ->assertSessionHasNoErrors();
 
         Storage::disk(ImagenProductoService::DISCO)->assertMissing($ruta);
-        $this->assertCount(1, Storage::disk(ImagenProductoService::DISCO)->allFiles());
+        // la foto nueva y su miniatura (la miniatura de la anterior también se borró)
+        $this->assertCount(2, Storage::disk(ImagenProductoService::DISCO)->allFiles());
+        $this->assertStringStartsWith(self::BASE."/empresas/{$this->empresa->id}/productos/", $producto->fresh()->imagen_miniatura);
 
         // y al quitarla, también
         $this->actingAs($this->admin)

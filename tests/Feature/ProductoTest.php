@@ -93,7 +93,13 @@ class ProductoTest extends TestCase
         $this->assertStringStartsWith('/storage/productos/', $producto->imagen_url);
         Storage::disk('public')->assertExists(substr($producto->imagen_url, strlen('/storage/')));
 
-        // quitar la imagen: el campo queda vacio y el archivo se borra
+        // la miniatura de las tarjetas de la tienda se crea sola: 400x300
+        $this->assertNotNull($producto->imagen_miniatura);
+        $miniatura = substr($producto->imagen_miniatura, strlen('/storage/'));
+        [$ancho, $alto] = getimagesizefromstring(Storage::disk('public')->get($miniatura));
+        $this->assertSame([400, 300], [$ancho, $alto]);
+
+        // quitar la imagen: el campo queda vacio y el archivo se borra (también la miniatura)
         $archivo = substr($producto->imagen_url, strlen('/storage/'));
         $this->actingAs($this->admin)->put("/productos/{$producto->id}", $this->payload([
             'codigo_interno' => $producto->codigo_interno,
@@ -101,7 +107,9 @@ class ProductoTest extends TestCase
         ]))->assertSessionHas('success');
 
         $this->assertNull($producto->fresh()->imagen_url);
+        $this->assertNull($producto->fresh()->imagen_miniatura);
         Storage::disk('public')->assertMissing($archivo);
+        Storage::disk('public')->assertMissing($miniatura);
     }
 
     public function test_las_fotos_se_ajustan_a_4_3_sin_recortarse(): void
