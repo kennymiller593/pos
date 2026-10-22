@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
 use App\Models\Compra;
+use App\Models\CompraDetalle;
 use App\Models\CuentaPorPagar;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
@@ -115,6 +116,16 @@ class CompraController extends Controller
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
 
+        // el último costo pagado por cada presentación (de la compra más reciente): sale de referencia al agregar el producto
+        $ultimoCosto = CompraDetalle::query()
+            ->join('compras', 'compras.id', '=', 'compra_detalles.compra_id')
+            ->where('compras.empresa_id', $empresaId)
+            ->where('compras.estado', 'registrada')
+            ->whereNotNull('compra_detalles.presentacion_id')
+            ->selectRaw('DISTINCT ON (compra_detalles.presentacion_id) compra_detalles.presentacion_id, compra_detalles.costo_unitario')
+            ->orderBy('compra_detalles.presentacion_id')->orderByDesc('compras.fecha')->orderByDesc('compras.creado_en')
+            ->toBase()->get()->pluck('costo_unitario', 'presentacion_id');
+
         return Inertia::render('Compras/Crear', [
             'productos' => $productos->map(fn ($p) => [
                 'id' => $p->id,
@@ -130,6 +141,7 @@ class CompraController extends Controller
                     'factor_conversion' => (float) $pres->factor_conversion,
                     'es_default' => $pres->es_default,
                     'codigo_barras' => $pres->codigo_barras,
+                    'ultimo_costo' => isset($ultimoCosto[$pres->id]) ? (float) $ultimoCosto[$pres->id] : null,
                 ]),
             ]),
             'tiposComprobante' => TipoComprobante::whereIn('codigo', ['01', '03', '00'])->orderBy('codigo')->get(['codigo', 'nombre']),

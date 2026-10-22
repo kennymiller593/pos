@@ -15,6 +15,7 @@ const props = defineProps({
     resumen: { type: Object, required: true },
     mediosPago: { type: Array, required: true },
     cajaAbierta: { type: Boolean, default: false },
+    cajaSucursalId: { type: String, default: null },
     // código de unidad -> nombre, para el detalle de la venta
     unidades: { type: Object, default: () => ({}) },
 })
@@ -66,6 +67,9 @@ function abrirCobro(cuenta) {
     formCobro.medio_pago_codigo = 'efectivo'
     formCobro.referencia = ''
 }
+
+// cada sucursal cobra sus propias deudas: con caja abierta en otra, el botón se apaga
+const deOtraSucursal = (c) => !!props.cajaSucursalId && !!c.comprobante?.sucursal_id && c.comprobante.sucursal_id !== props.cajaSucursalId
 
 function cobrar() {
     formCobro.transform((data) => ({
@@ -211,8 +215,8 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <button
                                     v-if="puede('cuentas_cobrar.cobrar') && c.estado !== 'pagado'"
                                     class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="!cajaAbierta"
-                                    :title="!cajaAbierta ? 'Abre caja para cobrar' : undefined"
+                                    :disabled="!cajaAbierta || deOtraSucursal(c)"
+                                    :title="!cajaAbierta ? 'Abre caja para cobrar' : (deOtraSucursal(c) ? `Se cobra desde una caja de ${c.comprobante?.sucursal?.nombre ?? 'su sucursal'}` : undefined)"
                                     @click="abrirCobro(c)"
                                 >
                                     <Banknote class="size-3.5" />

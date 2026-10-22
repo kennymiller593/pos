@@ -6,6 +6,7 @@ use App\Models\CapaCosto;
 use App\Models\Compra;
 use App\Models\MovimientoInventario;
 use App\Models\Proveedor;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -61,6 +62,31 @@ class CompraTest extends TestCase
         $listado->assertOk();
         $this->assertStringContainsString($producto->nombre, $listado->getContent());
         $this->assertStringContainsString('Caja x12', $listado->getContent());
+    }
+
+    public function test_al_registrar_otra_compra_sale_de_referencia_el_ultimo_costo_pagado(): void
+    {
+        $producto = $this->crearProducto(precio: 13.00);
+        $unidad = $producto->presentaciones->first();
+        $caja12 = $this->agregarPresentacion($producto, 'Caja x12', 12, 145.00);
+        $compra = fn (array $items, string $fecha) => $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-'.random_int(1000, 9999), 'fecha' => $fecha, 'es_credito' => false, 'items' => $items,
+        ])->assertSessionHas('success');
+
+        // sin compras previas no hay referencia
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->where('productos.0.presentaciones.0.ultimo_costo', null));
+
+        $compra([['presentacion_id' => $unidad->id, 'cantidad' => 5, 'costo_unitario' => 8.50]], now()->subDays(3)->toDateString());
+        $compra([['presentacion_id' => $unidad->id, 'cantidad' => 2, 'costo_unitario' => 9.00], ['presentacion_id' => $caja12->id, 'cantidad' => 1, 'costo_unitario' => 96.00]], now()->toDateString());
+
+        // manda la compra más reciente, por presentación
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p
+            ->where('productos.0.presentaciones.0.id', $unidad->id)->where('productos.0.presentaciones.0.ultimo_costo', fn ($v) => (float) $v === 9.0)
+            ->where('productos.0.presentaciones.1.ultimo_costo', fn ($v) => (float) $v === 96.0));
+
+        // otra empresa no ve estos costos
+        $this->crearEscenarioBase();
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->missing('productos.0.presentaciones.0.ultimo_costo'));
     }
 
     public function test_listado_filtra_por_fechas_y_proveedor(): void

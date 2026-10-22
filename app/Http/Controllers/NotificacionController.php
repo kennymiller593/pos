@@ -46,6 +46,7 @@ class NotificacionController extends Controller
 
         $porCobrar = CuentaPorCobrar::query()
             ->where('empresa_id', $empresaId)
+            ->when($sucursalIds, fn ($q) => $q->whereHas('comprobante', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
             ->where('estado', '!=', 'pagado')
             ->selectRaw('COUNT(*) as cuentas, COALESCE(SUM(monto_total - monto_pagado), 0) as saldo')
             ->first();

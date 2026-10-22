@@ -51,11 +51,13 @@ class CuentaPorCobrarController extends Controller
         $resumen = [
             'por_cobrar' => (float) CuentaPorCobrar::query()
                 ->where('empresa_id', $empresaId)
+                ->when($sucursalIds, fn ($q) => $q->whereHas('comprobante', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
                 ->where('estado', '!=', 'pagado')
                 ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0) as saldo')
                 ->value('saldo'),
             'cuentas_pendientes' => CuentaPorCobrar::query()
                 ->where('empresa_id', $empresaId)
+                ->when($sucursalIds, fn ($q) => $q->whereHas('comprobante', fn ($c) => $c->whereIn('sucursal_id', $sucursalIds)))
                 ->where('estado', '!=', 'pagado')
                 ->count(),
         ];
@@ -65,7 +67,9 @@ class CuentaPorCobrarController extends Controller
             'filtros' => $filtros,
             'resumen' => $resumen,
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
-            'cajaAbierta' => $this->caja->aperturaDe($request->user()) !== null,
+            'cajaAbierta' => ($apertura = $this->caja->aperturaDe($request->user())) !== null,
+            // cada sucursal cobra sus propias deudas: la pantalla apaga "Cobrar" en las de otra sucursal
+            'cajaSucursalId' => $apertura?->caja?->sucursal_id,
             // nombre de cada unidad para el detalle de la venta (KGM -> Kilogramo)
             'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
         ]);
@@ -84,6 +88,13 @@ class CuentaPorCobrarController extends Controller
 
         if ($cuenta->estado === 'pagado') {
             return back()->with('error', 'Esta cuenta ya está pagada.');
+        }
+
+        // cada sucursal cobra sus propias deudas: el dinero entra en una caja de la sucursal que vendió
+        $sucursalVenta = $cuenta->comprobante?->sucursal_id;
+        if ($sucursalVenta && $apertura->caja?->sucursal_id !== $sucursalVenta) {
+            $nombre = \App\Models\Sucursal::whereKey($sucursalVenta)->value('nombre') ?? 'otra sucursal';
+            return back()->with('error', "Esta deuda es de la sucursal {$nombre}: se cobra desde una caja de esa sucursal.");
         }
 
         $saldo = round((float) $cuenta->monto_total - (float) $cuenta->monto_pagado, 2);

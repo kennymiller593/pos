@@ -172,7 +172,8 @@ function agregarProducto(producto, presentacion = null) {
             producto,
             presentacion_id: def.id,
             cantidad: 1,
-            costo_unitario: '',
+            // de referencia, lo último que se pagó por esa presentación (se puede cambiar)
+            costo_unitario: def.ultimo_costo ?? '',
             numero_lote: '',
             fecha_vencimiento: '',
         }
@@ -187,6 +188,13 @@ function cambiarCantidad(fila, delta) {
     const nueva = Math.round((Number(fila.cantidad || 0) + delta) * 1000) / 1000
     if (nueva > 0) fila.cantidad = nueva
 }
+
+// al cambiar la presentación, el costo de referencia es el de esa presentación (si hay)
+function cambioPresentacion(fila) {
+    const pres = presentacionDe(fila)
+    if (pres?.ultimo_costo != null) fila.costo_unitario = pres.ultimo_costo
+}
+const esCostoAnterior = (fila) => presentacionDe(fila)?.ultimo_costo != null && Number(fila.costo_unitario) === presentacionDe(fila).ultimo_costo
 
 function presentacionDe(fila) {
     return fila.producto.presentaciones.find((p) => p.id === fila.presentacion_id)
@@ -461,6 +469,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                     v-model="fila.presentacion_id"
                                     aria-label="Presentación"
                                     :class="[claseCelda, 'mt-3 h-10 w-full text-base']"
+                                    @change="cambioPresentacion(fila)"
                                 >
                                     <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
                                         {{ pres.nombre }} (x{{ pres.factor_conversion }})
@@ -490,7 +499,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                         </div>
                                     </div>
                                     <div>
-                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Costo unitario</span>
+                                        <span class="mb-1 block text-xs text-[#64748B] dark:text-neutral-400">Costo unitario<span v-if="esCostoAnterior(fila)" class="ml-1 text-emerald-600 dark:text-emerald-400" data-costo-anterior>· último pagado</span></span>
                                         <div :class="[claseGrupo, 'h-11 px-3', fila.costo_unitario === '' && claseFalta]">
                                             <span class="text-sm text-[#94A3B8]">S/</span>
                                             <input
@@ -557,6 +566,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                                             v-if="fila.producto.presentaciones.length > 1"
                                                             v-model="fila.presentacion_id"
                                                             aria-label="Presentación"
+                                                            @change="cambioPresentacion(fila)"
                                                             class="mt-1 h-7 max-w-full rounded-lg border border-stone-200 bg-white pr-6 pl-2 text-xs font-medium focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                                         >
                                                             <option v-for="pres in fila.producto.presentaciones" :key="pres.id" :value="pres.id">
@@ -589,7 +599,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                                 </div>
                                             </td>
                                             <td class="px-2 py-3">
-                                                <div :class="[claseGrupo, 'ml-auto h-10 w-32 px-2.5', fila.costo_unitario === '' && claseFalta]" :title="fila.costo_unitario === '' ? 'Falta el costo' : undefined">
+                                                <div :class="[claseGrupo, 'ml-auto h-10 w-32 px-2.5', fila.costo_unitario === '' && claseFalta, esCostoAnterior(fila) && 'ring-1 ring-emerald-300 dark:ring-emerald-700']" :title="fila.costo_unitario === '' ? 'Falta el costo' : (esCostoAnterior(fila) ? 'Último costo pagado por esta presentación; puedes cambiarlo' : undefined)" :data-costo-anterior="esCostoAnterior(fila) || undefined">
                                                     <span class="text-xs text-[#94A3B8]">S/</span>
                                                     <input
                                                         v-model="fila.costo_unitario"

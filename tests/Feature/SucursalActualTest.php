@@ -223,4 +223,44 @@ class SucursalActualTest extends TestCase
         $this->assertFalse($tercera->fresh()->activo);
         Plan::where('codigo', 'prueba')->update(['max_sucursales' => 2]);
     }
+
+    public function test_cada_sucursal_ve_y_cobra_solo_sus_cuentas_por_cobrar(): void
+    {
+        // venta al crédito de 60.00 en la principal
+        $producto = $this->crearProducto(precio: 30);
+        $this->darStock($producto, 10, 20);
+        $this->abrirCaja(100);
+        $cliente = $this->crearCliente(limiteCredito: 100);
+        $this->actingAs($this->admin)->post('/pos/ventas', [
+            'tipo_comprobante_codigo' => '00', 'cliente_id' => $cliente->id, 'es_credito' => true,
+            'items' => [['presentacion_id' => $producto->presentaciones->first()->id, 'cantidad' => 2]], 'pagos' => [],
+        ])->assertSessionHas('success');
+        $cuenta = \App\Models\CuentaPorCobrar::where('cliente_id', $cliente->id)->firstOrFail();
+
+        // el administrador de la secundaria no la ve: ni en el dashboard, ni en la campanita, ni en cuentas por cobrar
+        $adminSecundaria = $this->usuarioDe('admin', $this->secundaria);
+        $this->actingAs($adminSecundaria)->get('/dashboard')->assertInertia(fn (Assert $p) => $p->where('pendientes.por_cobrar', 0));
+        $this->actingAs($adminSecundaria)->get('/cuentas-por-cobrar')->assertInertia(fn (Assert $p) => $p
+            ->has('cuentas.data', 0)->where('resumen.por_cobrar', 0)->where('resumen.cuentas_pendientes', 0));
+        $this->assertStringNotContainsString('por_cobrar', $this->actingAs($adminSecundaria)->get('/notificaciones')->getContent());
+
+        // el dueño, viendo la secundaria en el selector, tampoco; viendo todas, sí
+        $this->actingAs($this->admin)->post('/sucursal-activa', ['sucursal_id' => $this->secundaria->id]);
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $p) => $p->where('pendientes.por_cobrar', 0));
+        $this->actingAs($this->admin)->post('/sucursal-activa', ['sucursal_id' => null]);
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn (Assert $p) => $p->where('pendientes.por_cobrar', 60));
+        $this->actingAs($this->admin)->get('/cuentas-por-cobrar')->assertInertia(fn (Assert $p) => $p
+            ->has('cuentas.data', 1)->where('resumen.por_cobrar', 60)->where('cajaSucursalId', $this->sucursal->id));
+
+        // con caja abierta en la secundaria no se puede cobrar una deuda de la principal
+        $cajaSecundaria = Caja::create(['empresa_id' => $this->empresa->id, 'sucursal_id' => $this->secundaria->id, 'nombre' => 'Caja S', 'activo' => true]);
+        $this->actingAs($adminSecundaria)->post('/caja/abrir', ['caja_id' => $cajaSecundaria->id, 'monto_inicial' => 50])->assertSessionHas('success');
+        $this->actingAs($adminSecundaria)->post("/cuentas-por-cobrar/{$cuenta->id}/cobrar", ['monto' => 20, 'medio_pago_codigo' => 'efectivo'])
+            ->assertSessionHas('error', 'Esta deuda es de la sucursal '.$this->sucursal->nombre.': se cobra desde una caja de esa sucursal.');
+        $this->assertSame(0, $cuenta->cobros()->count());
+
+        // desde la caja de la principal, sí
+        $this->actingAs($this->admin)->post("/cuentas-por-cobrar/{$cuenta->id}/cobrar", ['monto' => 20, 'medio_pago_codigo' => 'efectivo'])->assertSessionHasNoErrors();
+        $this->assertSame(1, $cuenta->cobros()->count());
+    }
 }
