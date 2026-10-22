@@ -51,7 +51,7 @@
             </a>
             @if ($p['disponible'] !== false)
                 <button type="button" data-anadir="{{ json_encode($p['para_pedido'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}" data-necesita-js
-                    class="inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl bg-(--marca) px-2 text-[13px] font-semibold text-(--sobre-marca) transition-colors hover:bg-(--marca-oscuro) sm:text-sm"
+                    class="inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl bg-(--boton-carrito) px-2 text-[13px] font-semibold text-(--sobre-boton-carrito) transition-colors hover:bg-(--marca-oscuro) sm:text-sm"
                     aria-label="Añadir {{ $p['nombre'] }} al pedido">
                     @include('tienda.icono', ['n' => 'mas', 'clase' => 'hidden size-4 sm:block'])<span data-anadir-texto>Añadir</span>
                 </button>

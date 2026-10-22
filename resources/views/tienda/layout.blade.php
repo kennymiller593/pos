@@ -49,7 +49,7 @@
     @fonts
     @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     {{-- color de marca elegido por la tienda --}}
-    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; --secundario: {{ $tienda['secundario'][0] }}; --secundario-oscuro: {{ $tienda['secundario'][1] }}; --sobre-secundario: {{ $tienda['secundario'][2] }}; }
+    <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; --secundario: {{ $tienda['secundario'][0] }}; --secundario-oscuro: {{ $tienda['secundario'][1] }}; --sobre-secundario: {{ $tienda['secundario'][2] }}; --boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][0] : 'var(--marca)' }}; --sobre-boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][2] : 'var(--sobre-marca)' }}; }
         /* lo que solo sirve con el pedido activo (necesita JavaScript) no aparece hasta que carga */
         html:not(.con-pedido) [data-necesita-js] { display: none !important; }
         html:not(.con-bot) [data-necesita-bot] { display: none !important; }</style>

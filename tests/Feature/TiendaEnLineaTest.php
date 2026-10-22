@@ -1639,7 +1639,10 @@ class TiendaEnLineaTest extends TestCase
         $this->publicar(['plantilla' => 'mercado', 'color_secundario' => '#1E3A8A']);
         $this->tienda('/')->assertSee('--mercado-fondo: #1E3A8A;', false)->assertDontSee('color-mix(in srgb, var(--marca) 22%', false);
         $this->publicar(['color_secundario' => '#1E3A8A']);
-        $this->tienda('/')->assertSee('--secundario: #1E3A8A;', false);
+        $this->tienda('/')->assertSee('--secundario: #1E3A8A;', false)->assertSee('--boton-carrito: #1E3A8A;', false);
+        // sin secundario, el botón del carrito va en el color principal
+        $this->publicar();
+        $this->tienda('/')->assertSee('--boton-carrito: var(--marca);', false);
 
         // uno claro se oscurece hasta que el texto blanco se lea
         $this->publicar(['color_secundario' => '#FDE047']);

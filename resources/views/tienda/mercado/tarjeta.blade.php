@@ -63,7 +63,7 @@
                         <button type="button" data-elegir-mas aria-label="Uno más" class="grid h-10 w-9 cursor-pointer place-items-center rounded-r-lg text-slate-600 transition-colors hover:bg-slate-200 @min-[17rem]:w-8">@include('tienda.icono', ['n' => 'mas', 'clase' => 'size-3.5'])</button>
                     </div>
                     <button type="button" data-anadir="{{ json_encode($p['para_pedido'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) }}" data-necesita-js
-                        class="flex h-10 w-full shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-(--marca) px-2 text-[13px] font-bold text-(--sobre-marca) transition hover:brightness-110 @min-[17rem]:min-w-0 @min-[17rem]:flex-1"
+                        class="flex h-10 w-full shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-(--boton-carrito) px-2 text-[13px] font-bold text-(--sobre-boton-carrito) transition hover:brightness-110 @min-[17rem]:min-w-0 @min-[17rem]:flex-1"
                         aria-label="Agregar al carrito: {{ $p['nombre'] }}">
                         @include('tienda.icono', ['n' => 'carrito', 'clase' => 'size-4'])<span data-anadir-texto class="truncate">Agregar al carrito</span>
                     </button>

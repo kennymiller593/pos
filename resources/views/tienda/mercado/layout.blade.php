@@ -66,7 +66,7 @@
     @vite(['resources/css/app.css', 'resources/js/tienda.js'])
     <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
         /* el tono oscuro (barra superior, pie, mosaicos) sale del color de la tienda mezclado con azul noche */
-        :root { --mercado-fondo: {{ $tienda['secundario'][0] }}; --sobre-fondo: {{ $tienda['secundario'][2] }}; }
+        :root { --mercado-fondo: {{ $tienda['secundario'][0] }}; --sobre-fondo: {{ $tienda['secundario'][2] }}; --boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][0] : 'var(--marca)' }}; --sobre-boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][2] : 'var(--sobre-marca)' }}; }
         @if (! $tienda['secundario_propio'])@supports (color: color-mix(in srgb, red 50%, blue)) { :root { --mercado-fondo: color-mix(in srgb, var(--marca) 22%, #0b1627); } }@endif
         /* las vistas compartidas con la clásica (producto, páginas) se ensanchan igual que el resto de Mercado */
         [data-plantilla="mercado"] .max-w-7xl { max-width: 100rem; }

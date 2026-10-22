@@ -745,7 +745,7 @@ function guardarDescripcion() {
 
                 <div class="mt-6 border-t border-stone-100 pt-5 dark:border-neutral-800" data-color-secundario>
                     <label :class="claseLabel" for="tienda_color_secundario">Color secundario <span class="font-normal text-neutral-400">(opcional)</span></label>
-                    <p class="mb-2 text-sm text-neutral-500 dark:text-neutral-400">El fondo del pie, la franja superior y los botones oscuros. Si no eliges uno, va un gris azulado oscuro.</p>
+                    <p class="mb-2 text-sm text-neutral-500 dark:text-neutral-400">El fondo del pie, la franja superior y el botón "Agregar al carrito". Si no eliges uno, el pie va en gris azulado oscuro y el botón en tu color principal.</p>
                     <div class="flex flex-wrap items-center gap-2">
                         <input :value="secundarioValido ? form.color_secundario : '#0F172A'" type="color" aria-label="Elegir el color secundario" class="h-10 w-14 shrink-0 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" @input="form.color_secundario = $event.target.value.toUpperCase()" />
                         <input id="tienda_color_secundario" v-model="form.color_secundario" type="text" maxlength="7" spellcheck="false" autocomplete="off" :class="[claseInput, 'max-w-36 font-mono uppercase']" placeholder="#1E3A8A" />
@@ -756,7 +756,7 @@ function guardarDescripcion() {
                     <!-- muestra: cómo se ven juntos el principal y el secundario -->
                     <div class="mt-3 max-w-md overflow-hidden rounded-xl border border-stone-200 dark:border-neutral-800" data-muestra-colores aria-hidden="true">
                         <div class="flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-white" :style="{ backgroundColor: secundarioValido ? form.color_secundario : '#0F172A' }"><span>Envíos a todo el Perú</span><span>Atención al cliente</span></div>
-                        <div class="flex items-center gap-2 bg-white px-3 py-2 dark:bg-neutral-950"><span class="h-6 flex-1 rounded-full bg-stone-100 dark:bg-neutral-800" /><span class="h-7 rounded-lg px-3 text-xs leading-7 font-semibold" :style="{ backgroundColor: colorPrincipal, color: form.color === 'propio' ? TEXTOS[textoElegido] : '#fff' }">Agregar al carrito</span></div>
+                        <div class="flex items-center gap-2 bg-white px-3 py-2 dark:bg-neutral-950"><span class="h-6 flex-1 rounded-full bg-stone-100 dark:bg-neutral-800" /><span class="h-7 rounded-lg px-3 text-xs leading-7 font-semibold" :style="secundarioValido ? { backgroundColor: form.color_secundario, color: '#fff' } : { backgroundColor: colorPrincipal, color: form.color === 'propio' ? TEXTOS[textoElegido] : '#fff' }">Agregar al carrito</span></div>
                         <div class="px-3 py-2 text-[11px] text-white/80" :style="{ backgroundColor: secundarioValido ? form.color_secundario : '#020617' }">© Tu tienda · RUC · Libro de Reclamaciones</div>
                     </div>
                 </div>
