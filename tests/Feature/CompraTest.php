@@ -89,6 +89,27 @@ class CompraTest extends TestCase
         $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->missing('productos.0.presentaciones.0.ultimo_costo'));
     }
 
+    public function test_al_comprar_sugiere_los_lotes_vigentes_registrados_en_cualquier_sucursal(): void
+    {
+        $producto = $this->crearProducto(precio: 20.00, atributos: ['controla_lote' => true]);
+        $otra = \App\Models\Sucursal::create(['empresa_id' => $this->empresa->id, 'codigo_sunat' => '0002', 'nombre' => 'Tarapacá', 'activo' => true]);
+        $lote = fn (string $numero, ?string $vence, string $sucursal) => \App\Models\Lote::create(['empresa_id' => $this->empresa->id, 'producto_id' => $producto->id, 'sucursal_id' => $sucursal, 'numero_lote' => $numero, 'fecha_vencimiento' => $vence]);
+        $lote('L-VIEJO', now()->subDay()->toDateString(), $otra->id); // vencido: no se sugiere
+        $lote('L-100', now()->addYear()->toDateString(), $this->sucursal->id);
+        $lote('L-200', now()->addMonths(18)->toDateString(), $otra->id);
+
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p
+            ->has('productos.0.lotes_recientes', 2)
+            ->where('productos.0.lotes_recientes.0.numero', 'L-200')
+            ->where('productos.0.lotes_recientes.0.sucursal', 'Tarapacá')
+            ->where('productos.0.lotes_recientes.0.vence', now()->addMonths(18)->toDateString())
+            ->where('productos.0.lotes_recientes.1.numero', 'L-100'));
+
+        // otra empresa no ve estos lotes
+        $this->crearEscenarioBase();
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->missing('productos.0.lotes_recientes.0'));
+    }
+
     public function test_listado_filtra_por_fechas_y_proveedor(): void
     {
         $producto = $this->crearProducto(precio: 10.00);

@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\Compra;
 use App\Models\CompraDetalle;
 use App\Models\CuentaPorPagar;
+use App\Models\Lote;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
 use App\Models\Proveedor;
@@ -126,6 +127,22 @@ class CompraController extends Controller
             ->orderBy('compra_detalles.presentacion_id')->orderByDesc('compras.fecha')->orderByDesc('compras.creado_en')
             ->toBase()->get()->pluck('costo_unitario', 'presentacion_id');
 
+        // lotes vigentes de cada producto ya registrados en cualquier sucursal (los más recientes primero):
+        // la misma mercadería repartida entre tiendas trae el mismo lote, así no se escribe dos veces
+        $lotesRecientes = Lote::query()
+            ->join('sucursales', 'sucursales.id', '=', 'lotes.sucursal_id')
+            ->where('lotes.empresa_id', $empresaId)
+            ->whereIn('lotes.producto_id', $productos->where('controla_lote', true)->pluck('id'))
+            ->where(fn ($q) => $q->whereNull('lotes.fecha_vencimiento')->orWhere('lotes.fecha_vencimiento', '>=', now()->toDateString()))
+            ->orderByDesc('lotes.id') // uuid v7: el más nuevo primero
+            ->get(['lotes.producto_id', 'lotes.numero_lote', 'lotes.fecha_vencimiento', 'sucursales.nombre as sucursal'])
+            ->groupBy('producto_id')
+            ->map(fn ($lotes) => $lotes
+                ->unique(fn ($l) => mb_strtoupper(trim($l->numero_lote)).'|'.$l->fecha_vencimiento?->toDateString())
+                ->take(3)
+                ->map(fn ($l) => ['numero' => $l->numero_lote, 'vence' => $l->fecha_vencimiento?->toDateString(), 'sucursal' => $l->sucursal])
+                ->values());
+
         return Inertia::render('Compras/Crear', [
             'productos' => $productos->map(fn ($p) => [
                 'id' => $p->id,
@@ -135,6 +152,7 @@ class CompraController extends Controller
                 'controla_lote' => $p->controla_lote,
                 'permite_fraccion' => $p->permite_fraccion,
                 'imagen_url' => $p->imagen_url,
+                'lotes_recientes' => $lotesRecientes[$p->id] ?? [],
                 'presentaciones' => $p->presentaciones->map(fn ($pres) => [
                     'id' => $pres->id,
                     'nombre' => $pres->nombre,

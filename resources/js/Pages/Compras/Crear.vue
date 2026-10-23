@@ -196,6 +196,14 @@ function cambioPresentacion(fila) {
 }
 const esCostoAnterior = (fila) => presentacionDe(fila)?.ultimo_costo != null && Number(fila.costo_unitario) === presentacionDe(fila).ultimo_costo
 
+// lotes ya registrados de ese producto (en esta u otra sucursal): un clic llena lote y vencimiento
+const lotesSugeridos = (fila) => (fila.producto.lotes_recientes ?? []).filter((l) => l.numero.trim().toUpperCase() !== fila.numero_lote.trim().toUpperCase())
+function usarLote(fila, lote) {
+    fila.numero_lote = lote.numero
+    fila.fecha_vencimiento = lote.vence ?? ''
+}
+const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : 'sin vencimiento')
+
 function presentacionDe(fila) {
     return fila.producto.presentaciones.find((p) => p.id === fila.presentacion_id)
 }
@@ -525,6 +533,12 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                         <span class="mb-1 block text-xs text-neutral-500 dark:text-neutral-400">Vence</span>
                                         <input v-model="fila.fecha_vencimiento" type="date" :class="[claseCelda, 'h-10 w-full']" />
                                     </label>
+                                    <div v-if="lotesSugeridos(fila).length" class="col-span-2 flex flex-wrap items-center gap-1.5" data-lotes-sugeridos>
+                                        <span class="text-xs text-amber-700 dark:text-amber-400">Usar:</span>
+                                        <button v-for="l in lotesSugeridos(fila)" :key="l.numero + l.vence" type="button" class="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-left text-xs hover:border-emerald-400 hover:bg-emerald-50 dark:border-amber-800 dark:bg-neutral-950 dark:hover:bg-emerald-950/40" @click="usarLote(fila, l)">
+                                            <span class="font-semibold">{{ l.numero }}</span> · vence {{ fechaCorta(l.vence) }} <span class="text-neutral-500">· {{ l.sucursal }}</span>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div class="mt-3 flex items-center justify-between border-t border-[#F1F5F9] pt-3 text-sm dark:border-neutral-800">
@@ -647,6 +661,12 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                                         type="date"
                                                         class="h-8 rounded-lg border border-stone-200 bg-white px-2 text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                                     />
+                                                    <template v-if="lotesSugeridos(fila).length">
+                                                        <span class="text-xs text-amber-700 dark:text-amber-400" data-lotes-sugeridos>Usar:</span>
+                                                        <button v-for="l in lotesSugeridos(fila)" :key="l.numero + l.vence" type="button" class="h-8 rounded-lg border border-amber-200 bg-white px-2.5 text-xs hover:border-emerald-400 hover:bg-emerald-50 dark:border-amber-800 dark:bg-neutral-950 dark:hover:bg-emerald-950/40" :title="`Lote registrado en ${l.sucursal}`" @click="usarLote(fila, l)">
+                                                            <span class="font-semibold">{{ l.numero }}</span> · vence {{ fechaCorta(l.vence) }} <span class="text-neutral-500">· {{ l.sucursal }}</span>
+                                                        </button>
+                                                    </template>
                                                 </div>
                                             </td>
                                         </tr>
