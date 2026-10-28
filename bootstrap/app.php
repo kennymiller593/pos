@@ -6,6 +6,7 @@ use App\Http\Middleware\CorreoVerificado;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ImpersonacionVigente;
 use App\Http\Middleware\MezclasActivas;
+use App\Http\Middleware\SesionCoherente;
 use App\Http\Middleware\SoloDominioPrincipal;
 use App\Http\Middleware\SoloPlataforma;
 use App\Http\Middleware\SuscripcionVigente;
@@ -43,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SoloPlataforma::class,
             SuscripcionVigente::class,
             CorreoVerificado::class,
+            SesionCoherente::class,
             HandleInertiaRequests::class,
         ]);
 
