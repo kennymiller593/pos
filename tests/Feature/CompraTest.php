@@ -145,6 +145,43 @@ class CompraTest extends TestCase
         $this->assertContains($proveedorA->razon_social, collect($props['proveedores'])->pluck('razon_social')->all());
     }
 
+    public function test_listado_busca_compras_por_producto_lote_o_comprobante(): void
+    {
+        $zeta = $this->crearProducto(precio: 60.00, atributos: ['nombre' => 'ZETA Extra Large x FCO 250 ML.', 'controla_lote' => true]);
+        $coronel = $this->crearProducto(precio: 40.00, atributos: ['nombre' => 'CORONEL 247 SC x FCO 500 ML.']);
+        $compra = fn (string $numero, array $items) => $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '01', 'serie_numero' => $numero,
+            'fecha' => now()->toDateString(), 'es_credito' => false, 'items' => $items,
+        ])->assertRedirect(route('compras.index'));
+
+        $compra('F001-000101', [
+            ['presentacion_id' => $zeta->presentaciones->first()->id, 'cantidad' => 5, 'costo_unitario' => 48, 'numero_lote' => 'L-25874', 'fecha_vencimiento' => '2029-07-15'],
+            ['presentacion_id' => $coronel->presentaciones->first()->id, 'cantidad' => 2, 'costo_unitario' => 35],
+        ]);
+        $compra('F001-000102', [['presentacion_id' => $coronel->presentaciones->first()->id, 'cantidad' => 3, 'costo_unitario' => 34]]);
+
+        $buscar = fn (string $texto) => collect($this->actingAs($this->admin)->get('/compras?buscar='.urlencode($texto))->assertOk()
+            ->viewData('page')['props']['compras']['data']);
+        $documentos = fn (string $texto) => $buscar($texto)->pluck('serie_numero')->sort()->values()->all();
+
+        // por producto: sin tildes ni mayúsculas, por palabras sueltas
+        $this->assertSame(['F001-000101'], $documentos('zeta 250'));
+        $this->assertSame(['F001-000101', 'F001-000102'], $documentos('córonel'));
+        // por lote y por N° de comprobante
+        $this->assertSame(['F001-000101'], $documentos('25874'));
+        $this->assertSame(['F001-000102'], $documentos('f001-000102'));
+        $this->assertSame([], $documentos('glifosato'));
+
+        // en la compra se marca solo la línea del producto buscado
+        $lineas = collect($buscar('zeta')->first()['detalles']);
+        $this->assertSame([true, false], $lineas->sortByDesc('coincide')->pluck('coincide')->values()->all());
+        $this->assertSame('L-25874', $lineas->firstWhere('coincide', true)['lote']['numero_lote']);
+
+        // otra empresa no encuentra estas compras
+        $this->crearEscenarioBase();
+        $this->assertSame([], $documentos('zeta'));
+    }
+
     public function test_descarga_de_compra_en_pdf(): void
     {
         $producto = $this->crearProducto(precio: 10.00);

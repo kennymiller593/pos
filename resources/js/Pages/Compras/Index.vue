@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import { Ban, Barcode, CalendarDays, Download, Eye, Plus, Truck, X } from '@lucide/vue'
+import { Ban, Barcode, CalendarDays, Download, Eye, Plus, Search, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import SelectorBuscable from '@/Components/SelectorBuscable.vue'
 import { usePermisos } from '@/composables/permisos'
@@ -24,11 +24,14 @@ const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFraction
 
 const compraVer = ref(null)
 
-// ---- filtros: rango de fechas de la compra y proveedor ----
+// ---- filtros: producto / lote / N° de comprobante, rango de fechas de la compra y proveedor ----
+const buscar = ref(props.filtros.buscar ?? '')
 const desde = ref(props.filtros.desde ?? '')
 const hasta = ref(props.filtros.hasta ?? '')
 const proveedor = ref(props.filtros.proveedor ?? '')
-const hayFiltros = computed(() => !!(desde.value || hasta.value || proveedor.value))
+const hayFiltros = computed(() => !!(buscar.value.trim() || desde.value || hasta.value || proveedor.value))
+// líneas de la compra que coinciden con lo buscado (las marca el servidor)
+const coincidencias = (c) => c.detalles.filter((d) => d.coincide)
 const opcionesProveedor = computed(() => [
     { valor: '', texto: 'Todos los proveedores' },
     ...props.proveedores.map((pr) => ({ valor: pr.id, texto: pr.razon_social })),
@@ -36,17 +39,25 @@ const opcionesProveedor = computed(() => [
 
 function aplicarFiltros() {
     router.get('/compras', {
+        buscar: buscar.value.trim() || undefined,
         desde: desde.value || undefined,
         hasta: hasta.value || undefined,
         proveedor: proveedor.value || undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
 function limpiarFiltros() {
+    buscar.value = ''
     desde.value = ''
     hasta.value = ''
     proveedor.value = ''
 }
 watch([desde, hasta, proveedor], aplicarFiltros)
+// al escribir se espera a que termine para no consultar con cada letra
+let pausa = null
+watch(buscar, () => {
+    clearTimeout(pausa)
+    pausa = setTimeout(aplicarFiltros, 350)
+})
 
 const claseInput =
     'h-10 rounded-xl border border-[#E2E8F0] bg-white px-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900'
@@ -81,6 +92,18 @@ function anular() {
         <!-- Filtros y acción principal -->
         <div class="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center">
             <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-1 sm:flex-wrap sm:items-center">
+                <!-- producto, lote o N° de comprobante -->
+                <div class="relative col-span-2 sm:min-w-56 sm:flex-1" data-filtro-buscar>
+                    <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#94A3B8]" />
+                    <input
+                        v-model="buscar"
+                        type="search"
+                        maxlength="60"
+                        placeholder="Buscar producto, lote o N° de comprobante"
+                        aria-label="Buscar producto, lote o N° de comprobante"
+                        :class="[claseInput, 'w-full pl-9']"
+                    />
+                </div>
                 <!-- rango de fechas de la compra -->
                 <div class="col-span-2 flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-white pr-1.5 pl-3 dark:border-neutral-800 dark:bg-neutral-900">
                     <CalendarDays class="size-4 shrink-0 text-[#94A3B8]" />
@@ -164,6 +187,18 @@ function anular() {
                                 >
                                     Anulada
                                 </span>
+                                <!-- lo buscado dentro de esta compra -->
+                                <ul v-if="coincidencias(c).length" class="mt-1.5 space-y-1" data-coincidencias>
+                                    <li
+                                        v-for="d in coincidencias(c)"
+                                        :key="d.id"
+                                        class="w-fit max-w-80 rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200"
+                                    >
+                                        <span class="font-semibold">{{ d.producto?.nombre ?? '—' }}</span>
+                                        · {{ cantidad(d.cantidad) }}{{ d.presentacion && d.presentacion.nombre !== 'Unidad' ? ` ${d.presentacion.nombre}` : '' }}
+                                        × {{ soles(d.costo_unitario) }}{{ d.lote ? ` · lote ${d.lote.numero_lote}` : '' }}
+                                    </li>
+                                </ul>
                             </td>
                             <td class="px-4 py-3 text-neutral-600 dark:text-neutral-300">{{ c.serie_numero ?? '—' }}</td>
                             <td class="px-4 py-3 text-center text-neutral-600 dark:text-neutral-300">{{ c.detalles.length }}</td>
@@ -284,12 +319,13 @@ function anular() {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
-                                <tr v-for="d in compraVer.detalles" :key="d.id">
+                                <tr v-for="d in compraVer.detalles" :key="d.id" :class="d.coincide && 'bg-emerald-50 dark:bg-emerald-500/10'">
                                     <td class="py-2.5 pr-2">
                                         {{ d.producto?.nombre ?? '—' }}
                                         <span v-if="d.presentacion && d.presentacion.nombre !== 'Unidad'" class="text-xs text-neutral-500 dark:text-neutral-400">
                                             ({{ d.presentacion.nombre }})
                                         </span>
+                                        <span v-if="d.lote" class="block text-xs text-neutral-500 dark:text-neutral-400">Lote {{ d.lote.numero_lote }}</span>
                                     </td>
                                     <td class="py-2.5 text-center">{{ cantidad(d.cantidad) }}</td>
                                     <td class="py-2.5 text-right text-neutral-600 dark:text-neutral-300">{{ soles(d.costo_unitario) }}</td>

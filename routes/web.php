@@ -160,7 +160,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [InicioController::class, 'index'])->name('inicio');
 
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
-    Route::get('/notificaciones', [NotificacionController::class, 'index'])->name('notificaciones');
+    Route::get('/notificaciones', [NotificacionController::class, 'index'])->middleware('flash.conservar')->name('notificaciones');
     Route::post('/recorrido-visto', [RecorridoController::class, 'visto'])->name('recorrido.visto');
 
     // el superadmin vuelve a la plataforma tras "entrar como" (accesible aunque la empresa este vencida o desactivada)
@@ -355,7 +355,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/comprobantes/{comprobante}/xml', [ComprobanteController::class, 'xml'])->name('comprobantes.xml');
         Route::get('/comprobantes/{comprobante}/cdr', [ComprobanteController::class, 'cdr'])->name('comprobantes.cdr');
         Route::get('/comprobantes/{comprobante}/a5', [ComprobanteController::class, 'a5'])->name('comprobantes.a5');
-        Route::get('/comprobantes/{comprobante}/estado-sunat', [ComprobanteController::class, 'estadoSunat'])->name('comprobantes.estado-sunat');
+        Route::get('/comprobantes/{comprobante}/estado-sunat', [ComprobanteController::class, 'estadoSunat'])->middleware('flash.conservar')->name('comprobantes.estado-sunat');
         Route::post('/comprobantes/{comprobante}/correo', [ComprobanteController::class, 'correo'])->middleware('throttle:30,1')->name('comprobantes.correo');
     });
     Route::post('/comprobantes/{comprobante}/sunat', [ComprobanteController::class, 'enviarSunat'])->middleware('can:comprobantes.sunat')->name('comprobantes.sunat');

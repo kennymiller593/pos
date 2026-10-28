@@ -155,6 +155,11 @@ const carritoGuardado = useStorage(`pos-carrito-${empresaId}`, [])
 const clienteGuardado = useStorage(`pos-cliente-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
 // cotización que se está vendiendo: { id, codigo, vigente } (al cobrar queda enlazada a la venta)
 const cotizacionEnVenta = useStorage(`pos-cotizacion-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
+// clave única de cada carrito: si la venta se envía dos veces (doble clic, recarga, respuesta que no llegó),
+// el servidor devuelve la venta ya hecha en vez de repetirla. Cambia cada vez que el carrito queda vacío.
+const nuevaClave = () => crypto.randomUUID?.() ?? '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16))
+const claveVenta = useStorage(`pos-clave-${empresaId}`, nuevaClave())
+watch(() => carrito.value.length, (n) => { if (n === 0) claveVenta.value = nuevaClave() })
 
 // aviso flotante cuando se intenta vender sin stock
 const avisoSinStock = ref(null)
@@ -925,6 +930,7 @@ function cobrar() {
     const esCredito = condicion.value === 'credito'
 
     router.post('/pos/ventas', {
+        clave: claveVenta.value,
         tipo_comprobante_codigo: tipoComprobante.value,
         cliente_id: clienteSeleccionado.value?.id ?? null,
         cotizacion_id: cotizacionEnVenta.value?.id ?? null,

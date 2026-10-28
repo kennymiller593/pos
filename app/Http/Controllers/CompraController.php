@@ -12,6 +12,7 @@ use App\Models\ProductoPresentacion;
 use App\Models\Proveedor;
 use App\Models\Sucursal;
 use App\Models\TipoComprobante;
+use App\Services\BusquedaProductos;
 use App\Services\CompraService;
 use App\Services\InventarioService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
@@ -28,6 +29,7 @@ class CompraController extends Controller
     public function __construct(
         private readonly InventarioService $inventario,
         private readonly CompraService $comprasService,
+        private readonly BusquedaProductos $busqueda,
     ) {}
 
     public function index(Request $request): Response
@@ -45,6 +47,18 @@ class CompraController extends Controller
         if (Str::isUuid((string) $request->query('proveedor'))) {
             $filtros['proveedor'] = $request->query('proveedor');
         }
+        $buscar = Str::limit(trim((string) $request->query('buscar')), 60, '');
+        if ($buscar !== '') {
+            $filtros['buscar'] = $buscar;
+        }
+
+        // buscar: un producto (como en la tienda: sin tildes, por palabras, código o código de barras), un lote o el N° del comprobante
+        $productosBuscados = [];
+        $patron = '%'.addcslashes(mb_strtolower($buscar), '%_\\').'%';
+        if ($buscar !== '' && ($palabras = BusquedaProductos::palabras($buscar)) !== []) {
+            $productosBuscados = $this->busqueda->aplicar(Producto::withTrashed()->where('productos.empresa_id', $empresaId), $palabras)
+                ->limit(500)->toBase()->pluck('productos.id')->all();
+        }
 
         $compras = Compra::query()
             ->where('empresa_id', $empresaId)
@@ -53,18 +67,34 @@ class CompraController extends Controller
             ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
             ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->whereDate('fecha', '<=', $hasta))
             ->when($filtros['proveedor'] ?? null, fn ($q, $proveedor) => $q->where('proveedor_id', $proveedor))
+            ->when($buscar !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('detalles', fn ($d) => $d->whereIn('producto_id', $productosBuscados))
+                ->orWhereHas('detalles.lote', fn ($l) => $l->whereRaw('lower(numero_lote) LIKE ?', [$patron]))
+                ->orWhereRaw('lower(serie_numero) LIKE ?', [$patron])))
             ->with([
                 'proveedor' => fn ($q) => $q->withTrashed()->select('id', 'razon_social'),
                 'sucursal:id,nombre',
                 'usuario:id,nombre_completo',
                 'anuladaPor:id,nombre_completo',
-                'detalles:id,compra_id,producto_id,presentacion_id,cantidad,costo_unitario,total',
+                'detalles:id,compra_id,producto_id,presentacion_id,lote_id,cantidad,costo_unitario,total',
                 'detalles.producto' => fn ($q) => $q->withTrashed()->select('id', 'nombre'),
                 'detalles.presentacion:id,nombre',
+                'detalles.lote:id,numero_lote',
             ])
             ->latest('creado_en')
             ->paginate(10)
             ->withQueryString();
+
+        // las líneas que coinciden con lo buscado se muestran en el listado sin abrir la compra
+        if ($buscar !== '') {
+            $loteBuscado = mb_strtolower($buscar);
+            foreach ($compras as $compra) {
+                foreach ($compra->detalles as $detalle) {
+                    $detalle->setAttribute('coincide', in_array($detalle->producto_id, $productosBuscados, true)
+                        || ($detalle->lote && str_contains(mb_strtolower($detalle->lote->numero_lote), $loteBuscado)));
+                }
+            }
+        }
 
         // proveedores de la empresa para el filtro (los eliminados siguen si tienen compras, para poder filtrarlas)
         $proveedores = Proveedor::query()

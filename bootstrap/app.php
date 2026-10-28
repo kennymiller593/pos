@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CabecerasSeguridad;
+use App\Http\Middleware\ConservarFlash;
 use App\Http\Middleware\CorreoVerificado;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ImpersonacionVigente;
@@ -43,6 +44,8 @@ return Application::configure(basePath: dirname(__DIR__))
             CorreoVerificado::class,
             HandleInertiaRequests::class,
         ]);
+
+        $middleware->alias(['flash.conservar' => ConservarFlash::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

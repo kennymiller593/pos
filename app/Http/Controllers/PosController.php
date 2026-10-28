@@ -21,6 +21,7 @@ use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -242,6 +243,7 @@ class PosController extends Controller
             'pagos.*.medio_pago_codigo' => ['required', 'exists:medios_pago,codigo'],
             'pagos.*.monto' => ['required', 'numeric', 'gt:0'],
             'pagos.*.referencia' => ['nullable', 'string', 'max:100'],
+            'clave' => ['nullable', 'uuid'],
         ], [
             'items.required' => 'El carrito está vacío.',
             'pagos.required' => 'Indica cómo se pagó la venta.',
@@ -258,6 +260,17 @@ class PosController extends Controller
             return back()->with('error', 'Tu rol no puede cambiar el precio de lista. Pide a un administrador o cajero que lo haga.');
         }
 
+        // la misma venta enviada dos veces (doble clic, recarga, respuesta que no llegó) se registra una sola vez:
+        // el POS manda una clave por carrito y con ella se devuelve la venta ya hecha en vez de repetirla
+        $claveCache = filled($datos['clave'] ?? null) ? "pos.venta.{$request->user()->id}.{$datos['clave']}" : null;
+        $firma = md5(json_encode([$datos['tipo_comprobante_codigo'], $datos['cliente_id'] ?? null, $esCredito, $datos['items'], $datos['pagos'] ?? []]));
+        if ($claveCache && ($previa = Cache::get($claveCache)) && $previa['firma'] === $firma) {
+            $registrada = Comprobante::whereKey($previa['id'])->where('empresa_id', $empresa->id)->first();
+            if ($registrada) {
+                return $this->respuestaVenta($registrada, $esCredito, yaRegistrada: true);
+            }
+        }
+
         try {
             $comprobante = $this->ventas->registrar($request->user(), $apertura, $datos);
         } catch (ErrorDeNegocio $e) {
@@ -266,6 +279,10 @@ class PosController extends Controller
             report($e);
 
             return back()->with('error', 'No se pudo registrar la venta. Intenta de nuevo.');
+        }
+
+        if ($claveCache) {
+            Cache::put($claveCache, ['id' => $comprobante->id, 'firma' => $firma], now()->addHours(2));
         }
 
         if ($cotizacion) {
@@ -277,10 +294,22 @@ class PosController extends Controller
             EnviarComprobanteSunat::dispatchAfterResponse($comprobante->id);
         }
 
+        return $this->respuestaVenta($comprobante, $esCredito);
+    }
+
+    /** Vuelve al POS con el aviso y los datos de la venta para el modal de venta exitosa. */
+    private function respuestaVenta(Comprobante $comprobante, bool $esCredito, bool $yaRegistrada = false): RedirectResponse
+    {
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $total = number_format((float) $comprobante->total, 2);
 
         $comprobante->loadMissing(['cliente:id,email,telefono', 'empresa:id,razon_social,nombre_comercial,facturacion_electronica']);
+
+        $mensaje = match (true) {
+            $yaRegistrada => "La venta {$numero} por S/ {$total} ya estaba registrada; no se repitió.",
+            $esCredito => "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\".",
+            default => "Venta {$numero} registrada por S/ {$total}.",
+        };
 
         return back()
             ->with('ticket', route('comprobantes.ticket', $comprobante))
@@ -298,8 +327,6 @@ class PosController extends Controller
                 'enlace_publico' => ComprobanteController::enlacePublico($comprobante),
                 'puntos' => $this->puntosDeLaVenta($comprobante),
             ])
-            ->with('success', $esCredito
-                ? "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\"."
-                : "Venta {$numero} registrada por S/ {$total}.");
+            ->with('success', $mensaje);
     }
 }
