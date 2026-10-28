@@ -34,6 +34,7 @@ class Empresa extends Model
         'puntos_soles_por_punto',
         'puntos_valor',
         'puntos_minimo_canje',
+        'mezclas_activo',
         'tienda_slug',
         'tienda_publicada',
         'tienda_config',
@@ -70,6 +71,7 @@ class Empresa extends Model
             'puntos_soles_por_punto' => 'decimal:2',
             'puntos_valor' => 'decimal:2',
             'puntos_minimo_canje' => 'integer',
+            'mezclas_activo' => 'boolean',
             'tienda_publicada' => 'boolean',
             // adicional de pago: solo lo cambia la plataforma (no es fillable a proposito)
             'tienda_habilitada' => 'boolean',

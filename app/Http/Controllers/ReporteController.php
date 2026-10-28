@@ -16,7 +16,7 @@ use Inertia\Response;
 
 class ReporteController extends Controller
 {
-    private const ENTRADAS = ['compra', 'devolucion', 'ajuste', 'transferencia_entrada'];
+    private const ENTRADAS = ['compra', 'devolucion', 'ajuste', 'transferencia_entrada', 'mezcla_entrada'];
 
     private const TIPOS_KARDEX = [
         'compra' => 'Compra',
@@ -26,6 +26,9 @@ class ReporteController extends Controller
         'devolucion' => 'Devolución (anulación)',
         'transferencia_entrada' => 'Transferencia entrada',
         'transferencia_salida' => 'Transferencia salida',
+        'mezcla_entrada' => 'Obtenido de mezcla',
+        'mezcla_salida' => 'Usado en mezcla',
+        'mezcla_anulada' => 'Mezcla anulada',
     ];
 
     /**

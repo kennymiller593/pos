@@ -49,6 +49,7 @@ use App\Http\Controllers\ReclamacionController;
 use App\Http\Controllers\TiendaConfigController;
 use App\Http\Controllers\TiendaController;
 use App\Http\Controllers\TiendaDominioController;
+use App\Http\Controllers\MezclaController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Middleware\CabecerasTienda;
@@ -406,4 +407,15 @@ Route::middleware('auth')->group(function () {
     });
     Route::post('/transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir'])->middleware('can:transferencias.recibir')->name('transferencias.recibir');
     Route::post('/transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular'])->middleware('can:transferencias.anular')->name('transferencias.anular');
+
+    // ---- mezclas y preparados (módulo opcional: Configuración → Empresa) ----
+    Route::middleware('mezclas.activas')->group(function () {
+        Route::get('/mezclas', [MezclaController::class, 'index'])->middleware('can:mezclas.ver')->name('mezclas.index');
+        Route::get('/mezclas/{mezcla}/pdf', [MezclaController::class, 'pdf'])->middleware('can:mezclas.ver')->name('mezclas.pdf');
+        Route::middleware('can:mezclas.gestionar')->group(function () {
+            Route::get('/mezclas/crear', [MezclaController::class, 'crear'])->name('mezclas.crear');
+            Route::post('/mezclas', [MezclaController::class, 'store'])->name('mezclas.store');
+        });
+        Route::post('/mezclas/{mezcla}/anular', [MezclaController::class, 'anular'])->middleware('can:mezclas.anular')->name('mezclas.anular');
+    });
 });

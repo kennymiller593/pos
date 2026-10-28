@@ -50,6 +50,7 @@ import {
     Truck,
     Undo2,
     UserCog,
+    FlaskConical,
     Users,
     Wallet,
     X,
@@ -110,6 +111,8 @@ const menuBase = [
             { label: 'Categorías y marcas', href: '/catalogos', icon: Tags, permiso: 'productos.ver' },
             { label: 'Stock', href: '/stock', icon: Boxes, permiso: 'stock.ver' },
             { label: 'Transferencias', href: '/transferencias', icon: ArrowLeftRight, permiso: 'transferencias.ver' },
+            // módulo opcional: se enciende en Configuración → Empresa
+            { label: 'Mezclas', href: '/mezclas', icon: FlaskConical, permiso: 'mezclas.ver', si: () => !!empresa.value?.mezclas_activo },
         ],
     },
     {

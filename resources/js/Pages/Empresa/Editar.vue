@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import { Building2, Check, ChevronRight, FileKey, ImageIcon, QrCode, Trash2, Upload, X, Zap, ZapOff } from '@lucide/vue'
+import { Building2, Check, ChevronRight, FileKey, FlaskConical, ImageIcon, QrCode, Trash2, Upload, X, Zap, ZapOff } from '@lucide/vue'
+import { claseInterruptor } from '@/Components/Tienda/clases'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 
@@ -46,6 +47,7 @@ const form = useForm({
     logo: null,
     logo_eliminar: false,
     cuentas_bancarias: props.empresa.cuentas_bancarias ?? '',
+    mezclas_activo: !!props.empresa.mezclas_activo,
     usuario_sol: props.empresa.usuario_sol ?? '',
     gre_client_id: props.empresa.gre_client_id ?? '',
     gre_client_secret: '',
@@ -201,6 +203,20 @@ const certificadoVencimiento = computed(() => {
                             </span>
                             <ChevronRight class="size-5 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600" />
                         </Link>
+                    </div>
+                    <!-- módulo opcional: mezclas y preparados -->
+                    <div class="sm:col-span-2">
+                        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50 dark:border-neutral-800 dark:has-[:checked]:border-emerald-600 dark:has-[:checked]:bg-emerald-950/20">
+                            <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                <FlaskConical class="size-5" />
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-semibold">Mezclas y preparados</span>
+                                <span class="block text-xs text-neutral-500 dark:text-neutral-400">Actívalo si combinas productos del stock para obtener otro que vendes (mezclas de fertilizantes, packs, kits). Los insumos salen del stock a su costo real y lo obtenido entra con el costo calculado, sin registrar ventas ni compras.</span>
+                            </span>
+                            <input v-model="form.mezclas_activo" type="checkbox" class="peer sr-only" data-mezclas-activo />
+                            <span :class="[claseInterruptor, 'mt-2']" />
+                        </label>
                     </div>
                     <div class="sm:col-span-2">
                         <label :class="claseLabel">Logo</label>

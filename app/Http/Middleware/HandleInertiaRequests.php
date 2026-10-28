@@ -87,6 +87,8 @@ class HandleInertiaRequests extends Middleware
                             'ia_habilitada' => app(AsistenteIaService::class)->tieneAgentes($usuario->empresa),
                             // con más de una sucursal activa se muestran el selector y las columnas "Sucursal"
                             'multisucursal' => $contexto->multisucursal,
+                            // módulo opcional: decide si el menú muestra "Mezclas"
+                            'mezclas_activo' => (bool) $usuario->empresa->mezclas_activo,
                         ],
                         'sucursal' => $usuario->sucursal ? [
                             'id' => $usuario->sucursal->id,

@@ -31,6 +31,7 @@ class EmpresaController extends Controller
                 'rubro_codigo' => $empresa->rubro_codigo,
                 'logo_url' => $empresa->logo_url,
                 'cuentas_bancarias' => $empresa->cuentas_bancarias,
+                'mezclas_activo' => (bool) $empresa->mezclas_activo,
                 'usuario_sol' => $empresa->usuario_sol,
                 'gre_client_id' => $empresa->gre_client_id,
                 'tiene_gre_client_secret' => filled($empresa->gre_client_secret),
@@ -117,6 +118,7 @@ class EmpresaController extends Controller
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'logo_eliminar' => ['nullable', 'boolean'],
             'cuentas_bancarias' => ['nullable', 'string', 'max:500'],
+            'mezclas_activo' => ['nullable', 'boolean'],
             'usuario_sol' => ['nullable', 'string', 'max:50'],
             'certificado_digital' => ['nullable', 'string'],
             'clave_sol' => ['nullable', 'string', 'max:100'],
@@ -144,6 +146,7 @@ class EmpresaController extends Controller
         }
 
         unset($datos['logo'], $datos['logo_eliminar']);
+        $datos['mezclas_activo'] = $request->boolean('mezclas_activo');
 
         // credenciales de solo escritura: si vienen vacias, se conserva la actual
         foreach (['certificado_digital', 'clave_sol', 'clave_certificado', 'gre_client_secret'] as $campo) {

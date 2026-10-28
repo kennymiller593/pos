@@ -39,9 +39,12 @@ const TIPOS = {
     devolucion: { label: 'Devolución (anulación)', entrada: true },
     ajuste: { label: 'Ajuste (entrada)', entrada: true },
     transferencia_entrada: { label: 'Transferencia entrada', entrada: true },
+    mezcla_entrada: { label: 'Obtenido de mezcla', entrada: true },
     venta: { label: 'Venta', entrada: false },
     merma: { label: 'Merma / salida', entrada: false },
     transferencia_salida: { label: 'Transferencia salida', entrada: false },
+    mezcla_salida: { label: 'Usado en mezcla', entrada: false },
+    mezcla_anulada: { label: 'Mezcla anulada', entrada: false },
 }
 
 function estadoDe(p) {
