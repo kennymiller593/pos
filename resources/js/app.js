@@ -2,7 +2,11 @@
 import { createApp, h } from 'vue'
 import { createInertiaApp, router } from '@inertiajs/vue3'
 import { createPinia } from 'pinia'
+import { vigilarErrores } from './reporteErrores'
 import '../css/app.css'
+
+// lo que falla en el navegador se avisa al servidor (si no, no deja rastro en ningún log)
+vigilarErrores()
 
 // el <title> de cada pagina: "Comprobantes · inkaPos" (o solo la marca en la landing/login)
 const nombreApp = import.meta.env.VITE_APP_NAME || 'inkaPos'

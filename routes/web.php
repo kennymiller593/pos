@@ -3,6 +3,8 @@
 use App\Http\Controllers\Admin\AgenteIaController as AdminAgenteIaController;
 use App\Http\Controllers\Admin\CuentaController as AdminCuentaController;
 use App\Http\Controllers\Admin\EmpresaController as AdminEmpresaController;
+use App\Http\Controllers\Admin\ErrorClienteController as AdminErrorClienteController;
+use App\Http\Controllers\ErrorClienteController;
 use App\Http\Controllers\Admin\ImpersonacionController;
 use App\Http\Controllers\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Admin\ProveedorIaController as AdminProveedorIaController;
@@ -162,6 +164,8 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/sucursal-activa', [SucursalController::class, 'cambiarActiva'])->name('sucursal.activa');
     Route::get('/notificaciones', [NotificacionController::class, 'index'])->middleware('flash.conservar')->name('notificaciones');
+    // avisos del navegador: lo que falla antes de llegar al servidor
+    Route::post('/errores-cliente', [ErrorClienteController::class, 'store'])->middleware('throttle:30,1')->name('errores-cliente');
     Route::post('/recorrido-visto', [RecorridoController::class, 'visto'])->name('recorrido.visto');
 
     // el superadmin vuelve a la plataforma tras "entrar como" (accesible aunque la empresa este vencida o desactivada)
@@ -184,6 +188,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/empresas/{empresa}/entrar', [ImpersonacionController::class, 'entrar'])->name('empresas.entrar');
         Route::get('/empresas/{empresa}/auditoria', [AuditoriaController::class, 'deEmpresa'])->name('empresas.auditoria');
         Route::get('/auditoria/{empresa}', [AuditoriaController::class, 'deEmpresa'])->name('auditoria');
+        Route::get('/errores', [AdminErrorClienteController::class, 'index'])->name('errores');
         // inteligencia artificial: proveedores (claves, precios) y agentes por rubro
         Route::get('/ia/proveedores', [AdminProveedorIaController::class, 'index'])->name('ia.proveedores');
         Route::put('/ia/proveedores/{proveedor}', [AdminProveedorIaController::class, 'update'])->name('ia.proveedores.update');

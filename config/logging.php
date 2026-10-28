@@ -73,6 +73,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // avisos del navegador de los clientes (errores_cliente); la pantalla está en /admin/errores
+        'cliente' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/cliente.log'),
+            'level' => 'debug',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
