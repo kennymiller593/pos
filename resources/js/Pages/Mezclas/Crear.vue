@@ -158,6 +158,8 @@ const motivoNoGuardar = computed(() => {
 const puedeGuardar = computed(() => motivoNoGuardar.value === '')
 
 function guardar() {
+    // con el selector en una sucursal, siempre la vigente (no la que tenía el formulario al abrirse)
+    if (!props.sucursales.length) form.sucursal_id = props.sucursalId
     form.insumos = filas.value.map((f) => ({ producto_id: f.producto.id, presentacion_id: f.presentacion_id, cantidad: Number(f.cantidad) }))
     form.transform((data) => ({
         ...data,

@@ -236,7 +236,9 @@ onClickOutside(selectorRef, () => (selectorAbierto.value = false))
 function cambiarSucursal(id) {
     selectorAbierto.value = false
     if (id === sucursalConsultaId.value) return
-    router.post('/sucursal-activa', { sucursal_id: id }, { preserveScroll: true })
+    // la pantalla se vuelve a montar con la nueva sucursal: un formulario abierto (compra, mezcla,
+    // transferencia) no puede quedarse con la sucursal y el stock de la anterior
+    router.post('/sucursal-activa', { sucursal_id: id }, { preserveScroll: true, preserveState: false })
 }
 function abrirSelector() {
     if (puedeCambiarSucursal.value) selectorAbierto.value = !selectorAbierto.value
