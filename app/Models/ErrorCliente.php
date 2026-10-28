@@ -22,6 +22,7 @@ class ErrorCliente extends Model
         'red' => 'Envío sin respuesta',
         'respuesta' => 'Respuesta ajena al sistema',
         'negocio' => 'Rechazo del sistema',
+        'validacion' => 'Formulario rechazado (datos faltantes)',
     ];
 
     protected $fillable = ['empresa_id', 'usuario_id', 'tipo', 'pantalla', 'accion', 'mensaje', 'detalle', 'navegador', 'ip'];

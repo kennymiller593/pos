@@ -10,7 +10,7 @@ const props = defineProps({
     filtros: { type: Object, default: () => ({}) },
     // { js: 'Error de JavaScript', ... }
     tipos: { type: Object, default: () => ({}) },
-    // [{ id, nombre }] solo las que tienen errores
+    // [{ id, nombre }]
     empresas: { type: Array, default: () => [] },
 })
 
@@ -19,6 +19,7 @@ const CLASES = {
     red: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
     respuesta: 'bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-300',
     negocio: 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
+    validacion: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300',
 }
 
 const fechaHora = (f) => new Date(f).toLocaleString('es-PE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })

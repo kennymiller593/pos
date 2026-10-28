@@ -50,6 +50,11 @@ class ErroresClienteTest extends TestCase
         $this->actingAs($this->admin)->postJson('/errores-cliente', ['tipo' => 'js'])->assertStatus(422);
         $this->assertSame(0, ErrorCliente::where('empresa_id', $this->empresa->id)->count());
 
+        // un formulario rechazado (422) también se registra
+        $this->actingAs($this->admin)->postJson('/errores-cliente', ['tipo' => 'validacion', 'mensaje' => 'La compra a crédito necesita un proveedor.', 'detalle' => ['campos' => ['proveedor_id']]])->assertNoContent();
+        $this->assertSame('validacion', ErrorCliente::where('empresa_id', $this->empresa->id)->firstOrFail()->tipo);
+        ErrorCliente::where('empresa_id', $this->empresa->id)->delete();
+
         // un mensaje larguísimo se recorta a 500
         $this->actingAs($this->admin)->postJson('/errores-cliente', ['tipo' => 'js', 'mensaje' => str_repeat('a', 1500)])->assertNoContent();
         $this->assertSame(500, mb_strlen(ErrorCliente::where('empresa_id', $this->empresa->id)->firstOrFail()->mensaje));

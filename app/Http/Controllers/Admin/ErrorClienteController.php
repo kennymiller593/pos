@@ -57,8 +57,7 @@ class ErrorClienteController extends Controller
             'errores' => $errores,
             'filtros' => $filtros,
             'tipos' => ErrorCliente::TIPOS,
-            'empresas' => Empresa::query()->whereIn('id', ErrorCliente::query()->select('empresa_id')->whereNotNull('empresa_id'))
-                ->orderBy('nombre_comercial')->get(['id', 'nombre_comercial', 'razon_social'])
+            'empresas' => Empresa::query()->orderByRaw('coalesce(nombre_comercial, razon_social)')->get(['id', 'nombre_comercial', 'razon_social'])
                 ->map(fn ($e) => ['id' => $e->id, 'nombre' => $e->nombre_comercial ?: $e->razon_social]),
         ]);
     }

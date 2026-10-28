@@ -7,8 +7,9 @@ CREATE TABLE IF NOT EXISTS errores_cliente (
     id UUID PRIMARY KEY DEFAULT uuid_v7(),
     empresa_id UUID REFERENCES empresas(id) ON DELETE CASCADE,
     usuario_id UUID REFERENCES usuarios(id) ON DELETE SET NULL,
-    -- js: error de JavaScript · red: envío sin respuesta · respuesta: respuesta que no es del sistema (bloqueo, 419, 500) · negocio: rechazo del sistema
-    tipo VARCHAR(12) NOT NULL CHECK (tipo IN ('js', 'red', 'respuesta', 'negocio')),
+    -- js: error de JavaScript · red: envío sin respuesta · respuesta: respuesta que no es del sistema (bloqueo, 419, 500)
+    -- negocio: rechazo del sistema · validacion: formulario rechazado por datos faltantes (422)
+    tipo VARCHAR(12) NOT NULL,
     pantalla VARCHAR(300),
     accion VARCHAR(300),
     mensaje VARCHAR(500) NOT NULL,
@@ -17,6 +18,10 @@ CREATE TABLE IF NOT EXISTS errores_cliente (
     ip VARCHAR(45),
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE errores_cliente DROP CONSTRAINT IF EXISTS errores_cliente_tipo_check;
+ALTER TABLE errores_cliente ADD CONSTRAINT errores_cliente_tipo_check
+    CHECK (tipo IN ('js', 'red', 'respuesta', 'negocio', 'validacion'));
 
 CREATE INDEX IF NOT EXISTS errores_cliente_creado_idx ON errores_cliente (creado_en DESC);
 CREATE INDEX IF NOT EXISTS errores_cliente_empresa_idx ON errores_cliente (empresa_id, creado_en DESC);

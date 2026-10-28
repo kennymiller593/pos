@@ -71,6 +71,14 @@ export function vigilarErrores() {
         const x = e.detail.error
         reportar('red', x?.message || 'La petición no obtuvo respuesta', { codigo: x?.code, demora_ms: ultimaVisita ? Date.now() - ultimaVisita.desde : null, en_linea: navigator.onLine })
     })
+    // el formulario fue rechazado por datos faltantes o mal puestos (422): dónde se traban los usuarios
+    router.on('error', (e) => {
+        const errores = e.detail.errors ?? {}
+        const mensajes = Object.values(errores).flat().filter(Boolean)
+        if (mensajes.length && ultimaVisita && ultimaVisita.method !== 'get') {
+            reportar('validacion', mensajes.join(' | '), { campos: Object.keys(errores).slice(0, 20) })
+        }
+    })
     // el sistema rechazó la acción (stock insuficiente, lote faltante...): queda por empresa
     router.on('success', (e) => {
         const error = e.detail.page?.props?.flash?.error
