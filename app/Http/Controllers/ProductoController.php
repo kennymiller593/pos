@@ -170,23 +170,24 @@ class ProductoController extends Controller
 
         $mensaje = "Producto {$producto->codigo_interno} creado.";
         if ($stockInicial > 0) {
-            $mensaje = "Producto {$producto->codigo_interno} creado con stock inicial de ".rtrim(rtrim(number_format($stockInicial, 3, '.', ''), '0'), '.').'.';
+            $mensaje = "Producto {$producto->codigo_interno} creado con stock inicial de {$this->numero($stockInicial)}.";
         }
 
         return back()->with('success', $mensaje);
     }
 
     /**
-     * El stock con el que arranca un producto nuevo entra como ajuste con su costo (capa FIFO),
-     * igual que en la importacion. Devuelve la cantidad que entro (0 si no aplica).
+     * El stock con el que arranca un producto nuevo se escribe por presentacion ("2 cajas a S/ 30") y entra
+     * como ajuste con una capa FIFO por presentacion, en unidades base, igual que en la importacion.
+     * Devuelve el total que entro en unidades base (0 si no aplica).
      */
     private function cargarStockInicial(ProductoRequest $request, Producto $producto): float
     {
-        $cantidad = round((float) $request->validated('stock_inicial', 0), 3);
         $usuario = $request->user();
+        $conStock = collect($request->validated('presentaciones'))->filter(fn ($p) => (float) ($p['stock_inicial'] ?? 0) > 0);
 
         // el formulario oculta los campos en estos casos; aqui solo se asegura
-        if ($cantidad <= 0 || ! $producto->controla_stock || ! $usuario->can('stock.ajustar')) {
+        if ($conStock->isEmpty() || ! $producto->controla_stock || ! $usuario->can('stock.ajustar')) {
             return 0;
         }
 
@@ -195,14 +196,28 @@ class ProductoController extends Controller
             return 0;
         }
 
-        $costo = (float) $request->validated('precio_compra', 0);
-        $this->inventario->ingresarCapa($producto, $sucursalId, $cantidad, $costo);
-        $this->inventario->incrementarStock($producto->empresa_id, $producto->id, $sucursalId, $cantidad);
-        $this->inventario->registrarMovimiento(
-            $producto->empresa_id, $sucursalId, $producto->id, 'ajuste', $cantidad, $costo, usuarioId: $usuario->id, observacion: 'Stock inicial al crear el producto',
-        );
+        $total = 0.0;
+        foreach ($conStock as $p) {
+            $factor = (float) $p['factor_conversion'] ?: 1;
+            $cantidad = round((float) $p['stock_inicial'] * $factor, 3);
+            $costo = round((float) ($p['precio_compra'] ?? 0) / $factor, 6);
 
-        return $cantidad;
+            $this->inventario->ingresarCapa($producto, $sucursalId, $cantidad, $costo);
+            $this->inventario->incrementarStock($producto->empresa_id, $producto->id, $sucursalId, $cantidad);
+            $this->inventario->registrarMovimiento(
+                $producto->empresa_id, $sucursalId, $producto->id, 'ajuste', $cantidad, $costo, usuarioId: $usuario->id,
+                observacion: 'Stock inicial al crear el producto: '.$this->numero((float) $p['stock_inicial']).' '.$p['nombre'],
+            );
+            $total += $cantidad;
+        }
+
+        return $total;
+    }
+
+    /** 24.000 → "24", 2.500 → "2.5" */
+    private function numero(float $n): string
+    {
+        return rtrim(rtrim(number_format($n, 3, '.', ''), '0'), '.');
     }
 
     public function update(ProductoRequest $request, Producto $producto): RedirectResponse
@@ -229,7 +244,7 @@ class ProductoController extends Controller
 
     private function guardar(ProductoRequest $request, Producto $producto): void
     {
-        $datos = $request->safe()->except(['presentaciones', 'imagen', 'imagen_eliminar', 'stock_inicial', 'precio_compra', 'sucursal_id']);
+        $datos = $request->safe()->except(['presentaciones', 'imagen', 'imagen_eliminar', 'sucursal_id']);
 
         // al crear, el codigo lo asigna store() (P0001...): se ignora lo que envie el formulario
         if (! $producto->exists || blank($datos['codigo_interno'] ?? null)) {
@@ -286,7 +301,8 @@ class ProductoController extends Controller
                 $producto->presentaciones()->updateOrCreate(
                     ['id' => $datosPresentacion['id'] ?? null],
                     [
-                        ...collect($datosPresentacion)->except('id'),
+                        // el stock inicial no es dato de la presentacion: lo carga cargarStockInicial()
+                        ...collect($datosPresentacion)->except(['id', 'stock_inicial', 'precio_compra']),
                         'empresa_id' => $producto->empresa_id,
                         'activo' => true,
                     ]

@@ -34,10 +34,7 @@ class ProductoRequest extends FormRequest
             'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'imagen_eliminar' => ['nullable', 'boolean'],
 
-            // solo al crear: el stock con el que arranca el producto (en unidades base) y su costo;
-            // entra como ajuste con una capa FIFO, igual que en la importacion. En edicion se ignora.
-            'stock_inicial' => ['nullable', 'numeric', 'min:0'],
-            'precio_compra' => ['nullable', 'numeric', 'min:0', Rule::requiredIf(fn () => ! $productoId && (float) $this->input('stock_inicial') > 0)],
+            // solo al crear: a que sucursal entra el stock inicial (viendo "todas"); en edicion se ignora
             'sucursal_id' => ['nullable', 'uuid'],
 
             'presentaciones' => ['required', 'array', 'min:1'],
@@ -50,6 +47,10 @@ class ProductoRequest extends FormRequest
             'presentaciones.*.cantidad_mayorista' => ['nullable', 'numeric', 'gt:0', 'required_with:presentaciones.*.precio_mayorista'],
             'presentaciones.*.codigo_barras' => ['nullable', 'string', 'max:50'],
             'presentaciones.*.es_default' => ['required', 'boolean'],
+            // solo al crear: cuanto hay de esa presentacion y a cuanto se compro cada una ("2 cajas a S/ 30");
+            // entra como ajuste con una capa FIFO por presentacion, igual que en la importacion. En edicion se ignora.
+            'presentaciones.*.stock_inicial' => ['nullable', 'numeric', 'min:0'],
+            'presentaciones.*.precio_compra' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 
@@ -74,26 +75,38 @@ class ProductoRequest extends FormRequest
             'imagen.image' => 'El archivo debe ser una imagen.',
             'imagen.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
             'imagen.max' => 'La imagen no debe pesar más de 2 MB.',
-            'stock_inicial.min' => 'El stock inicial no puede ser negativo.',
-            'precio_compra.required' => 'Indica el precio de compra del stock inicial.',
-            'precio_compra.min' => 'El precio de compra no puede ser negativo.',
+            'presentaciones.*.stock_inicial.min' => 'El stock inicial no puede ser negativo.',
+            'presentaciones.*.precio_compra.min' => 'El precio de compra no puede ser negativo.',
         ];
     }
 
     public function after(): array
     {
         return [function ($validator) {
-            if ($this->route('producto') || (float) $this->input('stock_inicial') <= 0) {
+            if ($this->route('producto')) {
                 return;
             }
 
-            // con lote hace falta el numero y el vencimiento: eso lo pide el ajuste de stock
-            if ($this->boolean('controla_lote')) {
-                $validator->errors()->add('stock_inicial', 'Este producto controla lote: carga el stock con un ajuste de stock indicando el lote.');
-            }
+            foreach ((array) $this->input('presentaciones') as $i => $p) {
+                $stock = (float) ($p['stock_inicial'] ?? 0);
+                if ($stock <= 0) {
+                    continue;
+                }
 
-            if (! $this->boolean('permite_fraccion') && fmod((float) $this->input('stock_inicial'), 1) != 0) {
-                $validator->errors()->add('stock_inicial', 'Este producto no permite cantidades fraccionadas.');
+                // con lote hace falta el numero y el vencimiento: eso lo pide el ajuste de stock
+                if ($this->boolean('controla_lote')) {
+                    $validator->errors()->add("presentaciones.{$i}.stock_inicial", 'Este producto controla lote: carga el stock con un ajuste de stock indicando el lote.');
+                }
+
+                // sin costo quedaria una capa a costo 0 que infla el margen
+                if (! isset($p['precio_compra']) || $p['precio_compra'] === '') {
+                    $validator->errors()->add("presentaciones.{$i}.precio_compra", 'Indica el precio de compra del stock inicial.');
+                }
+
+                $base = round($stock * ((float) ($p['factor_conversion'] ?? 1) ?: 1), 3);
+                if (! $this->boolean('permite_fraccion') && fmod($base, 1) != 0) {
+                    $validator->errors()->add("presentaciones.{$i}.stock_inicial", 'Este producto no permite cantidades fraccionadas.');
+                }
             }
         }];
     }

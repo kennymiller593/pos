@@ -41,16 +41,31 @@ const form = useForm({
     imagen: null,
     imagen_eliminar: false,
     presentaciones: [],
-    stock_inicial: '',
-    precio_compra: '',
-    sucursal_id: '',
+    sucursal_id: '', // a qué sucursal entra el stock inicial (solo viendo "todas")
 })
 
-// stock inicial: solo al crear, si controla stock y quien crea puede ajustar stock;
-// los productos con lote lo cargan por ajuste (ahí se pide el lote y su vencimiento)
+// stock inicial: se escribe en cada presentación, como se compró ("2 cajas a S/ 30"), solo al crear,
+// si controla stock y quien crea puede ajustar stock; con lote se carga por ajuste (ahí se pide el lote)
 const { viendoTodas, accesibles } = useSucursales()
 const muestraStockInicial = computed(() => !props.producto && form.controla_stock && puede('stock.ajustar'))
 const stockInicialAplica = computed(() => muestraStockInicial.value && !form.controla_lote)
+
+const factorDe = (pres) => Number(pres.factor_conversion) || 1
+const tieneStockInicial = (pres) => Number(pres.stock_inicial) > 0
+// lo que entra en unidades base: 2 cajas x12 = 24 unidades a S/ 2.50 c/u
+const stockBaseDe = (pres) => Math.round(Number(pres.stock_inicial) * factorDe(pres) * 1000) / 1000
+const costoBaseDe = (pres) => (Number(pres.precio_compra) / factorDe(pres)).toFixed(2)
+// lo que gana por cada una, para ver el margen al lado del precio de venta
+const gananciaDe = (pres) => {
+    if (pres.precio_compra === '' || pres.precio_venta === '') return null
+    return Math.round((Number(pres.precio_venta) - Number(pres.precio_compra)) * 100) / 100
+}
+const stockInicialTotal = computed(() =>
+    stockInicialAplica.value
+        ? Math.round(form.presentaciones.filter(tieneStockInicial).reduce((s, p) => s + stockBaseDe(p), 0) * 1000) / 1000
+        : 0,
+)
+const unidadesBase = (n) => (n === 1 ? unidadBaseSingular.value : unidadBasePlural.value.toLowerCase())
 
 // ---- código de barras con la cámara del celular ----
 // la pistola lectora escribe directo en el campo; en el celular se abre la cámara
@@ -133,6 +148,8 @@ function presentacionNueva(esDefault = false) {
         cantidad_mayorista: '',
         codigo_barras: '',
         es_default: esDefault,
+        stock_inicial: '',
+        precio_compra: '',
     }
 }
 
@@ -157,8 +174,6 @@ function cargar() {
     form.imagen = null
     form.imagen_eliminar = false
     if (inputImagen.value) inputImagen.value.value = ''
-    form.stock_inicial = ''
-    form.precio_compra = ''
     form.sucursal_id = accesibles.value[0]?.id ?? ''
     form.presentaciones = p?.presentaciones?.length
         ? p.presentaciones.map((x) => ({
@@ -173,6 +188,8 @@ function cargar() {
               cantidad_mayorista: x.cantidad_mayorista === null ? '' : Number(x.cantidad_mayorista),
               codigo_barras: x.codigo_barras ?? '',
               es_default: x.es_default,
+              stock_inicial: '',
+              precio_compra: '',
           }))
         : [presentacionNueva(true)]
 }
@@ -214,7 +231,7 @@ function nombreAuto(pres) {
 const nombreDe = (pres) => (pres.nombre_manual ? pres.nombre : nombreAuto(pres))
 
 // la unidad base en plural, para que el factor hable en sus términos ("Kilogramos que trae")
-const pluralUnidad = (nombre) => (/n$/i.test(nombre) ? `${nombre}es` : `${nombre}s`)
+const pluralUnidad = (nombre) => (/[dn]$/i.test(nombre) ? `${nombre}es` : `${nombre}s`)
 const unidadBasePlural = computed(() => pluralUnidad(nombreUnidad(form.unidad_base_codigo)))
 const unidadBaseSingular = computed(() => nombreUnidad(form.unidad_base_codigo).toLowerCase())
 
@@ -262,9 +279,6 @@ function enviar() {
         categoria_id: data.categoria_id || null,
         marca_id: data.marca_id || null,
         stock_minimo: data.stock_minimo === '' ? null : data.stock_minimo,
-        // el stock inicial solo viaja cuando aplica (lo que quedó escrito antes de marcar "lote" no cuenta)
-        stock_inicial: stockInicialAplica.value && data.stock_inicial !== '' ? data.stock_inicial : null,
-        precio_compra: stockInicialAplica.value && data.precio_compra !== '' ? data.precio_compra : null,
         sucursal_id: stockInicialAplica.value && viendoTodas.value ? data.sucursal_id || null : null,
         presentaciones: data.presentaciones.map(({ nombre_manual, ...p }) => ({
             ...p,
@@ -272,6 +286,9 @@ function enviar() {
             precio_mayorista: p.precio_mayorista === '' ? null : p.precio_mayorista,
             cantidad_mayorista: p.cantidad_mayorista === '' ? null : p.cantidad_mayorista,
             codigo_barras: p.codigo_barras || null,
+            // el stock inicial solo viaja cuando aplica (lo escrito antes de marcar "lote" no cuenta)
+            stock_inicial: stockInicialAplica.value && p.stock_inicial !== '' ? p.stock_inicial : null,
+            precio_compra: stockInicialAplica.value && p.precio_compra !== '' ? p.precio_compra : null,
         })),
     })
 
@@ -432,45 +449,6 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </div>
                         </div>
 
-                        <!-- Stock inicial: solo al crear; entra como ajuste con su costo -->
-                        <div v-if="muestraStockInicial" class="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-neutral-800 dark:bg-neutral-950/40" data-stock-inicial>
-                            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                                <h3 class="text-sm font-semibold tracking-tight">Stock inicial <span class="font-normal text-neutral-500 dark:text-neutral-400">(opcional)</span></h3>
-                                <p v-if="stockInicialAplica" class="text-xs text-neutral-500 dark:text-neutral-400">Entra al inventario con su costo al guardar.</p>
-                            </div>
-                            <p v-if="form.controla_lote" class="text-sm text-neutral-600 dark:text-neutral-300">
-                                Este producto controla lote: una vez creado, carga su stock con un <strong>ajuste de stock</strong>, donde indicas el lote y su vencimiento.
-                            </p>
-                            <div v-else class="grid gap-4 sm:grid-cols-3">
-                                <div>
-                                    <label :class="claseLabel" for="stock_inicial">Cantidad</label>
-                                    <input
-                                        id="stock_inicial"
-                                        v-model="form.stock_inicial"
-                                        type="number"
-                                        :step="form.permite_fraccion ? '0.001' : '1'"
-                                        min="0"
-                                        :class="claseInput"
-                                        placeholder="0"
-                                    />
-                                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">En {{ unidadBasePlural.toLowerCase() }}.</p>
-                                    <p v-if="form.errors.stock_inicial" :class="claseError">{{ form.errors.stock_inicial }}</p>
-                                </div>
-                                <div>
-                                    <label :class="claseLabel" for="precio_compra">Precio de compra (S/)</label>
-                                    <input id="precio_compra" v-model="form.precio_compra" type="number" step="0.01" min="0" :class="claseInput" placeholder="0.00" />
-                                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Por {{ unidadBaseSingular }}.</p>
-                                    <p v-if="form.errors.precio_compra" :class="claseError">{{ form.errors.precio_compra }}</p>
-                                </div>
-                                <div v-if="viendoTodas">
-                                    <label :class="claseLabel" for="sucursal_inicial">Entra a</label>
-                                    <select id="sucursal_inicial" v-model="form.sucursal_id" :class="claseInput">
-                                        <option v-for="s in accesibles" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Presentaciones -->
                         <div class="mt-6">
                             <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -491,6 +469,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </div>
                             <p v-if="preciosBloqueados" class="mb-1 text-xs text-amber-700 dark:text-amber-400">
                                 Solo un administrador puede cambiar precios.
+                            </p>
+                            <p v-if="muestraStockInicial && form.controla_lote" class="mb-1 text-xs text-neutral-500 dark:text-neutral-400" data-nota-lote>
+                                Como controla lote, el stock inicial se carga después con un <strong>ajuste de stock</strong>, donde indicas el lote y su vencimiento.
                             </p>
                             <p v-if="form.errors.presentaciones" :class="claseError">{{ form.errors.presentaciones }}</p>
 
@@ -564,7 +545,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                             <span class="min-w-0 shrink truncate text-xs text-neutral-500 dark:text-neutral-400">{{ unidadBasePlural.toLowerCase() }}</span>
                                         </div>
                                         <p v-if="!esSuelta(pres)" class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
-                                            No es el stock: es cuántos {{ unidadBasePlural.toLowerCase() }} tiene cada {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }}. El stock entra por compras.
+                                            No es el stock: es cuántos {{ unidadBasePlural.toLowerCase() }} tiene cada {{ nombreUnidad(pres.unidad_codigo).toLowerCase() }}. El stock entra por compras{{ stockInicialAplica ? ' o como stock inicial, aquí abajo' : '' }}.
                                         </p>
                                         <p v-if="form.errors[`presentaciones.${i}.factor_conversion`]" :class="claseError">{{ form.errors[`presentaciones.${i}.factor_conversion`] }}</p>
                                     </div>
@@ -580,6 +561,49 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         />
                                         <p v-if="form.errors[`presentaciones.${i}.precio_venta`]" :class="claseError">{{ form.errors[`presentaciones.${i}.precio_venta`] }}</p>
                                     </div>
+                                </div>
+
+                                <!-- Stock inicial de esta presentación: solo al crear, al lado del precio de venta para ver el margen -->
+                                <div v-if="stockInicialAplica" class="mt-3 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-3 dark:bg-neutral-950/40" :data-stock-inicial="i">
+                                    <div>
+                                        <label :class="claseLabel">Precio compra (S/)</label>
+                                        <input
+                                            v-model="pres.precio_compra"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            :class="claseInput"
+                                            placeholder="Opcional"
+                                            :data-precio-compra="i"
+                                        />
+                                        <p v-if="gananciaDe(pres) !== null" class="mt-1 text-[11px]" :class="gananciaDe(pres) < 0 ? 'text-amber-700 dark:text-amber-400' : 'text-neutral-400 dark:text-neutral-500'" :data-ganancia="i">
+                                            <template v-if="gananciaDe(pres) < 0">Vendes por debajo del costo.</template>
+                                            <template v-else>Ganas S/ {{ gananciaDe(pres).toFixed(2) }} por {{ nombreDe(pres).toLowerCase() || 'unidad' }}.</template>
+                                        </p>
+                                        <p v-if="form.errors[`presentaciones.${i}.precio_compra`]" :class="claseError">{{ form.errors[`presentaciones.${i}.precio_compra`] }}</p>
+                                    </div>
+                                    <div>
+                                        <label :class="claseLabel">Stock inicial</label>
+                                        <input
+                                            v-model="pres.stock_inicial"
+                                            type="number"
+                                            :step="form.permite_fraccion || !esSuelta(pres) ? '0.001' : '1'"
+                                            min="0"
+                                            :class="claseInput"
+                                            :placeholder="`Ej. 10 ${esSuelta(pres) ? unidadBasePlural.toLowerCase() : pluralUnidad(nombreUnidad(pres.unidad_codigo)).toLowerCase()}`"
+                                            :data-stock-inicial-cantidad="i"
+                                        />
+                                        <p v-if="tieneStockInicial(pres) && !esSuelta(pres)" class="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500" :data-equivalencia-stock="i">
+                                            Entran {{ stockBaseDe(pres) }} {{ unidadesBase(stockBaseDe(pres)) }}<template v-if="Number(pres.precio_compra) > 0"> a S/ {{ costoBaseDe(pres) }} c/u</template>.
+                                        </p>
+                                        <p v-if="form.errors[`presentaciones.${i}.stock_inicial`]" :class="claseError">{{ form.errors[`presentaciones.${i}.stock_inicial`] }}</p>
+                                    </div>
+                                    <p class="self-center text-xs text-neutral-500 dark:text-neutral-400">
+                                        Si ya tienes de este producto, indícalo y entra al inventario con su costo al guardar.
+                                    </p>
+                                </div>
+
+                                <div class="mt-3 grid gap-3 sm:grid-cols-3">
                                     <div>
                                         <label :class="claseLabel">Precio mayorista (S/)</label>
                                         <input
@@ -665,6 +689,21 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     </button>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- resumen del stock inicial y a qué sucursal entra (solo cuando escribió alguno) -->
+                        <div
+                            v-if="stockInicialTotal > 0"
+                            class="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100"
+                            data-resumen-stock
+                        >
+                            <p>Al guardar entran <strong>{{ stockInicialTotal }} {{ unidadesBase(stockInicialTotal) }}</strong> al inventario.</p>
+                            <label v-if="viendoTodas" class="flex items-center gap-2">
+                                Entra a
+                                <select v-model="form.sucursal_id" class="h-9 rounded-xl border border-stone-300 bg-white px-2 text-sm text-neutral-900 focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100" data-sucursal-inicial>
+                                    <option v-for="s in accesibles" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                                </select>
+                            </label>
                         </div>
                     </div>
 

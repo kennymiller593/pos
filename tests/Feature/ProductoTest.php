@@ -202,26 +202,41 @@ class ProductoTest extends TestCase
         ]))->assertSessionHasErrors('imagen');
     }
 
-    public function test_al_crear_con_stock_inicial_entra_una_capa_con_su_costo(): void
+    /** El payload con stock inicial en la presentacion "Unidad" (indice 0) y, si se pide, en una caja x12. */
+    private function payloadConStock(array $unidad, ?array $caja = null, array $extra = []): array
     {
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['nombre' => 'Con stock', 'stock_inicial' => 24, 'precio_compra' => 3.5]))
-            ->assertSessionHasNoErrors()
-            ->assertSessionHas('success', fn ($m) => str_contains($m, 'stock inicial de 24.'));
+        $payload = $this->payload($extra);
+        $payload['presentaciones'][0] = [...$payload['presentaciones'][0], ...$unidad];
+        if ($caja !== null) {
+            $payload['presentaciones'][] = [...$payload['presentaciones'][0], 'nombre' => 'Caja x12', 'factor_conversion' => 12, 'precio_venta' => 50, 'es_default' => false, 'stock_inicial' => null, 'precio_compra' => null, ...$caja];
+        }
+
+        return $payload;
+    }
+
+    public function test_al_crear_con_stock_inicial_entra_una_capa_por_presentacion_con_su_costo(): void
+    {
+        // 10 unidades a S/ 3.50 y 2 cajas x12 a S/ 30: cada presentacion abre su capa, en unidades base
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock(
+            ['stock_inicial' => 10, 'precio_compra' => 3.5],
+            ['stock_inicial' => 2, 'precio_compra' => 30],
+            ['nombre' => 'Con stock'],
+        ))->assertSessionHasNoErrors()->assertSessionHas('success', fn ($m) => str_contains($m, 'stock inicial de 34.'));
 
         $producto = Producto::where('empresa_id', $this->empresa->id)->where('nombre', 'Con stock')->firstOrFail();
-        $this->assertSame(24.0, $this->stockDe($producto));
+        $this->assertSame(34.0, $this->stockDe($producto));
 
-        $capa = CapaCosto::where('producto_id', $producto->id)->firstOrFail();
-        $this->assertEquals(24, (float) $capa->cantidad_restante);
-        $this->assertEquals(3.5, (float) $capa->costo_unitario);
-        $this->assertSame($this->sucursal->id, $capa->sucursal_id);
+        $capas = CapaCosto::where('producto_id', $producto->id)->orderBy('cantidad_inicial')->get();
+        $this->assertSame([[10.0, 3.5], [24.0, 2.5]], $capas->map(fn ($c) => [(float) $c->cantidad_restante, (float) $c->costo_unitario])->all());
+        $this->assertSame($this->sucursal->id, $capas[0]->sucursal_id);
 
-        $movimiento = MovimientoInventario::where('producto_id', $producto->id)->where('tipo', 'ajuste')->firstOrFail();
-        $this->assertEquals(24, (float) $movimiento->cantidad);
-        $this->assertSame($this->admin->id, $movimiento->usuario_id);
+        $movimientos = MovimientoInventario::where('producto_id', $producto->id)->where('tipo', 'ajuste')->orderBy('cantidad')->get();
+        $this->assertSame([10.0, 24.0], $movimientos->map(fn ($m) => (float) $m->cantidad)->all());
+        $this->assertSame($this->admin->id, $movimientos[0]->usuario_id);
+        $this->assertSame('Stock inicial al crear el producto: 2 Caja x12', $movimientos[1]->observacion);
 
         // sin stock inicial no se abre ninguna capa ni movimiento
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['nombre' => 'Sin stock', 'stock_inicial' => null, 'precio_compra' => null]))
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock(['stock_inicial' => null, 'precio_compra' => null], extra: ['nombre' => 'Sin stock']))
             ->assertSessionHasNoErrors();
         $sinStock = Producto::where('empresa_id', $this->empresa->id)->where('nombre', 'Sin stock')->firstOrFail();
         $this->assertSame(0, CapaCosto::where('producto_id', $sinStock->id)->count());
@@ -231,26 +246,26 @@ class ProductoTest extends TestCase
     public function test_el_stock_inicial_exige_precio_de_compra_y_no_aplica_con_lote(): void
     {
         // sin costo quedaria una capa a costo 0 que infla el margen
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 5]))
-            ->assertSessionHasErrors('precio_compra');
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock(['stock_inicial' => 5]))
+            ->assertSessionHasErrors('presentaciones.0.precio_compra');
 
         // con lote hace falta numero y vencimiento: va por ajuste de stock
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['controla_lote' => true, 'stock_inicial' => 5, 'precio_compra' => 1]))
-            ->assertSessionHasErrors('stock_inicial');
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock(['stock_inicial' => 5, 'precio_compra' => 1], extra: ['controla_lote' => true]))
+            ->assertSessionHasErrors('presentaciones.0.stock_inicial');
 
-        // fraccion en un producto que no la permite
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 2.5, 'precio_compra' => 1]))
-            ->assertSessionHasErrors('stock_inicial');
-
+        // fraccion en un producto que no la permite (media caja x12 si entra: son 6 unidades)
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock(['stock_inicial' => 2.5, 'precio_compra' => 1]))
+            ->assertSessionHasErrors('presentaciones.0.stock_inicial');
         $this->assertSame(0, Producto::where('empresa_id', $this->empresa->id)->count());
+        $this->actingAs($this->admin)->post('/productos', $this->payloadConStock([], ['stock_inicial' => 0.5, 'precio_compra' => 24]))
+            ->assertSessionHasNoErrors();
+        $producto = Producto::where('empresa_id', $this->empresa->id)->firstOrFail();
+        $this->assertSame(6.0, $this->stockDe($producto));
 
         // en edicion el campo se ignora: no vuelve a cargar stock
-        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 10, 'precio_compra' => 2]))->assertSessionHasNoErrors();
-        $producto = Producto::where('empresa_id', $this->empresa->id)->firstOrFail();
-        $payload = $this->payload(['codigo_interno' => $producto->codigo_interno, 'stock_inicial' => 99, 'precio_compra' => 2]);
-        $payload['presentaciones'][0]['id'] = $producto->presentaciones()->first()->id;
+        $payload = $this->payloadConStock(['id' => $producto->presentaciones()->where('es_default', true)->value('id'), 'stock_inicial' => 99, 'precio_compra' => 2], extra: ['codigo_interno' => $producto->codigo_interno]);
         $this->actingAs($this->admin)->put("/productos/{$producto->id}", $payload)->assertSessionHasNoErrors();
-        $this->assertSame(10.0, $this->stockDe($producto));
+        $this->assertSame(6.0, $this->stockDe($producto));
         $this->assertSame(1, CapaCosto::where('producto_id', $producto->id)->count());
     }
 }
