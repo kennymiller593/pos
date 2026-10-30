@@ -34,6 +34,12 @@ class ProductoRequest extends FormRequest
             'imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'imagen_eliminar' => ['nullable', 'boolean'],
 
+            // solo al crear: el stock con el que arranca el producto (en unidades base) y su costo;
+            // entra como ajuste con una capa FIFO, igual que en la importacion. En edicion se ignora.
+            'stock_inicial' => ['nullable', 'numeric', 'min:0'],
+            'precio_compra' => ['nullable', 'numeric', 'min:0', Rule::requiredIf(fn () => ! $productoId && (float) $this->input('stock_inicial') > 0)],
+            'sucursal_id' => ['nullable', 'uuid'],
+
             'presentaciones' => ['required', 'array', 'min:1'],
             'presentaciones.*.id' => ['nullable', 'uuid'],
             'presentaciones.*.nombre' => ['required', 'string', 'max:80'],
@@ -68,6 +74,27 @@ class ProductoRequest extends FormRequest
             'imagen.image' => 'El archivo debe ser una imagen.',
             'imagen.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
             'imagen.max' => 'La imagen no debe pesar más de 2 MB.',
+            'stock_inicial.min' => 'El stock inicial no puede ser negativo.',
+            'precio_compra.required' => 'Indica el precio de compra del stock inicial.',
+            'precio_compra.min' => 'El precio de compra no puede ser negativo.',
         ];
+    }
+
+    public function after(): array
+    {
+        return [function ($validator) {
+            if ($this->route('producto') || (float) $this->input('stock_inicial') <= 0) {
+                return;
+            }
+
+            // con lote hace falta el numero y el vencimiento: eso lo pide el ajuste de stock
+            if ($this->boolean('controla_lote')) {
+                $validator->errors()->add('stock_inicial', 'Este producto controla lote: carga el stock con un ajuste de stock indicando el lote.');
+            }
+
+            if (! $this->boolean('permite_fraccion') && fmod((float) $this->input('stock_inicial'), 1) != 0) {
+                $validator->errors()->add('stock_inicial', 'Este producto no permite cantidades fraccionadas.');
+            }
+        }];
     }
 }

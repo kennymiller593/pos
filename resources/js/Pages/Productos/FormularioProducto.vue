@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useForm, usePage } from '@inertiajs/vue3'
 import { ImagePlus, LoaderCircle, Package, Plus, ScanBarcode, Sparkles, Trash2, X } from '@lucide/vue'
 import { usePermisos } from '@/composables/permisos'
+import { useSucursales } from '@/composables/sucursales'
 import { optimizarImagenProducto } from '@/composables/imagenProducto'
 import { puedeEscanear } from '@/composables/escaner'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
@@ -40,7 +41,16 @@ const form = useForm({
     imagen: null,
     imagen_eliminar: false,
     presentaciones: [],
+    stock_inicial: '',
+    precio_compra: '',
+    sucursal_id: '',
 })
+
+// stock inicial: solo al crear, si controla stock y quien crea puede ajustar stock;
+// los productos con lote lo cargan por ajuste (ahí se pide el lote y su vencimiento)
+const { viendoTodas, accesibles } = useSucursales()
+const muestraStockInicial = computed(() => !props.producto && form.controla_stock && puede('stock.ajustar'))
+const stockInicialAplica = computed(() => muestraStockInicial.value && !form.controla_lote)
 
 // ---- código de barras con la cámara del celular ----
 // la pistola lectora escribe directo en el campo; en el celular se abre la cámara
@@ -147,6 +157,9 @@ function cargar() {
     form.imagen = null
     form.imagen_eliminar = false
     if (inputImagen.value) inputImagen.value.value = ''
+    form.stock_inicial = ''
+    form.precio_compra = ''
+    form.sucursal_id = accesibles.value[0]?.id ?? ''
     form.presentaciones = p?.presentaciones?.length
         ? p.presentaciones.map((x) => ({
               id: x.id,
@@ -249,6 +262,10 @@ function enviar() {
         categoria_id: data.categoria_id || null,
         marca_id: data.marca_id || null,
         stock_minimo: data.stock_minimo === '' ? null : data.stock_minimo,
+        // el stock inicial solo viaja cuando aplica (lo que quedó escrito antes de marcar "lote" no cuenta)
+        stock_inicial: stockInicialAplica.value && data.stock_inicial !== '' ? data.stock_inicial : null,
+        precio_compra: stockInicialAplica.value && data.precio_compra !== '' ? data.precio_compra : null,
+        sucursal_id: stockInicialAplica.value && viendoTodas.value ? data.sucursal_id || null : null,
         presentaciones: data.presentaciones.map(({ nombre_manual, ...p }) => ({
             ...p,
             nombre: nombreDe({ ...p, nombre_manual }),
@@ -412,6 +429,45 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <input v-model="form.activo" type="checkbox" class="size-4 rounded accent-emerald-600" />
                                     Activo
                                 </label>
+                            </div>
+                        </div>
+
+                        <!-- Stock inicial: solo al crear; entra como ajuste con su costo -->
+                        <div v-if="muestraStockInicial" class="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-neutral-800 dark:bg-neutral-950/40" data-stock-inicial>
+                            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                                <h3 class="text-sm font-semibold tracking-tight">Stock inicial <span class="font-normal text-neutral-500 dark:text-neutral-400">(opcional)</span></h3>
+                                <p v-if="stockInicialAplica" class="text-xs text-neutral-500 dark:text-neutral-400">Entra al inventario con su costo al guardar.</p>
+                            </div>
+                            <p v-if="form.controla_lote" class="text-sm text-neutral-600 dark:text-neutral-300">
+                                Este producto controla lote: una vez creado, carga su stock con un <strong>ajuste de stock</strong>, donde indicas el lote y su vencimiento.
+                            </p>
+                            <div v-else class="grid gap-4 sm:grid-cols-3">
+                                <div>
+                                    <label :class="claseLabel" for="stock_inicial">Cantidad</label>
+                                    <input
+                                        id="stock_inicial"
+                                        v-model="form.stock_inicial"
+                                        type="number"
+                                        :step="form.permite_fraccion ? '0.001' : '1'"
+                                        min="0"
+                                        :class="claseInput"
+                                        placeholder="0"
+                                    />
+                                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">En {{ unidadBasePlural.toLowerCase() }}.</p>
+                                    <p v-if="form.errors.stock_inicial" :class="claseError">{{ form.errors.stock_inicial }}</p>
+                                </div>
+                                <div>
+                                    <label :class="claseLabel" for="precio_compra">Precio de compra (S/)</label>
+                                    <input id="precio_compra" v-model="form.precio_compra" type="number" step="0.01" min="0" :class="claseInput" placeholder="0.00" />
+                                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Por {{ unidadBaseSingular }}.</p>
+                                    <p v-if="form.errors.precio_compra" :class="claseError">{{ form.errors.precio_compra }}</p>
+                                </div>
+                                <div v-if="viendoTodas">
+                                    <label :class="claseLabel" for="sucursal_inicial">Entra a</label>
+                                    <select id="sucursal_inicial" v-model="form.sucursal_id" :class="claseInput">
+                                        <option v-for="s in accesibles" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 

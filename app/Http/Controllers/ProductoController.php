@@ -13,6 +13,7 @@ use App\Models\ProductoPresentacion;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
 use App\Services\ImagenProductoService;
+use App\Services\InventarioService;
 use App\Support\ExportadorExcel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,8 @@ use Inertia\Response;
 
 class ProductoController extends Controller
 {
+    public function __construct(private readonly InventarioService $inventario) {}
+
     public function index(Request $request): Response
     {
         $empresaId = $request->user()->empresa_id;
@@ -154,15 +157,52 @@ class ProductoController extends Controller
         $empresaId = $request->user()->empresa_id;
 
         // el codigo se calcula bajo lock: dos altas simultaneas no pueden tomar el mismo numero
-        $producto = Cache::lock("producto-codigo:{$empresaId}", 10)->block(5, function () use ($request, $empresaId) {
-            $producto = new Producto(['empresa_id' => $empresaId]);
-            $producto->codigo_interno = Producto::siguienteCodigo($empresaId);
-            $this->guardar($request, $producto);
+        [$producto, $stockInicial] = Cache::lock("producto-codigo:{$empresaId}", 10)->block(5, function () use ($request, $empresaId) {
+            // producto y stock inicial en una sola transaccion: si algo falla no queda nada a medias
+            return DB::transaction(function () use ($request, $empresaId) {
+                $producto = new Producto(['empresa_id' => $empresaId]);
+                $producto->codigo_interno = Producto::siguienteCodigo($empresaId);
+                $this->guardar($request, $producto);
 
-            return $producto;
+                return [$producto, $this->cargarStockInicial($request, $producto)];
+            });
         });
 
-        return back()->with('success', "Producto {$producto->codigo_interno} creado.");
+        $mensaje = "Producto {$producto->codigo_interno} creado.";
+        if ($stockInicial > 0) {
+            $mensaje = "Producto {$producto->codigo_interno} creado con stock inicial de ".rtrim(rtrim(number_format($stockInicial, 3, '.', ''), '0'), '.').'.';
+        }
+
+        return back()->with('success', $mensaje);
+    }
+
+    /**
+     * El stock con el que arranca un producto nuevo entra como ajuste con su costo (capa FIFO),
+     * igual que en la importacion. Devuelve la cantidad que entro (0 si no aplica).
+     */
+    private function cargarStockInicial(ProductoRequest $request, Producto $producto): float
+    {
+        $cantidad = round((float) $request->validated('stock_inicial', 0), 3);
+        $usuario = $request->user();
+
+        // el formulario oculta los campos en estos casos; aqui solo se asegura
+        if ($cantidad <= 0 || ! $producto->controla_stock || ! $usuario->can('stock.ajustar')) {
+            return 0;
+        }
+
+        $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
+        if (! $sucursalId) {
+            return 0;
+        }
+
+        $costo = (float) $request->validated('precio_compra', 0);
+        $this->inventario->ingresarCapa($producto, $sucursalId, $cantidad, $costo);
+        $this->inventario->incrementarStock($producto->empresa_id, $producto->id, $sucursalId, $cantidad);
+        $this->inventario->registrarMovimiento(
+            $producto->empresa_id, $sucursalId, $producto->id, 'ajuste', $cantidad, $costo, usuarioId: $usuario->id, observacion: 'Stock inicial al crear el producto',
+        );
+
+        return $cantidad;
     }
 
     public function update(ProductoRequest $request, Producto $producto): RedirectResponse
@@ -189,7 +229,7 @@ class ProductoController extends Controller
 
     private function guardar(ProductoRequest $request, Producto $producto): void
     {
-        $datos = $request->safe()->except(['presentaciones', 'imagen', 'imagen_eliminar']);
+        $datos = $request->safe()->except(['presentaciones', 'imagen', 'imagen_eliminar', 'stock_inicial', 'precio_compra', 'sucursal_id']);
 
         // al crear, el codigo lo asigna store() (P0001...): se ignora lo que envie el formulario
         if (! $producto->exists || blank($datos['codigo_interno'] ?? null)) {

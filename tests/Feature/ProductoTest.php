@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\CapaCosto;
+use App\Models\MovimientoInventario;
 use App\Models\Producto;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
@@ -198,5 +200,57 @@ class ProductoTest extends TestCase
         $this->actingAs($this->admin)->post('/productos', $this->payload([
             'imagen' => UploadedFile::fake()->create('archivo.pdf', 100, 'application/pdf'),
         ]))->assertSessionHasErrors('imagen');
+    }
+
+    public function test_al_crear_con_stock_inicial_entra_una_capa_con_su_costo(): void
+    {
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['nombre' => 'Con stock', 'stock_inicial' => 24, 'precio_compra' => 3.5]))
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'stock inicial de 24.'));
+
+        $producto = Producto::where('empresa_id', $this->empresa->id)->where('nombre', 'Con stock')->firstOrFail();
+        $this->assertSame(24.0, $this->stockDe($producto));
+
+        $capa = CapaCosto::where('producto_id', $producto->id)->firstOrFail();
+        $this->assertEquals(24, (float) $capa->cantidad_restante);
+        $this->assertEquals(3.5, (float) $capa->costo_unitario);
+        $this->assertSame($this->sucursal->id, $capa->sucursal_id);
+
+        $movimiento = MovimientoInventario::where('producto_id', $producto->id)->where('tipo', 'ajuste')->firstOrFail();
+        $this->assertEquals(24, (float) $movimiento->cantidad);
+        $this->assertSame($this->admin->id, $movimiento->usuario_id);
+
+        // sin stock inicial no se abre ninguna capa ni movimiento
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['nombre' => 'Sin stock', 'stock_inicial' => null, 'precio_compra' => null]))
+            ->assertSessionHasNoErrors();
+        $sinStock = Producto::where('empresa_id', $this->empresa->id)->where('nombre', 'Sin stock')->firstOrFail();
+        $this->assertSame(0, CapaCosto::where('producto_id', $sinStock->id)->count());
+        $this->assertSame(0, MovimientoInventario::where('producto_id', $sinStock->id)->count());
+    }
+
+    public function test_el_stock_inicial_exige_precio_de_compra_y_no_aplica_con_lote(): void
+    {
+        // sin costo quedaria una capa a costo 0 que infla el margen
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 5]))
+            ->assertSessionHasErrors('precio_compra');
+
+        // con lote hace falta numero y vencimiento: va por ajuste de stock
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['controla_lote' => true, 'stock_inicial' => 5, 'precio_compra' => 1]))
+            ->assertSessionHasErrors('stock_inicial');
+
+        // fraccion en un producto que no la permite
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 2.5, 'precio_compra' => 1]))
+            ->assertSessionHasErrors('stock_inicial');
+
+        $this->assertSame(0, Producto::where('empresa_id', $this->empresa->id)->count());
+
+        // en edicion el campo se ignora: no vuelve a cargar stock
+        $this->actingAs($this->admin)->post('/productos', $this->payload(['stock_inicial' => 10, 'precio_compra' => 2]))->assertSessionHasNoErrors();
+        $producto = Producto::where('empresa_id', $this->empresa->id)->firstOrFail();
+        $payload = $this->payload(['codigo_interno' => $producto->codigo_interno, 'stock_inicial' => 99, 'precio_compra' => 2]);
+        $payload['presentaciones'][0]['id'] = $producto->presentaciones()->first()->id;
+        $this->actingAs($this->admin)->put("/productos/{$producto->id}", $payload)->assertSessionHasNoErrors();
+        $this->assertSame(10.0, $this->stockDe($producto));
+        $this->assertSame(1, CapaCosto::where('producto_id', $producto->id)->count());
     }
 }
