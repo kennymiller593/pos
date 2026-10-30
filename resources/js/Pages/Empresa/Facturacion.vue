@@ -238,7 +238,7 @@ const certificadoVencimiento = computed(() => {
                             v-if="form.entorno_sunat === 'beta'"
                             class="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
                         >
-                            Estás en el ambiente de pruebas de SUNAT: las boletas y facturas que emitas NO tienen valor tributario y se imprimen con esa leyenda.
+                            Estás en el ambiente de pruebas de SUNAT: las boletas y facturas que emitas NO tienen valor tributario, aunque el documento impreso no lo indique. No las entregues a tus clientes.
                         </p>
                     </div>
 

@@ -125,6 +125,8 @@ class VentaService
                 'es_credito' => $esCredito,
                 'estado' => 'emitido',
                 'origen' => 'online',
+                // solo si la empresa lo usa; si no se indicó, la venta es de tienda
+                'canal_venta' => $usuario->empresa->canal_venta_activo ? ($datos['canal_venta'] ?? 'tienda') : null,
             ]);
 
             if ($esCredito) {

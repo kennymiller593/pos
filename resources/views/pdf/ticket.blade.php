@@ -55,7 +55,7 @@
     {{-- Encabezado --}}
     <div class="centro">
         @if ($logo)
-            <img src="{{ $logo }}" style="max-width: {{ $ancho === 58 ? '26mm' : '34mm' }}; max-height: 16mm; margin-bottom: 4px;">
+            <img src="{{ $logo }}" style="max-width: {{ $ancho === 58 ? '40mm' : '56mm' }}; max-height: {{ $ancho === 58 ? '24mm' : '30mm' }}; margin-bottom: 4px;">
         @endif
         <div class="titulo">{{ $empresa->nombre_comercial ?? $empresa->razon_social }}</div>
         <div>{{ $empresa->razon_social }}</div>
@@ -79,8 +79,6 @@
         <div class="anulado">ANULADO</div>
     @elseif ($comprobante->sunat?->estado === 'rechazado')
         <div class="anulado">RECHAZADO POR SUNAT<br>SIN VALIDEZ TRIBUTARIA</div>
-    @elseif ($comprobante->tipo_comprobante_codigo !== '00' && $empresa->entorno_sunat !== 'produccion')
-        <div class="anulado" style="letter-spacing: 1px; font-size: 10px;">AMBIENTE DE PRUEBAS<br>SIN VALOR TRIBUTARIO</div>
     @endif
 
     <div class="separador"></div>

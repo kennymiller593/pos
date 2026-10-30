@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
-import { Building2, ChevronRight, FileKey, FlaskConical, ImageIcon, QrCode, Trash2, Upload } from '@lucide/vue'
+import { Building2, ChevronRight, FileKey, FlaskConical, ImageIcon, QrCode, Store, Trash2, Upload } from '@lucide/vue'
 import { claseInterruptor } from '@/Components/Tienda/clases'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
@@ -21,6 +21,7 @@ const form = useForm({
     cuentas_bancarias: props.empresa.cuentas_bancarias ?? '',
     pie_cotizacion: props.empresa.pie_cotizacion ?? '',
     mezclas_activo: !!props.empresa.mezclas_activo,
+    canal_venta_activo: !!props.empresa.canal_venta_activo,
 })
 
 const inputLogo = ref(null)
@@ -241,6 +242,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <span class="block text-xs text-neutral-500 dark:text-neutral-400">Actívalo si combinas productos del stock para obtener otro que vendes (mezclas de fertilizantes, packs, kits). Los insumos salen del stock a su costo real y lo obtenido entra con el costo calculado, sin registrar ventas ni compras.</span>
                                 </span>
                                 <input v-model="form.mezclas_activo" type="checkbox" class="peer sr-only" data-mezclas-activo />
+                                <span :class="[claseInterruptor, 'mt-2']" />
+                            </label>
+                        </div>
+                        <!-- opción: medir de dónde vienen las ventas -->
+                        <div>
+                            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50 dark:border-neutral-800 dark:has-[:checked]:border-emerald-600 dark:has-[:checked]:bg-emerald-950/20">
+                                <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                    <Store class="size-5" />
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-semibold">Canal de venta (tienda u online)</span>
+                                    <span class="block text-xs text-neutral-500 dark:text-neutral-400">Actívalo para indicar al cobrar si la venta fue en tienda u online, y medirlo en Reportes → Por canal. No sale en el comprobante ni va a SUNAT.</span>
+                                </span>
+                                <input v-model="form.canal_venta_activo" type="checkbox" class="peer sr-only" data-canal-venta-activo />
                                 <span :class="[claseInterruptor, 'mt-2']" />
                             </label>
                         </div>

@@ -100,7 +100,7 @@ class CertificadoTest extends TestCase
         $this->assertSame($this->pem, Crypt::decryptString(DB::table('empresas')->where('id', $this->empresa->id)->value('certificado_digital')));
     }
 
-    public function test_el_ticket_en_beta_avisa_que_no_tiene_valor_tributario(): void
+    public function test_el_ticket_en_beta_se_imprime_sin_leyenda_de_pruebas(): void
     {
         $this->empresa->update(['facturacion_electronica' => true, 'entorno_sunat' => 'beta', 'certificado_digital' => $this->pem]);
         SerieCorrelativo::create([
@@ -122,6 +122,7 @@ class CertificadoTest extends TestCase
         $boleta = Comprobante::where('empresa_id', $this->empresa->id)->firstOrFail();
 
         $html = $this->actingAs($this->admin)->get("/comprobantes/{$boleta->id}/ticket?formato=html")->getContent();
-        $this->assertStringContainsString('AMBIENTE DE PRUEBAS', $html);
+        // en pruebas el documento se imprime sin leyenda: el aviso queda en el panel
+        $this->assertStringNotContainsString('AMBIENTE DE PRUEBAS', $html);
     }
 }

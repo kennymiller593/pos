@@ -36,6 +36,7 @@ class Empresa extends Model
         'puntos_valor',
         'puntos_minimo_canje',
         'mezclas_activo',
+        'canal_venta_activo',
         'tienda_slug',
         'tienda_publicada',
         'tienda_config',
@@ -63,6 +64,12 @@ class Empresa extends Model
         'gre_client_secret',
     ];
 
+    /** Activó el canal de venta o tiene ventas con ese dato: si la apaga, su historial sigue visible. */
+    public function usaCanalVenta(): bool
+    {
+        return $this->canal_venta_activo || Comprobante::where('empresa_id', $this->id)->whereNotNull('canal_venta')->exists();
+    }
+
     protected function casts(): array
     {
         return [
@@ -73,6 +80,7 @@ class Empresa extends Model
             'puntos_valor' => 'decimal:2',
             'puntos_minimo_canje' => 'integer',
             'mezclas_activo' => 'boolean',
+            'canal_venta_activo' => 'boolean',
             'tienda_publicada' => 'boolean',
             // adicional de pago: solo lo cambia la plataforma (no es fillable a proposito)
             'tienda_habilitada' => 'boolean',

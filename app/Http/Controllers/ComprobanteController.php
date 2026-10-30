@@ -59,6 +59,7 @@ class ComprobanteController extends Controller
         return Inertia::render('Comprobantes/Index', [
             'comprobantes' => $comprobantes,
             'filtros' => $filtros,
+            'usaCanalVenta' => $request->user()->empresa->usaCanalVenta(),
             'orden' => ['columna' => $orden, 'dir' => $dir],
             'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             // nombre de cada unidad para el detalle (KGM -> Kilogramo)
@@ -69,7 +70,7 @@ class ComprobanteController extends Controller
     /** La lista con sus filtros y orden (la comparten la pantalla y la exportacion). */
     private function consulta(Request $request): array
     {
-        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat', 'condicion']);
+        $filtros = $request->only(['buscar', 'tipo', 'estado', 'sunat', 'condicion', 'canal']);
         // rango de fechas de emision (AAAA-MM-DD); una fecha mal escrita se ignora
         foreach (['desde', 'hasta'] as $campo) {
             $valor = (string) $request->query($campo);
@@ -108,6 +109,7 @@ class ComprobanteController extends Controller
             ->when($filtros['desde'] ?? null, fn ($q, $desde) => $q->where('fecha_emision', '>=', $desde))
             ->when($filtros['hasta'] ?? null, fn ($q, $hasta) => $q->where('fecha_emision', '<=', $hasta))
             ->when($filtros['tipo'] ?? null, fn ($q, $tipo) => $q->where('tipo_comprobante_codigo', $tipo))
+            ->when(in_array($filtros['canal'] ?? null, ['tienda', 'online'], true), fn ($q) => $q->where('canal_venta', $filtros['canal']))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('estado', $estado))
             // contado o crédito
             ->when(in_array($filtros['condicion'] ?? null, ['contado', 'credito'], true), fn ($q) => $q->where('es_credito', $filtros['condicion'] === 'credito'))
@@ -157,6 +159,7 @@ class ComprobanteController extends Controller
                     $c->estado === 'emitido' ? 'Emitido' : 'Anulado',
                     in_array($c->tipo_comprobante_codigo, ['01', '03'], true) ? ($sunat[$c->sunat?->estado ?? 'pendiente'] ?? 'Pendiente') : 'No aplica',
                     $c->usuario?->nombre_completo,
+                    ['tienda' => 'Tienda', 'online' => 'Online'][$c->canal_venta] ?? '',
                 ];
             });
 
@@ -172,7 +175,7 @@ class ComprobanteController extends Controller
                 'Comprobantes',
                 'Comprobantes',
                 $periodo.' · '.now()->format('d/m/Y H:i'),
-                ['Número', 'Tipo', 'Fecha', 'Hora', 'Cliente', 'Documento', 'Gravado', 'Exonerado', 'Inafecto', 'IGV', 'Descuentos', 'Total', 'Condición', 'Estado', 'SUNAT', 'Vendedor'],
+                ['Número', 'Tipo', 'Fecha', 'Hora', 'Cliente', 'Documento', 'Gravado', 'Exonerado', 'Inafecto', 'IGV', 'Descuentos', 'Total', 'Condición', 'Estado', 'SUNAT', 'Vendedor', 'Canal'],
                 $filas,
                 [
                     ['etiqueta' => 'Comprobantes emitidos', 'valor' => $cantidad],
@@ -251,7 +254,7 @@ class ComprobanteController extends Controller
             + ($comprobante->es_credito ? 14 : 0)
             + ($comprobante->estado === 'anulado' ? 10 : 0)
             + ($comprobante->comprobanteRef ? 4 : 0)
-            + ($logo ? 18 : 0)
+            + ($logo ? ($ancho === 58 ? 26 : 32) : 0) // alto máximo del logo en el ticket + su margen
             + ($qr ? 30 : 0)
             + ($puntos ? 6 + ($puntos['ganados'] > 0 ? 3.5 : 0) + ($puntos['canjeados'] > 0 ? 3.5 : 0) : 0)
         );

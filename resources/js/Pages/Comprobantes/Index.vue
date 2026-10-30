@@ -55,6 +55,7 @@ const { imprimirTicket } = useImpresion()
 const props = defineProps({
     comprobantes: { type: Object, required: true },
     filtros: { type: Object, default: () => ({}) },
+    usaCanalVenta: { type: Boolean, default: false },
     orden: { type: Object, default: () => ({ columna: 'fecha', dir: 'desc' }) },
     mediosPago: { type: Array, default: () => [] },
     unidades: { type: Object, default: () => ({}) },
@@ -107,6 +108,7 @@ const COLUMNAS = computed(() => [
     { id: 'cliente', titulo: 'Cliente' },
     { id: 'total', titulo: 'Total', clase: 'text-right' },
     { id: 'condicion', titulo: 'Condición' },
+    ...(props.usaCanalVenta ? [{ id: 'canal', titulo: 'Canal', sinOrden: true }] : []),
     { id: 'estado', titulo: 'Estado' },
     { id: 'sunat', titulo: 'SUNAT' },
     { id: 'vendedor', titulo: 'Vendedor' },
@@ -130,6 +132,8 @@ const tipo = ref(props.filtros.tipo ?? '')
 const estado = ref(props.filtros.estado ?? '')
 const sunat = ref(props.filtros.sunat ?? '')
 const condicion = ref(props.filtros.condicion ?? '')
+const canal = ref(props.filtros.canal ?? '')
+const NOMBRE_CANAL = { tienda: 'Tienda', online: 'Online' }
 
 function aplicarFiltros() {
     router.get('/comprobantes', {
@@ -138,6 +142,7 @@ function aplicarFiltros() {
         estado: estado.value || undefined,
         sunat: sunat.value || undefined,
         condicion: condicion.value || undefined,
+        canal: canal.value || undefined,
         desde: desde.value || undefined,
         hasta: hasta.value || undefined,
         orden: orden.value.columna !== 'fecha' || orden.value.dir !== 'desc' ? orden.value.columna : undefined,
@@ -148,7 +153,7 @@ function aplicarFiltros() {
 // Excel con lo que se ve en la lista (mismos filtros y orden), sin paginar
 const urlExportar = computed(() => {
     const parametros = new URLSearchParams()
-    for (const [clave, valor] of Object.entries({ buscar: buscar.value, tipo: tipo.value, estado: estado.value, sunat: sunat.value, condicion: condicion.value, desde: desde.value, hasta: hasta.value })) {
+    for (const [clave, valor] of Object.entries({ buscar: buscar.value, tipo: tipo.value, estado: estado.value, sunat: sunat.value, condicion: condicion.value, canal: canal.value, desde: desde.value, hasta: hasta.value })) {
         if (valor) parametros.set(clave, valor)
     }
     if (orden.value.columna !== 'fecha' || orden.value.dir !== 'desc') {
@@ -159,7 +164,7 @@ const urlExportar = computed(() => {
     return '/comprobantes/exportar' + (q ? `?${q}` : '')
 })
 
-const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || condicion.value || desde.value || hasta.value))
+const hayFiltros = computed(() => !!(buscar.value || tipo.value || estado.value || sunat.value || condicion.value || canal.value || desde.value || hasta.value))
 function limpiarFiltros() {
     desde.value = ''
     hasta.value = ''
@@ -168,10 +173,11 @@ function limpiarFiltros() {
     estado.value = ''
     sunat.value = ''
     condicion.value = ''
+    canal.value = ''
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([tipo, estado, sunat, condicion, desde, hasta], aplicarFiltros)
+watch([tipo, estado, sunat, condicion, canal, desde, hasta], aplicarFiltros)
 
 // ---- detalle expandible ----
 
@@ -449,6 +455,11 @@ const claseInput =
                     <option value="contado">Al contado</option>
                     <option value="credito">Al crédito</option>
                 </select>
+                <select v-if="usaCanalVenta" v-model="canal" :class="[claseInput, 'w-full min-w-0']" aria-label="Canal de venta" data-filtro-canal>
+                    <option value="">Tienda y online</option>
+                    <option value="tienda">Tienda</option>
+                    <option value="online">Online</option>
+                </select>
                 <select v-model="estado" :class="[claseInput, 'w-full min-w-0']" aria-label="Estado">
                     <option value="">Todos los estados</option>
                     <option value="emitido">Emitidos</option>
@@ -575,6 +586,7 @@ const claseInput =
                                 </td>
                                 <td class="px-3 py-4 text-right text-base font-bold whitespace-nowrap text-[#0F172A] tabular-nums dark:text-neutral-100">{{ soles(c.total) }}</td>
                                 <td class="px-3 py-4"><span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="c.es_credito ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-slate-100 text-[#475569] dark:bg-neutral-800 dark:text-neutral-300'" data-condicion>{{ c.es_credito ? 'Crédito' : 'Contado' }}</span></td>
+                                <td v-if="usaCanalVenta" class="px-3 py-4 whitespace-nowrap text-[#475569] dark:text-neutral-300" data-canal>{{ NOMBRE_CANAL[c.canal_venta] ?? '—' }}</td>
                                 <td class="px-3 py-4">
                                     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="c.estado === 'emitido' ? ESTILO_OK : ESTILO_ERROR">
                                         {{ c.estado === 'emitido' ? 'Emitido' : 'Anulado' }}
@@ -672,6 +684,7 @@ const claseInput =
                         <span v-if="esElectronico(c)" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" :class="badgeSunat(c)[1]">SUNAT: {{ badgeSunat(c)[0] }}
                         </span>
                         <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="c.es_credito ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-slate-100 text-[#475569] dark:bg-neutral-800 dark:text-neutral-300'" data-condicion>{{ c.es_credito ? 'Crédito' : 'Contado' }}</span>
+                        <span v-if="usaCanalVenta && c.canal_venta" class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-[#475569] dark:bg-neutral-800 dark:text-neutral-300" data-canal>{{ NOMBRE_CANAL[c.canal_venta] }}</span>
                         <span v-if="c.notas?.length" class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ c.notas.length }} N. crédito</span>
                     </div>
                     <div class="mt-3 flex items-center gap-1.5">

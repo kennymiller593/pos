@@ -54,6 +54,7 @@ class Comprobante extends Model
         'anulado_por',
         'motivo_anulacion',
         'origen',
+        'canal_venta',
     ];
 
     protected function casts(): array

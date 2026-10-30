@@ -244,6 +244,7 @@ class PosController extends Controller
             'pagos.*.monto' => ['required', 'numeric', 'gt:0'],
             'pagos.*.referencia' => ['nullable', 'string', 'max:100'],
             'clave' => ['nullable', 'uuid'],
+            'canal_venta' => ['nullable', Rule::in(['tienda', 'online'])],
         ], [
             'items.required' => 'El carrito está vacío.',
             'pagos.required' => 'Indica cómo se pagó la venta.',

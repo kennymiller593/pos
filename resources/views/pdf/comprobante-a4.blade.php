@@ -58,7 +58,7 @@
         <tr>
             <td>
                 @if ($logo)
-                    <img src="{{ $logo }}" style="max-height: 60px; max-width: 180px; margin-bottom: 6px;">
+                    <img src="{{ $logo }}" style="max-height: 100px; max-width: 280px; margin-bottom: 6px;">
                 @endif
                 <div class="empresa-nombre">{{ $empresa->nombre_comercial ?? $empresa->razon_social }}</div>
                 <div class="empresa-datos">
@@ -84,8 +84,6 @@
         <div class="anulado">ANULADO</div>
     @elseif ($comprobante->sunat?->estado === 'rechazado')
         <div class="anulado">RECHAZADO POR SUNAT · SIN VALIDEZ TRIBUTARIA</div>
-    @elseif ($comprobante->tipo_comprobante_codigo !== '00' && $empresa->entorno_sunat !== 'produccion')
-        <div class="anulado">AMBIENTE DE PRUEBAS SUNAT · SIN VALOR TRIBUTARIO</div>
     @endif
 
     @if ($comprobante->comprobanteRef)

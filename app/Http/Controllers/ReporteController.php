@@ -41,6 +41,7 @@ class ReporteController extends Controller
             ['valor' => 'productos', 'label' => 'Por producto', 'descripcion' => 'Qué productos se venden más y cuánto pesa cada uno en tu venta.'],
             ['valor' => 'categorias', 'label' => 'Por categoría', 'descripcion' => 'Venta, costo y utilidad de cada categoría de productos.'],
             ['valor' => 'vendedores', 'label' => 'Por vendedor', 'descripcion' => 'Cuánto vendió cada persona, su ticket promedio y la utilidad que dejó.'],
+            ['valor' => 'canales', 'label' => 'Por canal', 'descripcion' => 'Cuánto se vendió en tienda y cuánto online.', 'solo_canal' => true],
             ['valor' => 'horas', 'label' => 'Por hora', 'descripcion' => 'A qué horas del día vendes más, para organizar a tu personal.'],
             ['valor' => 'dias', 'label' => 'Por día de la semana', 'descripcion' => 'Qué días de la semana son los más fuertes.'],
         ]],
@@ -73,7 +74,7 @@ class ReporteController extends Controller
         return Inertia::render('Reportes/Index', [
             // agrupar: lo que se aplicó de verdad (si no se eligió, sale del largo del rango)
             'filtros' => ['tipo' => $tipo, 'desde' => $desde, 'hasta' => $hasta, 'producto_id' => $productoId, 'agrupar' => $datos['agrupar'] ?? null, 'sucursal_id' => $this->sucursalKardex($request)],
-            'catalogo' => self::CATALOGO,
+            'catalogo' => $this->catalogo($request),
             // el kardex es de una sola sucursal: viendo "todas" se elige aquí
             'sucursalesKardex' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
             'datos' => $datos,
@@ -118,6 +119,20 @@ class ReporteController extends Controller
 
     // ---------------------------------------------------------------
 
+    /** El reporte por canal solo se ofrece a quien usa la opción (o la usó: su historial sigue a mano). */
+    private function catalogo(Request $request): array
+    {
+        if ($request->user()->empresa->usaCanalVenta()) {
+            return self::CATALOGO;
+        }
+
+        return array_map(function ($grupo) {
+            $grupo['reportes'] = array_values(array_filter($grupo['reportes'], fn ($r) => empty($r['solo_canal'])));
+
+            return $grupo;
+        }, self::CATALOGO);
+    }
+
     private function filtros(Request $request): array
     {
         // fechas invalidas o rangos de mas de un ano no llegan a la consulta
@@ -136,7 +151,7 @@ class ReporteController extends Controller
             'hasta.after_or_equal' => 'La fecha final debe ser igual o posterior a la inicial.',
         ]);
 
-        $tipos = collect(self::CATALOGO)->flatMap(fn ($grupo) => array_column($grupo['reportes'], 'valor'));
+        $tipos = collect($this->catalogo($request))->flatMap(fn ($grupo) => array_column($grupo['reportes'], 'valor'));
         $tipo = $tipos->contains($request->query('tipo')) ? $request->query('tipo') : 'ventas';
 
         $desde = $request->query('desde') ?: now()->startOfMonth()->toDateString();
@@ -159,6 +174,7 @@ class ReporteController extends Controller
             'productos' => $this->negocio->porProducto($empresaId, $sucursalIds, $desde, $hasta),
             'categorias' => $this->negocio->porCategoria($empresaId, $sucursalIds, $desde, $hasta),
             'vendedores' => $this->negocio->porVendedor($empresaId, $sucursalIds, $desde, $hasta),
+            'canales' => $this->negocio->porCanal($empresaId, $sucursalIds, $desde, $hasta),
             'horas' => $this->negocio->porHora($empresaId, $sucursalIds, $desde, $hasta),
             'dias' => $this->negocio->porDiaSemana($empresaId, $sucursalIds, $desde, $hasta),
             'utilidad' => $this->negocio->utilidadPorPeriodo($empresaId, $sucursalIds, $desde, $hasta, $agrupar),

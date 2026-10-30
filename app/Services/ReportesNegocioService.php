@@ -185,6 +185,57 @@ class ReportesNegocioService
         ];
     }
 
+    /** Tienda u online. Una nota de crédito resta del canal de la venta que corrige. */
+    public function porCanal(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
+    {
+        $signo = self::SIGNO;
+        $canal = "COALESCE(comprobantes.canal_venta, venta_original.canal_venta, 'sin_dato')";
+        $nombres = ['tienda' => 'Tienda', 'online' => 'Online', 'sin_dato' => 'Sin especificar'];
+
+        $filas = $this->comprobantes($empresaId, $sucursalIds, $desde, $hasta)
+            ->leftJoin('comprobantes as venta_original', 'venta_original.id', '=', 'comprobantes.comprobante_ref_id')
+            ->groupByRaw($canal)
+            ->selectRaw("
+                {$canal} as canal,
+                COUNT(*) FILTER (WHERE ".self::ES_VENTA.") as ventas,
+                COALESCE(SUM({$signo} * comprobantes.total), 0) as venta
+            ")
+            ->orderByDesc('venta')
+            ->get();
+
+        $utilidades = $this->detalles($empresaId, $sucursalIds, $desde, $hasta)
+            ->leftJoin('comprobantes as venta_original', 'venta_original.id', '=', 'comprobantes.comprobante_ref_id')
+            ->groupByRaw($canal)
+            ->selectRaw("{$canal} as canal, SUM({$signo} * (comprobante_detalles.total - ".self::COSTO.')) as utilidad')
+            ->pluck('utilidad', 'canal');
+
+        $total = (float) $filas->sum('venta');
+        $ventas = (int) $filas->sum('ventas');
+        $online = (float) ($filas->firstWhere('canal', 'online')?->venta ?? 0);
+
+        return [
+            'titulo' => 'Ventas por canal',
+            'columnas' => ['Canal', 'Nº de ventas', 'Venta', 'Ticket promedio', 'Utilidad', '% del total'],
+            'numericas' => [1, 2, 3, 4, 5],
+            'filas' => $filas->map(fn ($f) => [
+                $nombres[$f->canal] ?? $f->canal,
+                (int) $f->ventas,
+                $this->numero((float) $f->venta),
+                $this->numero($f->ventas > 0 ? (float) $f->venta / $f->ventas : 0),
+                $this->numero((float) ($utilidades[$f->canal] ?? 0)),
+                $this->porcentaje((float) $f->venta, $total),
+            ])->values(),
+            'resumen' => [
+                ['etiqueta' => 'Venta total', 'valor' => $this->soles($total)],
+                ['etiqueta' => 'Venta online', 'valor' => $this->soles($online)],
+                ['etiqueta' => '% online', 'valor' => $this->porcentaje($online, $total)],
+                ['etiqueta' => 'Nº de ventas', 'valor' => (string) $ventas],
+            ],
+            'nota' => $filas->firstWhere('canal', 'sin_dato') ? '"Sin especificar" son las ventas registradas antes de activar el canal de venta.' : null,
+            'grafico' => $this->grafico('Venta por canal', $filas->map(fn ($f) => $nombres[$f->canal] ?? $f->canal), $filas->pluck('venta'), horizontal: true),
+        ];
+    }
+
     public function porHora(string $empresaId, ?array $sucursalIds, string $desde, string $hasta): array
     {
         $signo = self::SIGNO;

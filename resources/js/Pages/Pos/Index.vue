@@ -62,6 +62,7 @@ const props = defineProps({
 })
 
 const page = usePage()
+const usaCanalVenta = computed(() => !!page.props.auth?.user?.empresa?.canal_venta_activo)
 // el Nuevo RUS solo emite boletas (nunca facturas)
 const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 const { puede } = usePermisos()
@@ -633,6 +634,7 @@ async function guardarCliente() {
 // ================= cobro =================
 const modalCobro = ref(false)
 const tipoComprobante = ref('00')
+const canalVenta = ref('tienda')
 const condicion = ref('contado') // contado | credito
 const recibido = ref('')
 const inputRecibido = ref(null)
@@ -754,6 +756,8 @@ function abrirCobro() {
     // Queda seleccionado, asi que si pagan con mas se escribe encima sin borrar nada.
     recibido.value = total.value.toFixed(2)
     condicion.value = 'contado'
+    // cada cobro vuelve a Tienda: una venta online no deja marcada la siguiente
+    canalVenta.value = 'tienda'
     modoMixto.value = false
     pagos.value = [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: '' }]
     modalCobro.value = true
@@ -931,6 +935,7 @@ function cobrar() {
 
     router.post('/pos/ventas', {
         clave: claveVenta.value,
+        canal_venta: usaCanalVenta.value ? canalVenta.value : null,
         tipo_comprobante_codigo: tipoComprobante.value,
         cliente_id: clienteSeleccionado.value?.id ?? null,
         cotizacion_id: cotizacionEnVenta.value?.id ?? null,
@@ -2034,6 +2039,26 @@ const claseInput =
                             <X class="size-5" />
                         </button>
                     </div>
+
+                    <!-- Canal de venta (opción de la empresa) -->
+                    <template v-if="usaCanalVenta">
+                        <p class="mb-1.5 text-sm font-medium">Canal de venta</p>
+                        <div class="mb-3 grid grid-cols-2 gap-2" data-canal-venta>
+                            <button
+                                v-for="c in [{ valor: 'tienda', texto: 'Tienda' }, { valor: 'online', texto: 'Online' }]"
+                                :key="c.valor"
+                                type="button"
+                                class="h-10 rounded-xl border text-sm font-medium transition-colors"
+                                :class="canalVenta === c.valor
+                                    ? 'border-emerald-600 bg-emerald-600 text-white'
+                                    : 'border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'"
+                                :aria-pressed="canalVenta === c.valor"
+                                @click="canalVenta = c.valor"
+                            >
+                                {{ c.texto }}
+                            </button>
+                        </div>
+                    </template>
 
                     <!-- Tipo de comprobante -->
                     <p class="mb-1.5 text-sm font-medium">Comprobante</p>
