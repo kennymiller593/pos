@@ -14,7 +14,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_compras_proveedor_documento
     ON compras (empresa_id, proveedor_id, serie_numero)
     WHERE estado = 'registrada' AND proveedor_id IS NOT NULL AND serie_numero IS NOT NULL;
 
--- Tipo de movimiento de kardex para la reversión de una compra
+-- Tipo de movimiento de kardex para la reversión de una compra.
+-- Los scripts corren en cada despliegue y en orden: esta lista debe ser SIEMPRE la completa (la misma que en
+-- 033_mezclas.sql). Con una lista más corta, el despliegue falla en cuanto existan movimientos de los tipos
+-- que agregaron los scripts posteriores (pasó el 2026-10-29 con las mezclas).
 ALTER TABLE movimientos_inventario DROP CONSTRAINT IF EXISTS movimientos_inventario_tipo_check;
 ALTER TABLE movimientos_inventario ADD CONSTRAINT movimientos_inventario_tipo_check
-    CHECK (tipo IN ('venta', 'compra', 'ajuste', 'merma', 'transferencia_salida', 'transferencia_entrada', 'devolucion', 'compra_anulada'));
+    CHECK (tipo IN ('venta', 'compra', 'ajuste', 'merma', 'transferencia_salida', 'transferencia_entrada', 'devolucion', 'compra_anulada',
+                    'mezcla_salida', 'mezcla_entrada', 'mezcla_anulada'));
