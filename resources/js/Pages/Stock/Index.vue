@@ -115,20 +115,22 @@ function fechaHora(iso) {
 
 // ---- ajuste ----
 const ajusteProducto = ref(null)
-const formAjuste = useForm({
-    sucursal_id: props.sucursales[0]?.id ?? null,
+// cada ajuste empieza en blanco: tras guardar, useForm toma lo enviado como sus valores por defecto,
+// así que reset() solo no basta (el siguiente producto heredaba la cantidad, el costo y el motivo)
+const AJUSTE_VACIO = {
     direccion: 'entrada',
     cantidad: '',
     costo_unitario: '',
     numero_lote: '',
     fecha_vencimiento: '',
     motivo: '',
-})
+}
+const formAjuste = useForm({ sucursal_id: props.sucursales[0]?.id ?? null, ...AJUSTE_VACIO })
 
 function abrirAjuste(producto) {
     ajusteProducto.value = producto
     formAjuste.clearErrors()
-    formAjuste.reset()
+    Object.assign(formAjuste, AJUSTE_VACIO)
     formAjuste.sucursal_id = comparado.value ? (formAjuste.sucursal_id || props.sucursales[0]?.id) : null
 }
 // stock actual del producto en la sucursal del ajuste
@@ -437,22 +439,32 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
                     @submit.prevent="guardarAjuste"
                 >
-                    <div class="mb-4 flex items-center justify-between">
-                        <div>
-                            <h3 class="font-semibold tracking-tight">
-                                Ajustar stock<template v-if="sucursal"> · {{ sucursal }}</template>
-                            </h3>
-                            <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                                {{ ajusteProducto.nombre }} · actual: {{ cantidad(stockActualAjuste) }}
-                            </p>
-                        </div>
+                    <div class="mb-4 flex items-start justify-between gap-3">
+                        <p class="text-xs font-semibold tracking-wider text-neutral-400 uppercase">
+                            Ajustar stock<template v-if="sucursal"> · {{ sucursal }}</template>
+                        </p>
                         <button
                             type="button"
-                            class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                            class="-mt-1.5 -mr-1.5 rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                             @click="ajusteProducto = null"
                         >
                             <X class="size-5" />
                         </button>
+                    </div>
+
+                    <!-- el producto que se ajusta, bien visible -->
+                    <div class="mb-5 flex items-center gap-3 rounded-xl bg-stone-50 p-3 dark:bg-neutral-950" data-ajuste-producto>
+                        <div class="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-white text-neutral-400 dark:bg-neutral-900">
+                            <img v-if="ajusteProducto.imagen_url" :src="ajusteProducto.imagen_url" :alt="ajusteProducto.nombre" class="size-full object-contain" />
+                            <Package v-else class="size-6" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-base leading-snug font-bold tracking-tight">{{ ajusteProducto.nombre }}</h3>
+                            <p class="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
+                                Stock actual: <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ cantidad(stockActualAjuste) }}</span>
+                                {{ ajusteProducto.unidad_base?.nombre ?? '' }}
+                            </p>
+                        </div>
                     </div>
 
                     <div class="space-y-4">
@@ -529,7 +541,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <input id="aj_vence" v-model="formAjuste.fecha_vencimiento" type="date" :class="claseInput" />
                             </div>
                         </div>
-                        <p v-else class="text-xs text-neutral-400 dark:text-neutral-500">
+                        <p v-if="formAjuste.direccion === 'salida'" class="text-xs text-neutral-400 dark:text-neutral-500">
                             La salida consume las capas de costo más antiguas (FIFO), igual que una venta.
                         </p>
 
