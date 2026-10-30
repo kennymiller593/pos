@@ -88,14 +88,15 @@ const certificadoVencimiento = computed(() => {
 
 <template>
     <AppLayout titulo="Facturación electrónica">
-        <div class="mx-auto max-w-3xl space-y-4">
-            <Link href="/empresa" class="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
-                <ArrowLeft class="size-4" />
-                Datos de la empresa
-            </Link>
+        <Link href="/empresa" class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-emerald-600 dark:text-neutral-400 dark:hover:text-emerald-400">
+            <ArrowLeft class="size-4" />
+            Datos de la empresa
+        </Link>
 
+        <!-- en pantallas anchas: estado a la izquierda, credenciales a la derecha -->
+        <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <!-- Estado y activación -->
-            <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900" data-facturacion-estado>
+            <div class="rounded-2xl border border-stone-200 bg-white p-6 xl:sticky xl:top-20 dark:border-neutral-800 dark:bg-neutral-900" data-facturacion-estado>
                 <div class="flex items-start justify-between gap-3">
                     <div class="flex items-center gap-3">
                         <div class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
@@ -152,7 +153,7 @@ const certificadoVencimiento = computed(() => {
                         {{ empresa.facturacion_electronica ? 'Desactivar facturación' : 'Activar facturación' }}
                     </button>
                     <p class="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-                        Primero guarda las credenciales de abajo. Empieza en Beta para probar sin riesgo.
+                        Primero guarda tus credenciales de SUNAT. Empieza en Beta para probar sin riesgo.
                     </p>
                 </div>
             </div>

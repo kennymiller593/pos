@@ -69,7 +69,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
 <template>
     <AppLayout titulo="Empresa">
-        <form class="mx-auto max-w-3xl" @submit.prevent="enviar">
+        <form @submit.prevent="enviar">
             <!-- Datos generales -->
             <div class="rounded-2xl border border-stone-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="mb-5 flex items-center gap-3">
