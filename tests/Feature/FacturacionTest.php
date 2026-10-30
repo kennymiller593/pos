@@ -128,7 +128,7 @@ class FacturacionTest extends TestCase
 
     public function test_las_claves_se_guardan_cifradas_y_solo_escritura(): void
     {
-        $this->actingAs($this->admin)->put('/empresa', [
+        $this->actingAs($this->admin)->put('/empresa/facturacion-electronica', [
             'razon_social' => $this->empresa->razon_social,
             'nombre_comercial' => null,
             'regimen_tributario' => $this->empresa->regimen_tributario,
@@ -145,7 +145,7 @@ class FacturacionTest extends TestCase
         $this->assertNotSame('secreta123', $empresa->getRawOriginal('clave_sol')); // cifrada en la BD
 
         // enviar el campo vacio no borra la clave guardada
-        $this->actingAs($this->admin)->put('/empresa', [
+        $this->actingAs($this->admin)->put('/empresa/facturacion-electronica', [
             'razon_social' => $this->empresa->razon_social,
             'nombre_comercial' => null,
             'regimen_tributario' => $this->empresa->regimen_tributario,

@@ -205,7 +205,8 @@ const claseResultado = 'flex w-full items-center gap-3 px-3.5 py-2.5 text-left t
                     <h2 :class="claseTitulo"><span :class="claseNumero">1</span> ¿Qué se obtiene?</h2>
 
                     <div v-if="!producto" class="relative">
-                        <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
+                        <!-- centrado en el campo (h-11), no en todo el bloque: debajo va el texto de ayuda -->
+                        <Search class="pointer-events-none absolute top-[1.375rem] left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                         <input
                             v-model="buscarProducto"
                             type="text"

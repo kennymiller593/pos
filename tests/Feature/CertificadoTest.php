@@ -45,7 +45,7 @@ class CertificadoTest extends TestCase
 
     public function test_el_certificado_se_valida_se_cifra_y_registra_su_vencimiento(): void
     {
-        $this->actingAs($this->admin)->put('/empresa', $this->datosEmpresa(['certificado_digital' => $this->pem]))
+        $this->actingAs($this->admin)->put('/empresa/facturacion-electronica', $this->datosEmpresa(['certificado_digital' => $this->pem]))
             ->assertSessionHas('success');
 
         $empresa = $this->empresa->fresh();
@@ -60,7 +60,7 @@ class CertificadoTest extends TestCase
 
     public function test_un_certificado_ilegible_o_vencido_se_rechaza(): void
     {
-        $this->actingAs($this->admin)->put('/empresa', $this->datosEmpresa(['certificado_digital' => 'CERTIFICADO-DE-PRUEBA']))
+        $this->actingAs($this->admin)->put('/empresa/facturacion-electronica', $this->datosEmpresa(['certificado_digital' => 'CERTIFICADO-DE-PRUEBA']))
             ->assertSessionHasErrors('certificado_digital');
 
         $this->assertNull($this->empresa->fresh()->certificado_vence_en);
@@ -73,12 +73,12 @@ class CertificadoTest extends TestCase
     {
         $this->empresa->update(['facturacion_electronica' => true, 'entorno_sunat' => 'beta']);
 
-        $this->actingAs($this->admin)->put('/empresa', $this->datosEmpresa(['entorno_sunat' => 'produccion']))
+        $this->actingAs($this->admin)->put('/empresa/facturacion-electronica', $this->datosEmpresa(['entorno_sunat' => 'produccion']))
             ->assertSessionHasErrors('entorno_sunat');
         $this->assertSame('beta', $this->empresa->fresh()->entorno_sunat);
 
         $this->empresa->update(['facturacion_electronica' => false]);
-        $this->actingAs($this->admin->fresh())->put('/empresa', $this->datosEmpresa(['entorno_sunat' => 'produccion']))
+        $this->actingAs($this->admin->fresh())->put('/empresa/facturacion-electronica', $this->datosEmpresa(['entorno_sunat' => 'produccion']))
             ->assertSessionHas('success');
         $this->assertSame('produccion', $this->empresa->fresh()->entorno_sunat);
         $this->assertDatabaseHas('auditoria', ['entidad_id' => $this->empresa->id, 'accion' => 'empresa.entorno_sunat']);

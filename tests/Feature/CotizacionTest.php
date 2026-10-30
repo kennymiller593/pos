@@ -299,6 +299,12 @@ class CotizacionTest extends TestCase
         ])->render();
         $this->assertStringContainsString('COT-000001', $html);
         $this->assertStringContainsString('Incluye instalación', $html);
+        // columnas en el orden pedido; sin descuentos no aparece esa columna
+        $columnas = ['Ítem', 'Descripción', 'Cant.', 'U/Med', 'Prec/Uni', 'Total S/'];
+        $posiciones = array_map(fn ($c) => strpos($html, ">{$c}</th>"), $columnas);
+        $this->assertNotContains(false, $posiciones);
+        $this->assertSame($posiciones, collect($posiciones)->sort()->values()->all());
+        $this->assertStringNotContainsString('>Dscto.</th>', $html);
 
         // el enlace publico exige firma
         $this->get("/q/{$cotizacion->id}")->assertForbidden();
@@ -321,5 +327,39 @@ class CotizacionTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $this->assertStringContainsString('BCP Soles', (string) $this->empresa->fresh()->cuentas_bancarias);
+    }
+
+    public function test_el_texto_al_pie_de_la_empresa_sale_en_la_cotizacion(): void
+    {
+        $producto = $this->crearProducto(precio: 10);
+        $cotizacion = $this->cotizar([['presentacion_id' => $producto->presentaciones->first()->id, 'cantidad' => 1]]);
+        $render = fn () => view('pdf.cotizacion', [
+            'cotizacion' => $cotizacion->fresh()->load(['empresa', 'detalles', 'sucursal', 'usuario']),
+            'empresa' => $this->empresa->fresh(),
+            'logo' => null,
+            'letras' => 'DIEZ CON 00/100 SOLES',
+        ])->render();
+
+        // sin texto, no se imprime el bloque
+        $this->assertStringNotContainsString('pie-empresa"', $render());
+
+        $this->actingAs($this->admin)->put('/empresa', [
+            'razon_social' => $this->empresa->razon_social,
+            'regimen_tributario' => 'MYPE',
+            'rubro_codigo' => $this->empresa->rubro_codigo,
+            'pie_cotizacion' => "GRACIAS POR SU PREFERENCIA\nUNA VEZ SALIDA LA MERCADERÍA NO SE ACEPTAN CAMBIOS NI DEVOLUCIONES\n\nSin otro particular, quedamos de usted.\nAtentamente,",
+        ])->assertSessionHasNoErrors();
+
+        $html = $render();
+        // las líneas en mayúsculas, centradas y en negrita; el resto, texto normal
+        $this->assertStringContainsString('<div class="pie-destacado">GRACIAS POR SU PREFERENCIA</div>', $html);
+        $this->assertStringContainsString('<div class="pie-destacado">UNA VEZ SALIDA LA MERCADERÍA NO SE ACEPTAN CAMBIOS NI DEVOLUCIONES</div>', $html);
+        $this->assertStringContainsString('<div class="pie-linea">Sin otro particular, quedamos de usted.</div>', $html);
+        $this->assertStringContainsString('<div class="pie-linea">Atentamente,</div>', $html);
+        $this->assertStringContainsString('pie-espacio', $html);
+
+        // lo que escribe la empresa se escapa
+        $this->empresa->update(['pie_cotizacion' => '<script>alert(1)</script>']);
+        $this->assertStringNotContainsString('<script>alert(1)</script>', $render());
     }
 }

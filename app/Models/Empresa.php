@@ -29,6 +29,7 @@ class Empresa extends Model
         'rubro_codigo',
         'logo_url',
         'cuentas_bancarias',
+        'pie_cotizacion',
         'cobros_qr',
         'puntos_activo',
         'puntos_soles_por_punto',

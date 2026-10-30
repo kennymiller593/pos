@@ -122,6 +122,7 @@ const formAjuste = useForm({
     costo_unitario: '',
     numero_lote: '',
     fecha_vencimiento: '',
+    motivo: '',
 })
 
 function abrirAjuste(producto) {
@@ -141,6 +142,7 @@ function guardarAjuste() {
         costo_unitario: data.direccion === 'entrada' ? data.costo_unitario : null,
         numero_lote: data.direccion === 'entrada' ? (data.numero_lote.trim() || null) : null,
         fecha_vencimiento: data.direccion === 'entrada' ? (data.fecha_vencimiento || null) : null,
+        motivo: data.motivo.trim() || null,
     })).post(`/stock/${ajusteProducto.value.id}/ajustar`, {
         preserveScroll: true,
         onSuccess: () => (ajusteProducto.value = null),
@@ -405,6 +407,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         <p class="text-xs text-neutral-500 dark:text-neutral-400">
                                             {{ fechaHora(m.creado_en) }}<template v-if="m.usuario"> · {{ m.usuario.nombre_completo }}</template>
                                         </p>
+                                        <p v-if="m.observacion" class="mt-0.5 text-xs text-neutral-700 italic dark:text-neutral-300" data-kardex-motivo>“{{ m.observacion }}”</p>
                                     </div>
                                 </div>
                                 <div class="shrink-0 text-right">
@@ -529,6 +532,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <p v-else class="text-xs text-neutral-400 dark:text-neutral-500">
                             La salida consume las capas de costo más antiguas (FIFO), igual que una venta.
                         </p>
+
+                        <div>
+                            <label :class="claseLabel" for="aj_motivo">Motivo <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <textarea
+                                id="aj_motivo"
+                                v-model="formAjuste.motivo"
+                                rows="2"
+                                maxlength="250"
+                                :class="[claseInput, 'h-auto py-2 leading-snug']"
+                                :placeholder="formAjuste.direccion === 'entrada' ? 'Ej. corrección del conteo de fin de mes' : 'Ej. 3 sacos mojados por la lluvia'"
+                                data-ajuste-motivo
+                            />
+                            <p v-if="formAjuste.errors.motivo" :class="claseError">{{ formAjuste.errors.motivo }}</p>
+                        </div>
                     </div>
 
                     <div class="mt-5 flex justify-end gap-2">

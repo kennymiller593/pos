@@ -110,7 +110,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
             <p>
                 <template v-if="!envioSunat.activo">La facturación electrónica está apagada: las guías se guardan pero no se envían a SUNAT.</template>
                 <template v-else>Faltan las credenciales de la API de guías (Client ID y Client Secret): las guías quedan pendientes de envío.</template>
-                <Link v-if="puede('empresa.gestionar')" href="/empresa" class="ml-1 font-semibold underline">Configurar en Empresa</Link>
+                <Link v-if="puede('empresa.gestionar')" href="/empresa/facturacion-electronica" class="ml-1 font-semibold underline">Configurar la facturación electrónica</Link>
             </p>
         </div>
 

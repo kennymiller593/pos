@@ -154,9 +154,9 @@ class NotificacionController extends Controller
             $items[] = [
                 'clave' => 'certificado',
                 'titulo' => $dias < 0 ? 'Tu certificado digital venció' : 'Tu certificado digital vence pronto',
-                'detalle' => ($dias < 0 ? 'Venció el ' : 'Vence el ').$empresa->certificado_vence_en->format('d/m/Y').'. Renuévalo con tu proveedor y cárgalo en Empresa.',
+                'detalle' => ($dias < 0 ? 'Venció el ' : 'Vence el ').$empresa->certificado_vence_en->format('d/m/Y').'. Renuévalo con tu proveedor y cárgalo en Facturación electrónica.',
                 'cantidad' => 1,
-                'url' => '/empresa',
+                'url' => '/empresa/facturacion-electronica',
             ];
         }
 

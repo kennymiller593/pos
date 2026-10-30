@@ -143,8 +143,10 @@ class InventarioService
         ?string $referenciaId = null,
         ?string $usuarioId = null,
         ?string $loteId = null,
+        ?string $observacion = null,
     ): void {
         MovimientoInventario::create([
+            'observacion' => $observacion,
             'empresa_id' => $empresaId,
             'sucursal_id' => $sucursalId,
             'producto_id' => $productoId,

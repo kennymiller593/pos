@@ -31,7 +31,28 @@ class EmpresaController extends Controller
                 'rubro_codigo' => $empresa->rubro_codigo,
                 'logo_url' => $empresa->logo_url,
                 'cuentas_bancarias' => $empresa->cuentas_bancarias,
+                'pie_cotizacion' => $empresa->pie_cotizacion,
                 'mezclas_activo' => (bool) $empresa->mezclas_activo,
+                // para el acceso a la facturación electrónica (se configura en su propia pantalla)
+                'facturacion_electronica' => (bool) $empresa->facturacion_electronica,
+                'entorno_sunat' => $empresa->entorno_sunat,
+            ],
+            // activos, mas el que ya tiene la empresa aunque este desactivado
+            'rubros' => Rubro::where('activo', true)->orWhere('codigo', $empresa->rubro_codigo)->orderBy('nombre')->get(['codigo', 'nombre']),
+        ]);
+    }
+
+    /** Facturación electrónica: credenciales SUNAT, certificado, entorno y el interruptor, en su propia pantalla. */
+    public function facturacion(Request $request): Response
+    {
+        $this->autorizarAdmin($request);
+
+        $empresa = $request->user()->empresa;
+
+        return Inertia::render('Empresa/Facturacion', [
+            'empresa' => [
+                'ruc' => $empresa->ruc,
+                'regimen_tributario' => $empresa->regimen_tributario,
                 'usuario_sol' => $empresa->usuario_sol,
                 'gre_client_id' => $empresa->gre_client_id,
                 'tiene_gre_client_secret' => filled($empresa->gre_client_secret),
@@ -42,8 +63,6 @@ class EmpresaController extends Controller
                 'entorno_sunat' => $empresa->entorno_sunat,
                 'certificado_vence_en' => $empresa->certificado_vence_en?->toDateString(),
             ],
-            // activos, mas el que ya tiene la empresa aunque este desactivado
-            'rubros' => Rubro::where('activo', true)->orWhere('codigo', $empresa->rubro_codigo)->orderBy('nombre')->get(['codigo', 'nombre']),
             'requisitosFacturacion' => $this->requisitosFacturacion($request),
         ]);
     }
@@ -118,15 +137,10 @@ class EmpresaController extends Controller
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'logo_eliminar' => ['nullable', 'boolean'],
             'cuentas_bancarias' => ['nullable', 'string', 'max:500'],
+            'pie_cotizacion' => ['nullable', 'string', 'max:1000'],
             'mezclas_activo' => ['nullable', 'boolean'],
-            'usuario_sol' => ['nullable', 'string', 'max:50'],
-            'certificado_digital' => ['nullable', 'string'],
-            'clave_sol' => ['nullable', 'string', 'max:100'],
-            'gre_client_id' => ['nullable', 'string', 'max:100'],
-            'gre_client_secret' => ['nullable', 'string', 'max:200'],
-            'clave_certificado' => ['nullable', 'string', 'max:100'],
-            'entorno_sunat' => ['nullable', Rule::in(['beta', 'produccion'])],
         ], [
+            'pie_cotizacion.max' => 'El texto al pie de la cotización no debe pasar de 1000 caracteres.',
             'razon_social.required' => 'Ingresa la razón social.',
             'rubro_codigo.required' => 'Elige el rubro.',
             'logo.image' => 'El logo debe ser una imagen.',
@@ -147,6 +161,28 @@ class EmpresaController extends Controller
 
         unset($datos['logo'], $datos['logo_eliminar']);
         $datos['mezclas_activo'] = $request->boolean('mezclas_activo');
+
+        $empresa->update($datos);
+
+        return back()->with('success', 'Datos de la empresa actualizados.');
+    }
+
+    /** Guarda las credenciales de SUNAT (solo lo que se escribe: lo vacío conserva lo guardado). */
+    public function guardarFacturacion(Request $request): RedirectResponse
+    {
+        $this->autorizarAdmin($request);
+
+        $datos = $request->validate([
+            'usuario_sol' => ['nullable', 'string', 'max:50'],
+            'certificado_digital' => ['nullable', 'string'],
+            'clave_sol' => ['nullable', 'string', 'max:100'],
+            'gre_client_id' => ['nullable', 'string', 'max:100'],
+            'gre_client_secret' => ['nullable', 'string', 'max:200'],
+            'clave_certificado' => ['nullable', 'string', 'max:100'],
+            'entorno_sunat' => ['nullable', Rule::in(['beta', 'produccion'])],
+        ]);
+
+        $empresa = $request->user()->empresa;
 
         // credenciales de solo escritura: si vienen vacias, se conserva la actual
         foreach (['certificado_digital', 'clave_sol', 'clave_certificado', 'gre_client_secret'] as $campo) {
@@ -195,7 +231,7 @@ class EmpresaController extends Controller
             ]);
         }
 
-        return back()->with('success', 'Datos de la empresa actualizados.');
+        return back()->with('success', 'Datos de facturación electrónica guardados.');
     }
 
     private function autorizarAdmin(Request $request): void

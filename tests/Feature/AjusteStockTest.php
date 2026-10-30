@@ -52,6 +52,35 @@ class AjusteStockTest extends TestCase
         $this->assertEqualsWithDelta(3.50, (float) $merma->costo_unitario, 0.001);
     }
 
+    public function test_el_motivo_opcional_queda_en_el_kardex(): void
+    {
+        $producto = $this->crearProducto();
+        $this->darStock($producto, 20, 3.50);
+
+        $this->actingAs($this->admin)->post("/stock/{$producto->id}/ajustar", [
+            'direccion' => 'salida',
+            'cantidad' => 3,
+            'motivo' => '  3 sacos mojados por la lluvia  ',
+        ])->assertSessionHas('success');
+        // sin motivo también se registra
+        $this->actingAs($this->admin)->post("/stock/{$producto->id}/ajustar", [
+            'direccion' => 'entrada', 'cantidad' => 2, 'costo_unitario' => 3.50,
+        ])->assertSessionHas('success');
+
+        $merma = MovimientoInventario::where('producto_id', $producto->id)->where('tipo', 'merma')->firstOrFail();
+        $this->assertSame('3 sacos mojados por la lluvia', $merma->observacion);
+        $this->assertNull(MovimientoInventario::where('producto_id', $producto->id)->where('tipo', 'ajuste')->value('observacion'));
+
+        // se ve en el kardex de la pantalla de stock
+        $kardex = $this->actingAs($this->admin)->getJson("/stock/{$producto->id}/kardex")->assertOk()->json('movimientos');
+        $this->assertContains('3 sacos mojados por la lluvia', array_column($kardex, 'observacion'));
+
+        // un motivo demasiado largo se rechaza
+        $this->actingAs($this->admin)->post("/stock/{$producto->id}/ajustar", [
+            'direccion' => 'salida', 'cantidad' => 1, 'motivo' => str_repeat('x', 251),
+        ])->assertSessionHasErrors('motivo');
+    }
+
     public function test_salida_mayor_al_disponible_es_bloqueada(): void
     {
         $producto = $this->crearProducto();

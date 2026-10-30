@@ -388,7 +388,8 @@ class ReporteController extends Controller
 
             return [
                 $m->creado_en->format('d/m/Y H:i'),
-                self::TIPOS_KARDEX[$m->tipo] ?? $m->tipo,
+                // el motivo que escribió quien ajustó el stock, si lo dejó
+                (self::TIPOS_KARDEX[$m->tipo] ?? $m->tipo).($m->observacion ? " · {$m->observacion}" : ''),
                 $esEntrada ? $numero($cantidad) : '',
                 $esEntrada ? '' : $numero($cantidad),
                 $m->costo_unitario !== null ? number_format((float) $m->costo_unitario, 2) : '',

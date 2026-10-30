@@ -41,6 +41,10 @@
         .totales .fila-total td { border-top: 2px solid #1c1917; font-size: 13px; font-weight: 700; padding-top: 6px; }
 
         .nota { border: 1px solid #d6d3d1; border-radius: 6px; padding: 8px 12px; line-height: 1.6; }
+        .pie-empresa { margin-top: 16px; line-height: 1.5; }
+        .pie-destacado { text-align: center; font-weight: bold; font-size: 13px; }
+        .pie-linea { font-size: 11px; }
+        .pie-espacio { height: 8px; }
         .nota .rotulo { display: block; font-size: 9px; color: #78716c; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 2px; }
         .leyenda { margin-top: 14px; font-size: 9px; color: #78716c; line-height: 1.5; text-align: center; }
 
@@ -119,26 +123,32 @@
     {{-- Items --}}
     <div class="seccion">
         <table class="items">
+            {{-- el descuento solo aparece si alguna línea lo tiene: sin él, cantidad × precio no cuadraría con el total --}}
+            @php($conDescuento = $cotizacion->detalles->contains(fn ($d) => (float) $d->descuento > 0))
             <thead>
                 <tr>
-                    <th style="width: 30px;">#</th>
-                    <th style="width: 55px;">Cant.</th>
-                    <th style="width: 50px;">Unidad</th>
+                    <th style="width: 34px;">Ítem</th>
                     <th>Descripción</th>
-                    <th style="width: 75px;">P. Unit.</th>
-                    <th style="width: 65px;">Dscto.</th>
-                    <th style="width: 85px;">Importe</th>
+                    <th style="width: 50px;">Cant.</th>
+                    <th style="width: 50px;">U/Med</th>
+                    <th style="width: 72px;">Prec/Uni</th>
+                    @if ($conDescuento)
+                        <th style="width: 60px;">Dscto.</th>
+                    @endif
+                    <th style="width: 80px;">Total S/</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($cotizacion->detalles as $i => $detalle)
                     <tr>
                         <td class="centrado">{{ $i + 1 }}</td>
+                        <td>{{ $detalle->descripcion }}</td>
                         <td class="centrado">{{ rtrim(rtrim(number_format($detalle->cantidad, 3), '0'), '.') }}</td>
                         <td class="centrado">{{ trim((string) $detalle->unidad_codigo) ?: 'NIU' }}</td>
-                        <td>{{ $detalle->descripcion }}</td>
                         <td class="num">{{ number_format($detalle->precio_unitario, 2) }}</td>
-                        <td class="num">{{ (float) $detalle->descuento > 0 ? number_format($detalle->descuento, 2) : '—' }}</td>
+                        @if ($conDescuento)
+                            <td class="num">{{ (float) $detalle->descuento > 0 ? number_format($detalle->descuento, 2) : '—' }}</td>
+                        @endif
                         <td class="num">{{ number_format($detalle->total, 2) }}</td>
                     </tr>
                 @endforeach
@@ -189,6 +199,22 @@
         <div class="seccion nota">
             <span class="rotulo">Cuentas para el pago</span>
             {!! nl2br(e($empresa->cuentas_bancarias)) !!}
+        </div>
+    @endif
+
+    @if ($empresa->pie_cotizacion)
+        {{-- texto propio de la empresa: las líneas en MAYÚSCULAS van centradas y en negrita --}}
+        <div class="pie-empresa">
+            @foreach (preg_split('/\R/', trim($empresa->pie_cotizacion)) as $linea)
+                @php($linea = trim($linea))
+                @if ($linea === '')
+                    <div class="pie-espacio"></div>
+                @elseif (preg_match('/\p{L}/u', $linea) && mb_strtoupper($linea) === $linea)
+                    <div class="pie-destacado">{{ $linea }}</div>
+                @else
+                    <div class="pie-linea">{{ $linea }}</div>
+                @endif
+            @endforeach
         </div>
     @endif
 

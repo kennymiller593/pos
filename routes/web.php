@@ -231,6 +231,9 @@ Route::middleware('auth')->group(function () {
         Route::delete('/tienda-en-linea/dominio', [TiendaDominioController::class, 'quitar'])->name('tienda-dominio.quitar');
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
+        // facturación electrónica: credenciales SUNAT y el interruptor, en su propia pantalla
+        Route::get('/empresa/facturacion-electronica', [EmpresaController::class, 'facturacion'])->name('empresa.facturacion.edit');
+        Route::put('/empresa/facturacion-electronica', [EmpresaController::class, 'guardarFacturacion'])->name('empresa.facturacion.update');
         Route::post('/empresa/facturacion', [EmpresaController::class, 'alternarFacturacion'])->name('empresa.facturacion');
         // QR de cobro (Yape, Plin) que el POS muestra al cliente
         Route::get('/empresa/cobros-qr', [CobroQrController::class, 'edit'])->name('cobros-qr.edit');

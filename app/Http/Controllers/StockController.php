@@ -152,7 +152,7 @@ class StockController extends Controller
                 ->with('usuario:id,nombre_completo')
                 ->latest('creado_en')
                 ->limit(30)
-                ->get(['id', 'tipo', 'cantidad', 'costo_unitario', 'usuario_id', 'creado_en'])
+                ->get(['id', 'tipo', 'cantidad', 'costo_unitario', 'usuario_id', 'observacion', 'creado_en'])
                 ->each(function ($m) use ($request) {
                     if (! $request->user()->can('stock.costos')) {
                         $m->costo_unitario = null;
@@ -177,7 +177,9 @@ class StockController extends Controller
             'costo_unitario' => ['required_if:direccion,entrada', 'nullable', 'numeric', 'min:0'],
             'numero_lote' => ['nullable', 'string', 'max:50'],
             'fecha_vencimiento' => ['nullable', 'date'],
+            'motivo' => ['nullable', 'string', 'max:250'],
         ], [
+            'motivo.max' => 'El motivo no debe pasar de 250 caracteres.',
             'cantidad.required' => 'Ingresa la cantidad.',
             'cantidad.gt' => 'La cantidad debe ser mayor a 0.',
             'costo_unitario.required_if' => 'Indica el costo unitario del ingreso.',
@@ -194,6 +196,7 @@ class StockController extends Controller
         // la sucursal elegida en el modal (viendo "todas") o la del selector
         $sucursalId = $this->sucursalElegida($request, 'sucursal_id');
         $cantidad = round((float) $datos['cantidad'], 3);
+        $motivo = trim((string) ($datos['motivo'] ?? '')) ?: null;
 
         if ($datos['direccion'] === 'salida') {
             $disponible = $this->inventario->stockDisponible($producto->id, $sucursalId);
@@ -204,7 +207,7 @@ class StockController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($datos, $producto, $usuario, $sucursalId, $cantidad) {
+            DB::transaction(function () use ($datos, $producto, $usuario, $sucursalId, $cantidad, $motivo) {
                 if ($datos['direccion'] === 'entrada') {
                     $loteId = null;
                     if ($producto->controla_lote && filled($datos['numero_lote'] ?? null)) {
@@ -221,7 +224,7 @@ class StockController extends Controller
                     $this->inventario->ingresarCapa($producto, $sucursalId, $cantidad, $costo, loteId: $loteId);
                     $this->inventario->incrementarStock($producto->empresa_id, $producto->id, $sucursalId, $cantidad);
                     $this->inventario->registrarMovimiento(
-                        $producto->empresa_id, $sucursalId, $producto->id, 'ajuste', $cantidad, $costo, usuarioId: $usuario->id, loteId: $loteId,
+                        $producto->empresa_id, $sucursalId, $producto->id, 'ajuste', $cantidad, $costo, usuarioId: $usuario->id, loteId: $loteId, observacion: $motivo,
                     );
 
                     return;
@@ -238,6 +241,7 @@ class StockController extends Controller
                     $cantidad,
                     $cantidad > 0 ? $consumo['costo_total'] / $cantidad : 0,
                     usuarioId: $usuario->id,
+                    observacion: $motivo,
                 );
             });
         } catch (\Throwable $e) {
@@ -253,6 +257,7 @@ class StockController extends Controller
             'cantidad' => $cantidad,
             'costo_unitario' => $datos['direccion'] === 'entrada' ? (float) $datos['costo_unitario'] : null,
             'lote' => $datos['numero_lote'] ?? null,
+            'motivo' => $motivo,
         ]);
 
         return back()->with('success', $datos['direccion'] === 'entrada'

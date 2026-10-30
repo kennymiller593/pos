@@ -25,6 +25,7 @@ class MovimientoInventario extends Model
         'costo_unitario',
         'referencia_id',
         'usuario_id',
+        'observacion',
     ];
 
     protected function casts(): array

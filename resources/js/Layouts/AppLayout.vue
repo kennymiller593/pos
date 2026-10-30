@@ -51,6 +51,7 @@ import {
     Undo2,
     UserCog,
     FlaskConical,
+    FileKey,
     Bug,
     Users,
     Wallet,
@@ -149,6 +150,7 @@ const menuBase = [
             {
                 label: 'Empresa', icon: Settings, hijos: [
                     { label: 'Datos de la empresa', href: '/empresa', icon: Settings, exact: true, permiso: 'empresa.gestionar' },
+                    { label: 'Facturación electrónica', href: '/empresa/facturacion-electronica', icon: FileKey, permiso: 'empresa.gestionar' },
                     { label: 'Cobros con QR', href: '/empresa/cobros-qr', icon: QrCode, permiso: 'empresa.gestionar' },
                     // adicional de pago: solo aparece si la plataforma activó un agente de IA para la empresa
                     { label: 'Asistente de IA', href: '/asistente', icon: Bot, exact: true, permiso: 'empresa.gestionar', si: () => !!empresa.value?.ia_habilitada },
@@ -659,7 +661,7 @@ watch(
                     <component
                         :is="puede('empresa.gestionar') ? Link : 'span'"
                         v-if="empresa?.facturacion_electronica && !esPlataforma"
-                        :href="puede('empresa.gestionar') ? '/empresa' : undefined"
+                        :href="puede('empresa.gestionar') ? '/empresa/facturacion-electronica' : undefined"
                         class="hidden h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-bold tracking-wide uppercase sm:flex"
                         :class="empresa.entorno_sunat === 'produccion'
                             ? 'bg-[#10B981] text-white'
@@ -845,13 +847,16 @@ watch(
         <RecorridoGuiado v-if="!esPlataforma" :abierto="recorridoAbierto" :pasos="pasosRecorrido"
             :preparar="prepararPasoRecorrido" texto-final="¡A vender!" @cerrar="cerrarRecorrido" />
 
-        <!-- Toast de éxito -->
+        <!-- Toast de éxito (verde) o error (rojo): fondo lleno para que no pase desapercibido -->
         <Transition enter-active-class="transition duration-200" enter-from-class="translate-y-2 opacity-0"
             leave-active-class="transition duration-200" leave-to-class="translate-y-2 opacity-0">
             <div v-if="toast"
-                class="fixed right-4 bottom-4 z-50 flex items-center gap-2.5 rounded-xl border border-stone-200 bg-white py-3 pr-5 pl-4 shadow-lg shadow-neutral-900/5 dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-black/30">
-                <CheckCircle2 v-if="toast.tipo === 'exito'" class="size-5 text-emerald-600 dark:text-emerald-400" />
-                <XCircle v-else class="size-5 text-red-600 dark:text-red-400" />
+                class="fixed right-4 bottom-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-2.5 rounded-xl py-3 pr-5 pl-4 text-white shadow-lg sm:max-w-md"
+                :class="toast.tipo === 'exito' ? 'bg-emerald-600 shadow-emerald-900/20' : 'bg-red-600 shadow-red-900/20'"
+                :role="toast.tipo === 'exito' ? 'status' : 'alert'"
+                data-toast>
+                <CheckCircle2 v-if="toast.tipo === 'exito'" class="size-5 shrink-0" />
+                <XCircle v-else class="size-5 shrink-0" />
                 <span class="text-sm font-medium">{{ toast.mensaje }}</span>
             </div>
         </Transition>
