@@ -569,6 +569,48 @@ class VentaTest extends TestCase
         $this->actingAs($this->admin)->getJson("/productos/{$producto->id}/historial")->assertForbidden();
     }
 
+    public function test_el_historial_del_producto_solo_muestra_las_sucursales_que_el_usuario_puede_ver(): void
+    {
+        $producto = $this->crearProducto(precio: 3.50);
+        $unidad = $producto->presentaciones->first();
+        $tarapaca = Sucursal::create(['empresa_id' => $this->empresa->id, 'codigo_sunat' => '0002', 'nombre' => 'Tarapacá', 'activo' => true]);
+
+        // una compra en cada sucursal y una venta en la principal
+        foreach ([[$this->sucursal, 'F001-000001', 5], [$tarapaca, 'F001-000002', 4]] as [$sucursal, $numero, $cantidad]) {
+            $this->actingAs($this->admin)->post('/compras', [
+                'sucursal_id' => $sucursal->id,
+                'proveedor_id' => null,
+                'tipo_comprobante_codigo' => null,
+                'serie_numero' => $numero,
+                'fecha' => now()->toDateString(),
+                'es_credito' => false,
+                'items' => [['presentacion_id' => $unidad->id, 'cantidad' => $cantidad, 'costo_unitario' => 2.00]],
+            ])->assertSessionHasNoErrors();
+        }
+        $this->abrirCaja();
+        $this->venderContado($unidad, 2);
+
+        // el admin sin restriccion, viendo "todas", ve ambas compras y de que sucursal es cada una
+        $datos = $this->actingAs($this->admin)->getJson("/productos/{$producto->id}/historial")->assertOk()->json();
+        $this->assertTrue($datos['multisucursal']);
+        $this->assertSame(['Tarapacá', 'Principal'], collect($datos['compras'])->sortBy('cantidad')->pluck('sucursal')->values()->all());
+        $this->assertSame(['Principal'], collect($datos['ventas'])->pluck('sucursal')->all());
+
+        // si elige una sucursal en el selector, solo ve esa
+        $this->actingAs($this->admin)->post('/sucursal-activa', ['sucursal_id' => $tarapaca->id]);
+        $datos = $this->actingAs($this->admin)->getJson("/productos/{$producto->id}/historial")->assertOk()->json();
+        $this->assertSame(['Tarapacá'], collect($datos['compras'])->pluck('sucursal')->all());
+        $this->assertSame([], $datos['ventas']);
+
+        // un admin que solo puede entrar a la principal no ve lo de Tarapacá (era el hueco de Agro Marañón)
+        $limitado = $this->crearUsuario('admin', 'limitado'.random_int(1000, 999999).'@test.local');
+        $limitado->sucursales()->sync([$this->sucursal->id]);
+        $datos = $this->actingAs($limitado)->getJson("/productos/{$producto->id}/historial")->assertOk()->json();
+        $this->assertSame(['Principal'], collect($datos['compras'])->pluck('sucursal')->all());
+        $this->assertEqualsWithDelta(5, $datos['compras'][0]['cantidad'], 0.001);
+        $this->assertSame(['Principal'], collect($datos['ventas'])->pluck('sucursal')->all());
+    }
+
     public function test_credito_es_bloqueado_al_exceder_el_limite_y_sin_linea(): void
     {
         $producto = $this->crearProducto(precio: 30.00);

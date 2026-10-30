@@ -308,7 +308,7 @@ function anular() {
                     </div>
 
                     <!-- Items -->
-                    <div class="max-h-[50vh] overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino max-h-[50vh] overflow-y-auto px-6 py-4">
                         <table class="w-full text-left text-sm">
                             <thead class="text-xs text-neutral-400 uppercase dark:text-neutral-500">
                                 <tr>

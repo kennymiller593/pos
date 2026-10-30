@@ -14,7 +14,8 @@ const emit = defineEmits(['cerrar'])
 
 const pestana = ref(props.inicial)
 const cargando = ref(true)
-const datos = ref({ puede: { compras: true, ventas: true }, compras: [], ventas: [] })
+// multisucursal: la empresa tiene varias sedes y cada fila dice de cuál es
+const datos = ref({ puede: { compras: true, ventas: true }, multisucursal: false, compras: [], ventas: [] })
 
 onMounted(async () => {
     try {
@@ -77,7 +78,7 @@ const PESTANAS = [
                     </button>
                 </div>
 
-                <div class="max-h-[65vh] overflow-x-auto overflow-y-auto px-5 py-4 sm:px-6">
+                <div class="scroll-fino max-h-[65vh] overflow-x-auto overflow-y-auto px-5 py-4 sm:px-6">
                     <p v-if="cargando" class="py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">Cargando...</p>
 
                     <!-- compras -->
@@ -88,6 +89,7 @@ const PESTANAS = [
                                 <tr>
                                     <th class="pr-3 pb-2 font-semibold tracking-wider">Fecha</th>
                                     <th class="px-3 pb-2 font-semibold tracking-wider">Documento</th>
+                                    <th v-if="datos.multisucursal" class="px-3 pb-2 font-semibold tracking-wider">Sucursal</th>
                                     <th class="px-3 pb-2 font-semibold tracking-wider">Proveedor</th>
                                     <th class="px-3 pb-2 text-right font-semibold tracking-wider">Stock restante</th>
                                     <th class="px-3 pb-2 text-right font-semibold tracking-wider">Cantidad</th>
@@ -99,6 +101,7 @@ const PESTANAS = [
                                 <tr v-for="c in datos.compras" :key="c.id" :class="c.anulada ? 'text-neutral-400 line-through dark:text-neutral-500' : ''">
                                     <td class="py-2.5 pr-3 whitespace-nowrap">{{ fechaCorta(c.fecha) }}</td>
                                     <td class="px-3 py-2.5 font-mono text-xs text-neutral-600 dark:text-neutral-300">{{ c.documento ?? '—' }}<span v-if="c.anulada" class="ml-1 font-sans text-red-600 no-underline">anulada</span></td>
+                                    <td v-if="datos.multisucursal" class="max-w-32 truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-300" data-sucursal>{{ c.sucursal }}</td>
                                     <td class="max-w-40 truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-300">{{ c.proveedor ?? '—' }}</td>
                                     <td class="px-3 py-2.5 text-right font-medium" :class="c.stock_restante !== null && c.stock_restante <= 0 ? 'text-red-600 dark:text-red-400' : ''">
                                         {{ c.stock_restante !== null ? cantidad(c.stock_restante) : '—' }}
@@ -122,6 +125,7 @@ const PESTANAS = [
                                 <tr>
                                     <th class="pr-3 pb-2 font-semibold tracking-wider">Fecha</th>
                                     <th class="px-3 pb-2 font-semibold tracking-wider">Documento</th>
+                                    <th v-if="datos.multisucursal" class="px-3 pb-2 font-semibold tracking-wider">Sucursal</th>
                                     <th class="px-3 pb-2 font-semibold tracking-wider">Cliente</th>
                                     <th class="px-3 pb-2 text-right font-semibold tracking-wider">Cantidad</th>
                                     <th class="px-3 pb-2 text-right font-semibold tracking-wider">Precio</th>
@@ -135,6 +139,7 @@ const PESTANAS = [
                                         <Link :href="`/comprobantes?buscar=${encodeURIComponent(v.documento)}`" class="font-mono text-xs text-emerald-700 hover:underline dark:text-emerald-400">{{ v.documento }}</Link>
                                         <span class="block text-[11px] text-neutral-400">{{ v.tipo }}<span v-if="v.anulada" class="ml-1 text-red-600">anulada</span></span>
                                     </td>
+                                    <td v-if="datos.multisucursal" class="max-w-32 truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-300" data-sucursal>{{ v.sucursal }}</td>
                                     <td class="max-w-48 truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-300">{{ v.cliente }}</td>
                                     <td class="px-3 py-2.5 text-right">
                                         {{ cantidad(v.cantidad) }}

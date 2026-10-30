@@ -283,7 +283,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                         </button>
                     </div>
 
-                    <div class="max-h-[55vh] overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino max-h-[55vh] overflow-y-auto px-6 py-4">
                         <dl class="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                             <div>
                                 <dt class="text-xs text-neutral-500 dark:text-neutral-400">Término de pago</dt>

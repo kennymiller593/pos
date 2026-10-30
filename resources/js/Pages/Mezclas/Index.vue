@@ -278,7 +278,7 @@ function anular() {
                         por {{ mezclaVer.anulada_por?.nombre_completo ?? '—' }}<template v-if="mezclaVer.motivo_anulacion">: {{ mezclaVer.motivo_anulacion }}</template>
                     </div>
 
-                    <div class="max-h-[55vh] overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino max-h-[55vh] overflow-y-auto px-6 py-4">
                         <!-- lo obtenido -->
                         <div class="flex items-center gap-3 rounded-xl bg-emerald-50 p-3 dark:bg-emerald-500/10">
                             <div class="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">

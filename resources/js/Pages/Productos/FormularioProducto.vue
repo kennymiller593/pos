@@ -336,7 +336,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </button>
                     </div>
 
-                    <div class="max-h-[70vh] overflow-y-auto px-6 py-5">
+                    <div class="scroll-fino max-h-[70vh] overflow-y-auto px-6 py-5">
                         <!-- Imagen -->
                         <div class="mb-5 flex items-center gap-4">
                             <div class="grid aspect-[4/3] w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-stone-200 bg-stone-50 dark:border-neutral-700 dark:bg-neutral-950">

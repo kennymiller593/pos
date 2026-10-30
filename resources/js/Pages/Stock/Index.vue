@@ -371,7 +371,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <X class="size-5" />
                         </button>
                     </div>
-                    <div class="max-h-[60vh] overflow-y-auto">
+                    <div class="scroll-fino max-h-[60vh] overflow-y-auto">
                         <p v-if="cargandoKardex" class="px-6 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">Cargando...</p>
                         <template v-else>
 
