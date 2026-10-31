@@ -47,3 +47,14 @@
         scrollbar-color: rgb(148 163 184 / 0.4) transparent;
     }
 }
+
+/* Campo de monto sin las flechas del input numérico: en modo oscuro salen como un recuadro blanco encima del texto */
+@utility sin-flechas {
+    appearance: textfield;
+    -moz-appearance: textfield;
+    &::-webkit-inner-spin-button,
+    &::-webkit-outer-spin-button {
+        appearance: none;
+        margin: 0;
+    }
+}

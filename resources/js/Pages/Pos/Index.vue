@@ -1625,7 +1625,7 @@ const claseInput =
                                     step="0.01"
                                     min="0"
                                     placeholder="0.00"
-                                    class="h-7 w-24 rounded-lg border bg-white px-2 text-right text-sm focus:outline-none dark:bg-neutral-950"
+                                    class="sin-flechas h-7 w-24 rounded-lg border bg-white px-2 text-right text-sm focus:outline-none dark:bg-neutral-950"
                                     :class="descuentoInvalido(item)
                                         ? 'border-red-400 focus:border-red-500 dark:border-red-600'
                                         : 'border-stone-200 focus:border-emerald-500 dark:border-neutral-700'"
@@ -2241,7 +2241,7 @@ const claseInput =
                                     min="0"
                                     :max="total"
                                     placeholder="0.00"
-                                    class="h-11 w-full rounded-xl border border-stone-300 bg-white pr-3 pl-9 text-right text-base font-semibold focus:border-amber-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                    class="sin-flechas h-11 w-full rounded-xl border border-stone-300 bg-white pr-3 pl-9 text-right text-base font-semibold focus:border-amber-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                     data-abono-monto
                                     @focus="$event.target.select()"
                                     @blur="normalizarMontoAbono"
@@ -2418,7 +2418,7 @@ const claseInput =
                                         min="0"
                                         placeholder="0.00"
                                         @input="completarResto(i)"
-                                        class="h-10 w-24 shrink-0 rounded-xl sm:w-28 border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                        class="sin-flechas h-10 w-24 shrink-0 rounded-xl sm:w-28 border border-stone-300 bg-white px-3 text-right text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                     />
                                     <button
                                         v-if="pagos.length > 1"
