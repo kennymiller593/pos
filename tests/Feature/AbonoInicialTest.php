@@ -334,4 +334,28 @@ class AbonoInicialTest extends TestCase
         $this->assertSame(0, Cobro::where('empresa_id', $this->empresa->id)->count());
         $this->assertSame(0, CuentaPorCobrar::where('empresa_id', $this->empresa->id)->count());
     }
+
+    public function test_el_pos_refresca_por_id_el_cliente_guardado_con_su_limite_y_deuda_actuales(): void
+    {
+        // el POS guarda al cliente en el navegador; si luego le suben la linea de credito debe verla sin volver a buscarlo
+        $this->cliente->update(['limite_credito' => 0]);
+        $this->venderFiado(null)->assertSessionHas('error'); // sin linea no se fia
+
+        $this->cliente->update(['limite_credito' => 10000]);
+        $this->actingAs($this->admin)->getJson('/pos/clientes?id='.$this->cliente->id)
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $this->cliente->id)
+            ->assertJsonPath('0.limite_credito', fn ($v) => (float) $v === 10000.0)
+            ->assertJsonPath('0.deuda', fn ($v) => (float) $v === 0.0);
+
+        // la deuda tambien llega al dia
+        $this->venderFiado($this->abono(20))->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->getJson('/pos/clientes?id='.$this->cliente->id)
+            ->assertJsonPath('0.deuda', fn ($v) => (float) $v === 40.0);
+
+        // un id de otra empresa o inexistente no devuelve nada
+        $this->actingAs($this->admin)->getJson('/pos/clientes?id='.Str::uuid())->assertOk()->assertJsonCount(0);
+        $this->actingAs($this->admin)->getJson('/pos/clientes')->assertOk()->assertJsonCount(0);
+    }
 }

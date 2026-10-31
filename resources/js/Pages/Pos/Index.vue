@@ -495,6 +495,24 @@ function elegirCliente(cliente) {
 if (clienteGuardado.value && props.productos.length) {
     clienteSeleccionado.value = clienteGuardado.value
 }
+
+// lo guardado puede estar viejo (le subieron la línea de crédito, pagó una deuda, canjeó puntos):
+// se vuelve a pedir al servidor; si ya no existe, se quita del carrito
+async function refrescarCliente() {
+    const id = clienteSeleccionado.value?.id
+    if (!id) return
+    try {
+        const r = await fetch(`/pos/clientes?id=${encodeURIComponent(id)}`, { headers: { Accept: 'application/json' } })
+        if (!r.ok) return
+        const [actual] = await r.json()
+        if (clienteSeleccionado.value?.id !== id) return
+        clienteSeleccionado.value = actual ?? null
+    } catch {
+        // sin red se sigue con lo guardado
+    }
+}
+refrescarCliente()
+
 watch(clienteSeleccionado, (cliente) => {
     clienteGuardado.value = cliente
     // el canje es de un cliente: al cambiarlo o quitarlo se deshace

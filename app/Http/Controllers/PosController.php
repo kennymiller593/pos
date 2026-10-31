@@ -132,8 +132,10 @@ class PosController extends Controller
     public function clientes(Request $request): JsonResponse
     {
         $buscar = trim((string) $request->query('buscar'));
+        // con id el POS refresca el cliente que tenía guardado (su límite y deuda pueden haber cambiado)
+        $id = trim((string) $request->query('id'));
 
-        if ($buscar === '') {
+        if ($buscar === '' && $id === '') {
             return response()->json([]);
         }
 
@@ -147,9 +149,10 @@ class PosController extends Controller
                         ->whereColumn('cliente_id', 'clientes.id')
                         ->where('estado', '!=', 'pagado'),
                 ])
-                ->where(fn ($q) => $q
+                ->when($id !== '', fn ($q) => $q->whereKey($id))
+                ->when($id === '', fn ($q) => $q->where(fn ($w) => $w
                     ->where('nombre', 'ilike', "%{$buscar}%")
-                    ->orWhere('numero_documento', 'ilike', "{$buscar}%"))
+                    ->orWhere('numero_documento', 'ilike', "{$buscar}%")))
                 ->orderBy('nombre')
                 ->limit(10)
                 ->get()
