@@ -120,14 +120,15 @@
     </div>
 
     {{-- Cabecera blanca: marca, buscador grande, WhatsApp y carrito --}}
-    <header class="z-30 bg-white shadow-sm shadow-slate-900/5 {{ $previa ? '' : 'lg:sticky lg:top-0' }}">
-        <div class="mx-auto max-w-[100rem] px-3 sm:px-6 lg:px-8">
+    {{-- en celular la cabecera se "disuelve" (contents) para que solo la barra de categorías quede fija al bajar --}}
+    <header class="z-30 bg-white shadow-sm shadow-slate-900/5 max-lg:contents {{ $previa ? '' : 'lg:sticky lg:top-0' }}">
+        <div class="mx-auto w-full max-w-[100rem] bg-white px-3 sm:px-6 lg:bg-transparent lg:px-8">
             <div class="flex items-center gap-3 py-3 lg:gap-6">
                 <a href="/" class="flex min-w-0 items-center gap-2.5" aria-label="{{ $tienda['nombre'] }}: inicio">
                     @if ($tienda['logo'])
-                        <img src="{{ $tienda['logo'] }}" alt="" class="size-11 shrink-0 object-contain">
+                        <img src="{{ $tienda['logo'] }}" alt="" class="size-14 shrink-0 object-contain lg:size-16">
                     @else
-                        <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-(--marca) text-lg font-extrabold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
+                        <span class="grid size-14 shrink-0 place-items-center rounded-xl bg-(--marca) text-xl font-extrabold text-(--sobre-marca) lg:size-16">{{ $tienda['inicial'] }}</span>
                     @endif
                     <span class="min-w-0">
                         <span class="block truncate text-lg leading-tight font-extrabold tracking-tight text-(--marca-texto) sm:text-xl">{{ $tienda['nombre'] }}</span>
@@ -173,7 +174,7 @@
         </div>
 
         {{-- Barra de categorías en el color de la tienda --}}
-        <nav class="bg-(--marca) text-(--sobre-marca)" aria-label="Categorías">
+        <nav class="bg-(--marca) text-(--sobre-marca) {{ $previa ? '' : 'max-lg:sticky max-lg:top-0 max-lg:z-30 max-lg:shadow-md max-lg:shadow-slate-900/10' }}" aria-label="Categorías" data-menu-fijo>
             <div class="mx-auto flex max-w-[100rem] items-stretch gap-1 px-2 text-sm font-semibold sm:px-4 lg:px-6">
                 @if ($categorias->isNotEmpty())
                     <details class="group relative shrink-0">
@@ -181,7 +182,7 @@
                             @include('tienda.mercado.icono', ['n' => 'menu', 'clase' => 'size-4.5'])Todas las categorías
                             @include('tienda.icono', ['n' => 'derecha', 'clase' => 'size-3.5 rotate-90 opacity-70 transition-transform group-open:-rotate-90'])
                         </summary>
-                        <div class="absolute top-full left-0 z-40 w-[min(90vw,40rem)] overflow-hidden rounded-b-2xl bg-white p-3 text-slate-900 shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
+                        <div class="absolute top-full left-0 z-40 scroll-fino max-h-[calc(100dvh-4rem)] w-[min(90vw,40rem)] overflow-y-auto rounded-b-2xl bg-white p-3 text-slate-900 shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
                             <a href="/catalogo" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 font-bold hover:bg-(--marca-suave) hover:text-(--marca-texto)">
                                 <span>Ver toda la tienda</span><span class="text-xs font-normal text-slate-400 tabular-nums">{{ number_format($tienda['productos']) }} productos</span>
                             </a>

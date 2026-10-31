@@ -204,7 +204,7 @@
                         </div>
                         <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
                     </div>
-                    <div class="-mx-3 mt-5 flex snap-x gap-3 overflow-x-auto px-3 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div class="-mx-3 mt-3 flex snap-x gap-3 overflow-x-auto px-3 pt-2 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         @foreach ($categorias->take(8) as $cat)
                             <a href="{{ $cat->url }}" class="group w-24 shrink-0 snap-start text-center sm:w-28 lg:w-auto">
                                 <span class="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-2xl font-extrabold text-(--marca-texto) ring-4 ring-white shadow-sm transition duration-300 group-hover:scale-105 group-hover:ring-(--marca) sm:size-24">
