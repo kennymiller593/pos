@@ -649,6 +649,8 @@ const medioDe = (codigo) => props.mediosPago.find((m) => m.codigo === codigo)
 const ORDEN_MEDIOS = ['efectivo', 'yape', 'plin', 'tarjeta', 'transferencia']
 const ICONO_MEDIO = { efectivo: Banknote, yape: Smartphone, plin: Smartphone, tarjeta: CreditCard, transferencia: Landmark }
 const NOMBRE_CORTO = { transferencia: 'Transferencia' }
+// en la rejilla de cinco fichas del abono no entra "Transferencia"
+const NOMBRE_ABONO = { transferencia: 'Transf.' }
 const BILLETERAS = ['yape', 'plin']
 const mediosOrdenados = computed(() =>
     [...props.mediosPago].sort((a, b) => {
@@ -748,13 +750,21 @@ const abonoValido = computed(() => {
     if (!(montoAbono.value > 0) || abonoCubreTotal.value) return false
     return !referenciaObligatoria(abono.value.medio_pago_codigo) || !!abono.value.referencia.trim()
 })
-const abonoErrorMensaje = computed(() => {
+// lo que falta escribir no es un error: se muestra como ayuda neutra; el rojo es para montos imposibles
+const abonoAyuda = computed(() => {
     if (!abono.value.activo) return null
-    if (abonoCubreTotal.value) return 'El abono cubre el total: registra la venta al contado.'
     if (!(montoAbono.value > 0)) return 'Ingresa cuánto paga ahora.'
-    if (referenciaObligatoria(abono.value.medio_pago_codigo) && !abono.value.referencia.trim()) return 'Ingresa el número de operación del abono.'
+    if (!abonoCubreTotal.value && referenciaObligatoria(abono.value.medio_pago_codigo) && !abono.value.referencia.trim()) return 'Ingresa el número de operación del abono.'
     return null
 })
+const abonoErrorMensaje = computed(() =>
+    abono.value.activo && abonoCubreTotal.value ? 'El abono cubre el total: registra la venta al contado.' : null,
+)
+
+// al salir del campo queda con dos decimales, como los demás montos del modal
+function normalizarMontoAbono() {
+    if (abono.value.monto !== '' && Number(abono.value.monto) > 0) abono.value.monto = Number(abono.value.monto).toFixed(2)
+}
 
 // la referencia es de un medio concreto: al cambiar de medio no debe quedar pegada al nuevo
 function elegirMedioAbono(codigo) {
@@ -1767,8 +1777,8 @@ const claseInput =
                                     </h3>
                                     <p v-if="datosVenta" class="mt-0.5 text-2xl font-bold tracking-tight text-[#10B981] dark:text-emerald-400">{{ soles(datosVenta.total) }}</p>
                                     <p v-if="datosVenta?.abono > 0" class="mt-1 text-sm text-[#64748B] dark:text-neutral-400" data-venta-abono>
-                                        A cuenta <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(datosVenta.abono) }}</span><template v-if="datosVenta.abono_medio"> ({{ datosVenta.abono_medio }})</template>
-                                        · Saldo fiado <span class="font-semibold text-amber-700 dark:text-amber-300">{{ soles(datosVenta.saldo) }}</span>
+                                        <span class="whitespace-nowrap">A cuenta <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(datosVenta.abono) }}</span><template v-if="datosVenta.abono_medio"> ({{ datosVenta.abono_medio }})</template></span>
+                                        · <span class="whitespace-nowrap">Saldo fiado <span class="font-semibold text-amber-700 dark:text-amber-300">{{ soles(datosVenta.saldo) }}</span></span>
                                     </p>
                                     <p v-if="datosVenta?.puntos" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-[#64748B] dark:text-neutral-400" data-puntos-venta>
                                         <Star class="size-3.5 fill-amber-400 text-amber-400" />
@@ -1778,7 +1788,8 @@ const claseInput =
                                         <span v-if="datosVenta.puntos.ganados > 0" aria-hidden="true">·</span>
                                         <span class="font-semibold text-[#0F172A] dark:text-neutral-100">Tiene {{ datosVenta.puntos.saldo }} puntos</span>
                                     </p>
-                                    <p v-else class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
+                                    <!-- con abono la línea de arriba ya lo dice todo: no se repite el mensaje -->
+                                    <p v-else-if="!(datosVenta?.abono > 0)" class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
                                 </div>
                             </div>
                             <div v-if="datosVenta" class="space-y-1.5 text-sm md:justify-self-end md:text-right">
@@ -2176,25 +2187,27 @@ const claseInput =
                     <!-- Crédito: abono opcional y resumen -->
                     <div v-if="condicion === 'credito'" class="mt-4 rounded-xl bg-amber-50 p-4 text-sm dark:bg-amber-950/40" data-credito-resumen>
                         <div class="flex justify-between gap-3">
-                            <span class="min-w-0 truncate text-neutral-600 dark:text-neutral-300">Crédito disponible de {{ clienteSeleccionado.nombre }}</span>
+                            <span class="text-neutral-600 dark:text-neutral-300">Crédito disponible</span>
                             <span class="shrink-0 font-semibold">{{ soles(creditoDisponible) }}</span>
                         </div>
 
-                        <!-- ¿paga algo ahora? -->
-                        <div class="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2.5 dark:border-amber-900/60 dark:bg-neutral-900">
+                        <!-- ¿paga algo ahora? toda la fila es pulsable: en el celular el interruptor solo es chico -->
+                        <button
+                            type="button"
+                            role="switch"
+                            :aria-checked="abono.activo"
+                            class="mt-3 flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 text-left dark:border-amber-900/60 dark:bg-neutral-900"
+                            data-abono-toggle
+                            @click="alternarAbono"
+                        >
                             <span class="font-medium">¿Paga algo ahora?</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                :aria-checked="abono.activo"
+                            <span
                                 class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors"
                                 :class="abono.activo ? 'bg-amber-500' : 'bg-stone-300 dark:bg-neutral-700'"
-                                data-abono-toggle
-                                @click="alternarAbono"
                             >
                                 <span class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform" :class="abono.activo ? 'translate-x-5' : ''" />
-                            </button>
-                        </div>
+                            </span>
+                        </button>
 
                         <template v-if="abono.activo">
                             <label class="mt-3 mb-1 block text-sm font-medium" for="abono_monto">Paga ahora</label>
@@ -2213,10 +2226,39 @@ const claseInput =
                                     class="h-11 w-full rounded-xl border border-stone-300 bg-white pr-3 pl-9 text-right text-base font-semibold focus:border-amber-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
                                     data-abono-monto
                                     @focus="$event.target.select()"
+                                    @blur="normalizarMontoAbono"
                                 />
                             </div>
+                        </template>
 
-                            <div class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5" data-abono-medios>
+                        <!-- resumen: cuánto paga y cuánto queda fiado, pegado al monto para verlo sin hacer scroll -->
+                        <div class="mt-3 space-y-1 border-t border-amber-200 pt-3 dark:border-amber-900/60">
+                            <div class="flex justify-between text-neutral-600 dark:text-neutral-300">
+                                <span>Total de la venta</span>
+                                <span>{{ soles(total) }}</span>
+                            </div>
+                            <div v-if="abono.activo" class="flex justify-between text-neutral-600 dark:text-neutral-300" data-abono-acuenta>
+                                <span>A cuenta ({{ medioDe(abono.medio_pago_codigo)?.nombre }})</span>
+                                <span>− {{ soles(montoAbono) }}</span>
+                            </div>
+                            <div class="flex justify-between text-base font-semibold" data-abono-saldo>
+                                <span>Queda como deuda</span>
+                                <span :class="saldoCredito <= creditoDisponible + 0.001 ? 'text-amber-800 dark:text-amber-300' : 'text-red-700 dark:text-red-400'">{{ soles(Math.max(0, saldoCredito)) }}</span>
+                            </div>
+                        </div>
+                        <!-- falta el monto: ayuda neutra; lo demás sí es un error -->
+                        <p v-if="abonoAyuda" class="mt-2 text-xs text-neutral-500 dark:text-neutral-400" data-abono-ayuda>{{ abonoAyuda }}</p>
+                        <p
+                            v-else-if="abonoErrorMensaje || saldoCredito > creditoDisponible + 0.001"
+                            class="mt-2 rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-500/15 dark:text-red-300"
+                            data-abono-error
+                        >
+                            {{ abonoErrorMensaje ?? `La deuda de ${soles(saldoCredito)} excede el crédito disponible.` }}
+                        </p>
+
+                        <template v-if="abono.activo">
+                            <p class="mt-3 mb-1.5 text-sm font-medium">¿Con qué paga?</p>
+                            <div class="grid grid-cols-3 gap-2 sm:grid-cols-5" data-abono-medios>
                                 <button
                                     v-for="m in mediosOrdenados"
                                     :key="m.codigo"
@@ -2229,7 +2271,7 @@ const claseInput =
                                     @click="elegirMedioAbono(m.codigo)"
                                 >
                                     <component :is="ICONO_MEDIO[m.codigo] ?? Banknote" class="size-4" />
-                                    <span class="w-full truncate text-center">{{ NOMBRE_CORTO[m.codigo] ?? m.nombre }}</span>
+                                    <span class="w-full truncate text-center">{{ NOMBRE_ABONO[m.codigo] ?? m.nombre }}</span>
                                 </button>
                             </div>
 
@@ -2255,29 +2297,6 @@ const claseInput =
                                 data-abono-referencia
                             />
                         </template>
-
-                        <!-- resumen: cuánto paga y cuánto queda fiado -->
-                        <div class="mt-3 space-y-1 border-t border-amber-200 pt-3 dark:border-amber-900/60">
-                            <div class="flex justify-between text-neutral-600 dark:text-neutral-300">
-                                <span>Total de la venta</span>
-                                <span>{{ soles(total) }}</span>
-                            </div>
-                            <div v-if="abono.activo" class="flex justify-between text-neutral-600 dark:text-neutral-300" data-abono-acuenta>
-                                <span>A cuenta ({{ NOMBRE_CORTO[abono.medio_pago_codigo] ?? medioDe(abono.medio_pago_codigo)?.nombre }})</span>
-                                <span>− {{ soles(montoAbono) }}</span>
-                            </div>
-                            <div class="flex justify-between text-base font-semibold" data-abono-saldo>
-                                <span>Queda como deuda</span>
-                                <span :class="saldoCredito <= creditoDisponible + 0.001 ? 'text-amber-800 dark:text-amber-300' : 'text-red-700 dark:text-red-400'">{{ soles(Math.max(0, saldoCredito)) }}</span>
-                            </div>
-                        </div>
-                        <p
-                            v-if="abonoErrorMensaje || saldoCredito > creditoDisponible + 0.001"
-                            class="mt-2 rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-500/15 dark:text-red-300"
-                            data-abono-error
-                        >
-                            {{ abonoErrorMensaje ?? `La deuda de ${soles(saldoCredito)} excede el crédito disponible.` }}
-                        </p>
                     </div>
 
                     <!-- Pagos (solo contado) -->
