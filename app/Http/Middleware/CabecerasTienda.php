@@ -34,6 +34,8 @@ class CabecerasTienda
             "img-src 'self' data: https:",
             "font-src 'self'",
             trim("connect-src 'self' https://cloudflareinsights.com ".implode(' ', $medicion['conexion'])),
+            // el mapa de la página de contacto; en las demás páginas no se permite ningún marco
+            ...($request->is('contacto') ? ['frame-src https://www.google.com'] : []),
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self'",

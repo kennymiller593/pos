@@ -126,7 +126,7 @@
           <div class="flex h-18 items-center gap-x-4 bg-white px-4 sm:px-6 lg:contents {{ $fijaMovil }} max-lg:top-0">
             <a href="/" class="flex min-w-0 items-center gap-3" aria-label="{{ $tienda['nombre'] }}: inicio">
                 @if ($tienda['logo'])
-                    <img src="{{ $tienda['logo'] }}" alt="" class="size-11 shrink-0 object-contain">
+                    <img src="{{ $tienda['logo_ligero'] }}" alt="" class="size-11 shrink-0 object-contain">
                 @else
                     <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
                 @endif
@@ -256,7 +256,7 @@
             <div class="lg:col-span-4">
                 <div class="flex items-center gap-3">
                     @if ($tienda['logo'])
-                        <img src="{{ $tienda['logo'] }}" alt="" class="size-11 rounded-xl bg-white object-contain">
+                        <img src="{{ $tienda['logo_ligero'] }}" alt="" class="size-11 rounded-xl bg-white object-contain">
                     @else
                         <span class="grid size-11 place-items-center rounded-xl bg-(--marca) text-lg font-semibold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
                     @endif

@@ -127,7 +127,7 @@
             <div class="flex items-center gap-3 py-3 lg:gap-6">
                 <a href="/" class="flex min-w-0 items-center gap-2.5" aria-label="{{ $tienda['nombre'] }}: inicio">
                     @if ($tienda['logo'])
-                        <img src="{{ $tienda['logo'] }}" alt="" class="size-14 shrink-0 object-contain lg:size-16">
+                        <img src="{{ $tienda['logo_ligero'] }}" alt="" class="size-14 shrink-0 object-contain lg:size-16">
                     @else
                         <span class="grid size-14 shrink-0 place-items-center rounded-xl bg-(--marca) text-xl font-extrabold text-(--sobre-marca) lg:size-16">{{ $tienda['inicial'] }}</span>
                     @endif
@@ -168,8 +168,8 @@
                 <label for="buscador-movil" class="sr-only">Buscar productos</label>
                 <input id="buscador-movil" type="search" name="q" value="{{ $buscar ?? '' }}" placeholder="Buscar productos, marcas, presentación..." autocomplete="off" maxlength="80"
                     class="h-11 w-full rounded-full border border-slate-200 bg-slate-50 pr-13 pl-4 text-[15px] placeholder-slate-400 focus:border-(--marca) focus:bg-white focus:ring-4 focus:ring-(--marca)/15 focus:outline-none">
-                <button type="submit" aria-label="Buscar" class="absolute top-1/2 right-1.5 grid size-8 -translate-y-[calc(50%+0.375rem)] place-items-center rounded-full bg-(--marca) text-(--sobre-marca)">
-                    @include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4'])
+                <button type="submit" aria-label="Buscar" class="absolute top-1/2 right-0 grid size-11 -translate-y-[calc(50%+0.375rem)] cursor-pointer place-items-center">
+                    <span class="grid size-8 place-items-center rounded-full bg-(--marca) text-(--sobre-marca)">@include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4'])</span>
                 </button>
             </form>
         </div>
@@ -251,7 +251,7 @@
             <div class="lg:col-span-4">
                 <div class="flex items-center gap-3">
                     @if ($tienda['logo'])
-                        <img src="{{ $tienda['logo'] }}" alt="" class="size-11 rounded-xl bg-white object-contain p-0.5">
+                        <img src="{{ $tienda['logo_ligero'] }}" alt="" class="size-11 rounded-xl bg-white object-contain p-0.5">
                     @else
                         <span class="grid size-11 place-items-center rounded-xl bg-(--marca) text-lg font-extrabold text-(--sobre-marca)">{{ $tienda['inicial'] }}</span>
                     @endif
@@ -270,7 +270,7 @@
                     <div class="mt-2 flex gap-2">
                         @foreach (['facebook' => 'Facebook', 'instagram' => 'Instagram', 'tiktok' => 'TikTok'] as $red => $nombreRed)
                             @if ($contactos[$red])
-                                <a href="{{ $contactos[$red] }}" target="_blank" rel="noopener" aria-label="{{ $nombreRed }}" title="{{ $nombreRed }}" class="grid size-9 place-items-center rounded-full bg-white/10 ring-1 ring-white/15 transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">
+                                <a href="{{ $contactos[$red] }}" target="_blank" rel="noopener" aria-label="{{ $nombreRed }}" title="{{ $nombreRed }}" class="grid size-11 place-items-center rounded-full bg-white/10 ring-1 ring-white/15 transition-colors hover:bg-(--marca) hover:text-(--sobre-marca)">
                                     @include('tienda.icono', ['n' => $red, 'clase' => 'size-4'])
                                 </a>
                             @endif
@@ -295,7 +295,9 @@
                     @foreach ($paginas as $enlacePagina)
                         <li><a href="{{ $enlacePagina['url'] }}" class="hover:underline">{{ $enlacePagina['titulo'] }}</a></li>
                     @endforeach
-                    <li><a href="#contacto" class="hover:underline">Contáctanos</a></li>
+                    @unless (collect($paginas)->contains('url', '/contacto'))
+                        <li><a href="#contacto" class="hover:underline">Contáctanos</a></li>
+                    @endunless
                     @if ($whatsapp)
                         <li><a href="{{ $whatsapp }}" target="_blank" rel="noopener" class="hover:underline">Pedir por WhatsApp</a></li>
                     @endif

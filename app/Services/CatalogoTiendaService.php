@@ -59,7 +59,7 @@ class CatalogoTiendaService
     ];
 
     /**
-     * Busca por palabras (nombre, marca, código, código de barras), con tolerancia a tildes, abreviaturas y
+     * Busca por palabras (nombre, marca, código, código de barras, categoría y descripción), con tolerancia a tildes, abreviaturas y
      * errores de tipeo, ordenando por relevancia. Se exigen todas las palabras; si así no sale nada, una menos.
      */
     public function buscar(Builder $consulta, string $texto): Builder
@@ -67,7 +67,7 @@ class CatalogoTiendaService
         $palabras = BusquedaProductos::palabras($texto);
         $busqueda = app(BusquedaProductos::class);
 
-        return $busqueda->aplicar($consulta, $palabras, $busqueda->minimo($consulta, $palabras));
+        return $busqueda->aplicar($consulta, $palabras, $busqueda->minimo($consulta, $palabras, conDescripcion: true), conDescripcion: true);
     }
 
     /** Marcas con productos visibles en la tienda (en una categoría, si se indica), con cuántos productos cada una. */

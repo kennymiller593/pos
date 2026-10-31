@@ -34,7 +34,7 @@ class CloudflareService
             return;
         }
 
-        $rutas = ['/', '/catalogo', '/sitemap.xml', '/robots.txt', '/nosotros', '/politicas', '/preguntas-frecuentes', ...$rutasExtra];
+        $rutas = ['/', '/catalogo', '/sitemap.xml', '/robots.txt', '/nosotros', '/politicas', '/preguntas-frecuentes', '/contacto', ...$rutasExtra];
         $rutas = [...$rutas, ...app(CatalogoTiendaService::class)->categorias($empresa)->pluck('url')->all()];
 
         $bases = array_filter(array_unique([rtrim((string) Tienda::urlDe($empresa), '/'), rtrim((string) Tienda::url($empresa->tienda_slug), '/')]));

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
 use App\Models\Auditoria;
+use App\Models\Empresa;
 use App\Models\Rubro;
 use App\Models\SerieCorrelativo;
 use App\Support\CertificadoDigital;
@@ -246,7 +247,8 @@ class EmpresaController extends Controller
     private function eliminarLogoLocal(?string $url): void
     {
         if ($url && str_starts_with($url, '/storage/')) {
-            Storage::disk('public')->delete(substr($url, strlen('/storage/')));
+            $ruta = substr($url, strlen('/storage/'));
+            Storage::disk('public')->delete([$ruta, Empresa::rutaLogoLigero($ruta)]);
         }
     }
 }

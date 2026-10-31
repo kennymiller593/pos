@@ -121,6 +121,72 @@ class Empresa extends Model
         return 'data:'.$disco->mimeType($ruta).';base64,'.base64_encode($disco->get($ruta));
     }
 
+    /**
+     * Logo liviano para la cabecera y el pie de la tienda: el original puede pesar varios cientos de KB
+     * y ahí se muestra a menos de 70 px. Se genera la primera vez; si no se puede, queda el original.
+     */
+    public function logoLigero(): ?string
+    {
+        if (! $this->logo_url || ! str_starts_with($this->logo_url, '/storage/')) {
+            return $this->logo_url;
+        }
+
+        $disco = Storage::disk('public');
+        $ruta = substr($this->logo_url, strlen('/storage/'));
+        $ligero = self::rutaLogoLigero($ruta);
+
+        if ($disco->exists($ligero)) {
+            return Storage::url($ligero);
+        }
+        if (! $disco->exists($ruta) || ! function_exists('imagewebp')) {
+            return $this->logo_url;
+        }
+
+        $contenido = (string) $disco->get($ruta);
+        [$ancho, $alto] = @getimagesizefromstring($contenido) ?: [0, 0];
+        $escala = $ancho && $alto ? 192 / max($ancho, $alto) : 1; // se muestra a 64 px: así se ve nítido en pantallas densas
+
+        // chico, enorme (abrirlo agotaría la memoria en una página pública) o girado por EXIF (GD lo perdería): el original
+        if ($escala >= 1 || $ancho * $alto > 16_000_000 || self::orientacionExif($contenido) !== 1) {
+            return $this->logo_url;
+        }
+
+        $imagen = @imagecreatefromstring($contenido);
+        if (! $imagen) {
+            return $this->logo_url;
+        }
+
+        imagepalettetotruecolor($imagen);
+        $reducido = imagescale($imagen, max(1, (int) round($ancho * $escala)), max(1, (int) round($alto * $escala)), IMG_BICUBIC);
+        if (! $reducido) {
+            return $this->logo_url;
+        }
+        imagealphablending($reducido, false);
+        imagesavealpha($reducido, true);
+        ob_start();
+        $convertido = imagewebp($reducido, null, 85);
+        $webp = (string) ob_get_clean();
+
+        // el disco no lanza error si no puede escribir: sin archivo válido, queda el original
+        return $convertido && $webp !== '' && $disco->put($ligero, $webp) ? Storage::url($ligero) : $this->logo_url;
+    }
+
+    /** La orientación EXIF de un JPG; 1 (derecho) si no tiene o no se puede leer. */
+    private static function orientacionExif(string $contenido): int
+    {
+        if (! function_exists('exif_read_data') || ! str_starts_with($contenido, "\xFF\xD8")) {
+            return 1;
+        }
+
+        return (int) (@exif_read_data('data://image/jpeg;base64,'.base64_encode($contenido))['Orientation'] ?? 1);
+    }
+
+    /** "logos/abc.jpg" -> "logos/ligeros/abc.webp" */
+    public static function rutaLogoLigero(string $ruta): string
+    {
+        return pathinfo($ruta, PATHINFO_DIRNAME).'/ligeros/'.pathinfo($ruta, PATHINFO_FILENAME).'.webp';
+    }
+
     public function rubro(): BelongsTo
     {
         return $this->belongsTo(Rubro::class, 'rubro_codigo', 'codigo');

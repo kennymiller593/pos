@@ -26,7 +26,7 @@ class TiendaController extends Controller
     private const POR_PAGINA = 24;
 
     /** Páginas de texto de la tienda: su dirección y de qué parte del contenido salen. */
-    public const PAGINAS = ['nosotros' => 'nosotros', 'politicas' => 'politicas', 'preguntas-frecuentes' => 'preguntas'];
+    public const PAGINAS = ['nosotros' => 'nosotros', 'politicas' => 'politicas', 'preguntas-frecuentes' => 'preguntas', 'contacto' => 'contacto'];
 
     /** Cuántos productos del catálogo asoman en la portada, antes del botón para verlos todos. */
     private const EN_PORTADA = 12;
@@ -220,7 +220,7 @@ class TiendaController extends Controller
         ]);
     }
 
-    /** /nosotros, /politicas y /preguntas-frecuentes: lo que el dueño escribió en "Contenido". */
+    /** /nosotros, /politicas, /preguntas-frecuentes (lo que el dueño escribió en "Contenido") y /contacto. */
     public function pagina(Request $request, string $pagina): View
     {
         $empresa = $this->empresa($request);
@@ -330,6 +330,10 @@ class TiendaController extends Controller
             'preguntas' => $config['preguntas']
                 ? ['url' => '/preguntas-frecuentes', 'titulo' => 'Preguntas frecuentes', 'secciones' => [], 'preguntas' => $config['preguntas']]
                 : null,
+            // sale de los datos de contacto: dirección, horario y mapa en una dirección propia
+            'contacto' => filled($config['whatsapp']) || filled($config['telefono']) || filled($config['email']) || filled($config['direccion'])
+                ? ['url' => '/contacto', 'titulo' => 'Contacto', 'secciones' => [], 'preguntas' => [], 'contacto' => true]
+                : null,
         ]);
     }
 
@@ -402,6 +406,7 @@ class TiendaController extends Controller
                 'nombre' => $nombre,
                 'inicial' => Str::upper(Str::substr($nombre, 0, 1)),
                 'logo' => $empresa->logo_url,
+                'logo_ligero' => $empresa->logoLigero(),
                 'favicon' => $config['favicon'],
                 'descripcion' => $config['descripcion'],
                 'url' => (string) Tienda::urlDe($empresa),

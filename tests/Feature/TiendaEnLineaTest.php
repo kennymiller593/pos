@@ -183,6 +183,60 @@ class TiendaEnLineaTest extends TestCase
 
     // ---------------- tienda pública ----------------
 
+    public function test_el_buscador_encuentra_por_la_descripcion(): void
+    {
+        $this->publicar();
+        $this->urea->forceFill(['descripcion' => 'Ayuda contra la rancha'])->saveQuietly();
+
+        $this->tienda('/catalogo?q=rancha')->assertOk()->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL x 1 L');
+    }
+
+    public function test_la_pagina_de_contacto_muestra_los_datos_y_permite_solo_su_mapa(): void
+    {
+        $this->publicar(['direccion' => 'Av. Los Agricultores 245', 'horario' => 'Lunes a sábado', 'mapa_lat' => -9.93, 'mapa_lng' => -76.24]);
+
+        $respuesta = $this->tienda('/contacto')
+            ->assertOk()
+            ->assertSee('Av. Los Agricultores 245')
+            ->assertSee('Lunes a sábado')
+            ->assertSee('https://www.google.com/maps?q=-9.93%2C-76.24', false);
+        $this->assertStringContainsString('frame-src https://www.google.com', $respuesta->headers->get('Content-Security-Policy'));
+
+        $this->assertStringNotContainsString('frame-src', $this->tienda('/')->headers->get('Content-Security-Policy'));
+        $this->tienda('/sitemap.xml')->assertSee('/contacto');
+    }
+
+    public function test_el_logo_de_la_tienda_usa_una_version_liviana(): void
+    {
+        Storage::fake('public');
+        $imagen = imagecreatetruecolor(800, 800);
+        ob_start();
+        imagepng($imagen);
+        Storage::disk('public')->put('logos/grande.png', (string) ob_get_clean());
+        $this->empresa->forceFill(['logo_url' => '/storage/logos/grande.png'])->save();
+        $this->publicar();
+
+        $this->tienda('/')->assertOk()->assertSee('logos/ligeros/grande.webp', false);
+
+        Storage::disk('public')->assertExists('logos/ligeros/grande.webp');
+        [$ancho] = getimagesizefromstring(Storage::disk('public')->get('logos/ligeros/grande.webp'));
+        $this->assertSame(192, $ancho);
+    }
+
+    public function test_un_logo_enorme_o_que_no_se_puede_guardar_no_rompe_la_tienda(): void
+    {
+        Storage::fake('public');
+        // 9000x9000 sin abrirlo: solo su cabecera PNG declara el tamaño
+        $cabecera = "\x89PNG\r\n\x1a\n\0\0\0\rIHDR".pack('NN', 9000, 9000)."\x08\x02\0\0\0";
+        $enorme = $cabecera.pack('N', crc32(substr($cabecera, 12))).'relleno';
+        Storage::disk('public')->put('logos/enorme.png', $enorme);
+        $this->empresa->forceFill(['logo_url' => '/storage/logos/enorme.png'])->save();
+        $this->publicar();
+
+        $this->tienda('/')->assertOk()->assertSee('/storage/logos/enorme.png', false);
+        Storage::disk('public')->assertMissing('logos/ligeros/enorme.webp');
+    }
+
     public function test_el_titulo_no_escapa_dos_veces_y_sigue_seguro(): void
     {
         $this->crearProducto(precio: 30, atributos: ['nombre' => 'Aspersor 1" plast. & riego', 'codigo_interno' => 'P0009']);
@@ -829,7 +883,7 @@ class TiendaEnLineaTest extends TestCase
         foreach (['/nosotros', '/politicas', '/preguntas-frecuentes'] as $ruta) {
             $this->tienda($ruta)->assertNotFound();
         }
-        $this->tienda('/')->assertDontSee('data-paginas', false)->assertDontSee('Conócenos');
+        $this->tienda('/')->assertDontSee('href="/nosotros"', false)->assertDontSee('Conócenos');
 
         $guardar([
             'nosotros' => "Somos una agroveterinaria familiar.\n\nAtendemos desde 2010 en Huánuco.",

@@ -699,3 +699,21 @@ if (medicion && (medicion.ga4 || medicion.meta || medicion.tiktok || medicion.cl
         }
     })
 }
+
+// ---------------- WhatsApp flotante en el celular ----------------
+// Al bajar se esconde para no tapar los botones de las tarjetas; al subir vuelve a aparecer.
+const flotanteWhatsapp = document.querySelector('[data-whatsapp-flotante]')
+if (flotanteWhatsapp) {
+    const celular = window.matchMedia('(max-width: 639px)')
+    let ultimaPosicion = window.scrollY
+    flotanteWhatsapp.style.transition = 'transform 200ms ease'
+
+    window.addEventListener('scroll', () => {
+        const posicion = window.scrollY
+        if (Math.abs(posicion - ultimaPosicion) < 8) return
+        const esconder = celular.matches && posicion > ultimaPosicion && posicion > 120
+        flotanteWhatsapp.style.transform = esconder ? 'translateY(calc(100% + 2rem))' : ''
+        flotanteWhatsapp.inert = esconder
+        ultimaPosicion = posicion
+    }, { passive: true })
+}
