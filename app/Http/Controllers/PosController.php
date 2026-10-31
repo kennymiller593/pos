@@ -243,12 +243,22 @@ class PosController extends Controller
             'pagos.*.medio_pago_codigo' => ['required', 'exists:medios_pago,codigo'],
             'pagos.*.monto' => ['required', 'numeric', 'gt:0'],
             'pagos.*.referencia' => ['nullable', 'string', 'max:100'],
+            // "paga ahora, a cuenta": abono que el cliente deja al fiar (solo con es_credito)
+            'abono' => ['nullable', 'array'],
+            'abono.medio_pago_codigo' => ['required_with:abono', 'exists:medios_pago,codigo'],
+            'abono.monto' => ['required_with:abono', 'numeric', 'gt:0'],
+            'abono.referencia' => ['nullable', 'string', 'max:100'],
             'clave' => ['nullable', 'uuid'],
             'canal_venta' => ['nullable', Rule::in(['tienda', 'online'])],
         ], [
             'items.required' => 'El carrito está vacío.',
             'pagos.required' => 'Indica cómo se pagó la venta.',
             'cliente_id.required' => 'La venta al crédito necesita un cliente.',
+            'abono.monto.required_with' => 'El monto a cuenta debe ser mayor a 0.',
+            'abono.monto.numeric' => 'El monto a cuenta debe ser mayor a 0.',
+            'abono.monto.gt' => 'El monto a cuenta debe ser mayor a 0.',
+            'abono.medio_pago_codigo.required_with' => 'Elige un medio de pago válido para el abono.',
+            'abono.medio_pago_codigo.exists' => 'Elige un medio de pago válido para el abono.',
         ]);
 
         // venta de una cotizacion vigente: sus precios se respetan aunque el rol no pueda cambiar precios
@@ -264,7 +274,7 @@ class PosController extends Controller
         // la misma venta enviada dos veces (doble clic, recarga, respuesta que no llegó) se registra una sola vez:
         // el POS manda una clave por carrito y con ella se devuelve la venta ya hecha en vez de repetirla
         $claveCache = filled($datos['clave'] ?? null) ? "pos.venta.{$request->user()->id}.{$datos['clave']}" : null;
-        $firma = md5(json_encode([$datos['tipo_comprobante_codigo'], $datos['cliente_id'] ?? null, $esCredito, $datos['items'], $datos['pagos'] ?? []]));
+        $firma = md5(json_encode([$datos['tipo_comprobante_codigo'], $datos['cliente_id'] ?? null, $esCredito, $datos['items'], $datos['pagos'] ?? [], $datos['abono'] ?? null]));
         if ($claveCache && ($previa = Cache::get($claveCache)) && $previa['firma'] === $firma) {
             $registrada = Comprobante::whereKey($previa['id'])->where('empresa_id', $empresa->id)->first();
             if ($registrada) {
@@ -306,8 +316,18 @@ class PosController extends Controller
 
         $comprobante->loadMissing(['cliente:id,email,telefono', 'empresa:id,razon_social,nombre_comercial,facturacion_electronica']);
 
+        // venta fiada: lo que el cliente dejo a cuenta en el momento y lo que le queda por pagar
+        $abono = null;
+        $saldo = null;
+        if ($esCredito) {
+            $comprobante->loadMissing('cuentaPorCobrar.cobros.medioPago');
+            $abono = $comprobante->cuentaPorCobrar?->abonoInicial();
+            $saldo = round((float) $comprobante->total - (float) ($abono?->monto ?? 0), 2);
+        }
+
         $mensaje = match (true) {
             $yaRegistrada => "La venta {$numero} por S/ {$total} ya estaba registrada; no se repitió.",
+            $esCredito && $abono => "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\": a cuenta S/ ".number_format((float) $abono->monto, 2).', saldo S/ '.number_format($saldo, 2).'.',
             $esCredito => "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\".",
             default => "Venta {$numero} registrada por S/ {$total}.",
         };
@@ -327,6 +347,10 @@ class PosController extends Controller
                 'cliente_telefono' => $comprobante->cliente?->telefono,
                 'enlace_publico' => ComprobanteController::enlacePublico($comprobante),
                 'puntos' => $this->puntosDeLaVenta($comprobante),
+                // venta fiada: abono dejado a cuenta (0 si no hubo) y saldo pendiente (null si fue al contado)
+                'abono' => (float) ($abono?->monto ?? 0),
+                'abono_medio' => $abono?->medioPago?->nombre,
+                'saldo' => $saldo,
             ])
             ->with('success', $mensaje);
     }

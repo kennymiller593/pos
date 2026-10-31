@@ -150,6 +150,17 @@
             @if ($comprobante->fecha_vencimiento)
                 <div class="vence">Pagar hasta el {{ $comprobante->fecha_vencimiento->format('d/m/Y') }}</div>
             @endif
+            @if (!empty($abono))
+                {{-- lo que el cliente dejo a cuenta en el momento y lo que le queda por pagar --}}
+                <div class="fila" style="margin-top: 3px;">
+                    <span class="izq">A CUENTA ({{ $abono->medioPago?->nombre ?? $abono->medio_pago_codigo }})</span>
+                    <span class="der">S/ {{ number_format($abono->monto, 2) }}</span>
+                </div>
+                <div class="fila negrita">
+                    <span class="izq">SALDO</span>
+                    <span class="der">S/ {{ number_format((float) $comprobante->total - (float) $abono->monto, 2) }}</span>
+                </div>
+            @endif
         </div>
     @elseif ($comprobante->pagos->isNotEmpty())
         <div class="separador"></div>

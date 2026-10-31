@@ -90,6 +90,11 @@ class CuentaPorCobrarController extends Controller
             return back()->with('error', 'Esta cuenta ya está pagada.');
         }
 
+        // la venta ya se mandó a anular y SUNAT aún procesa la baja: al confirmarse, la deuda desaparece
+        if ($cuenta->comprobante?->sunat?->estado === 'baja_pendiente') {
+            return back()->with('error', 'Esta venta está en proceso de anulación en SUNAT: no se puede cobrar.');
+        }
+
         // cada sucursal cobra sus propias deudas: el dinero entra en una caja de la sucursal que vendió
         $sucursalVenta = $cuenta->comprobante?->sucursal_id;
         if ($sucursalVenta && $apertura->caja?->sucursal_id !== $sucursalVenta) {

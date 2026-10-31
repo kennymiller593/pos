@@ -120,7 +120,7 @@
                 <td class="etiqueta">Condición</td>
                 <td>
                     @if ($comprobante->es_credito)
-                        <strong>CRÉDITO</strong>{{ $comprobante->fecha_vencimiento ? ' — vence ' . $comprobante->fecha_vencimiento->format('d/m/Y') : '' }}
+                        <strong>CRÉDITO</strong>{{ $comprobante->fecha_vencimiento ? ' — vence ' . $comprobante->fecha_vencimiento->format('d/m/Y') : '' }}{{ !empty($abono) ? ' — a cuenta S/ ' . number_format($abono->monto, 2) . ' · saldo S/ ' . number_format((float) $comprobante->total - (float) $abono->monto, 2) : '' }}
                     @else
                         CONTADO
                     @endif
@@ -194,6 +194,13 @@
         <div class="seccion" style="font-size: 10px; color: #57534e;">
             <span class="etiqueta">Forma de pago:</span>
             {{ $comprobante->pagos->map(fn ($p) => ($p->medioPago?->nombre ?? $p->medio_pago_codigo) . ' S/ ' . number_format($p->monto, 2))->implode(' · ') }}
+        </div>
+    @elseif (!empty($abono))
+        {{-- venta fiada con abono en el momento --}}
+        <div class="seccion" style="font-size: 10px; color: #57534e;">
+            <span class="etiqueta">Forma de pago:</span>
+            A cuenta: {{ $abono->medioPago?->nombre ?? $abono->medio_pago_codigo }} S/ {{ number_format($abono->monto, 2) }}
+            · Saldo: S/ {{ number_format((float) $comprobante->total - (float) $abono->monto, 2) }}
         </div>
     @endif
 

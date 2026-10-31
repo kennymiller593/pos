@@ -218,6 +218,7 @@ class ComprobanteController extends Controller
             'sucursal:id,nombre,direccion',
             'caja:id,ancho_ticket',
             'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',
+            'cuentaPorCobrar.cobros.medioPago:codigo,nombre',
         ]);
 
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
@@ -226,6 +227,8 @@ class ComprobanteController extends Controller
         $ancho = (int) ($comprobante->caja?->ancho_ticket ?? 80);
         $qr = $this->pdf->qr($comprobante, $empresa);
         $puntos = $this->puntosDelTicket($comprobante);
+        // venta fiada con abono en el momento: el ticket muestra lo pagado a cuenta y el saldo
+        $abono = $comprobante->cuentaPorCobrar?->abonoInicial();
 
         // impresion directa: la misma vista como HTML que se imprime solo desde el
         // navegador (con Chrome en --kiosk-printing sale a la termica sin dialogo)
@@ -239,6 +242,7 @@ class ComprobanteController extends Controller
                 'qr' => $qr,
                 'hash' => $comprobante->hash_cpe,
                 'puntos' => $puntos,
+                'abono' => $abono,
                 'imprimirDirecto' => true,
             ]);
         }
@@ -252,6 +256,7 @@ class ComprobanteController extends Controller
             + ($comprobante->cliente_nombre ? 7 : 0)
             + 3.5 // linea de condicion (contado / credito)
             + ($comprobante->es_credito ? 14 : 0)
+            + ($abono ? 7 : 0) // filas "a cuenta" y "saldo" dentro del recuadro de credito
             + ($comprobante->estado === 'anulado' ? 10 : 0)
             + ($comprobante->comprobanteRef ? 4 : 0)
             + ($logo ? ($ancho === 58 ? 26 : 32) : 0) // alto máximo del logo en el ticket + su margen
@@ -271,6 +276,7 @@ class ComprobanteController extends Controller
             'qr' => $qr,
             'hash' => $comprobante->hash_cpe,
             'puntos' => $puntos,
+            'abono' => $abono,
         ])
             ->setOption('page-width', "{$ancho}mm")
             ->setOption('page-height', "{$alto}mm")

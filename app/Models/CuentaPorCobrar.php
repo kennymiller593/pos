@@ -51,4 +51,10 @@ class CuentaPorCobrar extends Model
     {
         return $this->hasMany(Cobro::class, 'cuenta_id');
     }
+
+    /** El abono que el cliente dejó al momento de la venta ("paga ahora, a cuenta"), si lo hubo. */
+    public function abonoInicial(): ?Cobro
+    {
+        return $this->cobros->firstWhere('abono_inicial', true);
+    }
 }

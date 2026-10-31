@@ -123,10 +123,14 @@ class SunatService
         if ($comprobante->es_credito) {
             $vencimiento = $comprobante->fecha_vencimiento ?? $comprobante->fecha_emision->copy()->addDays(30);
 
-            $invoice->setFormaPago(new FormaPagoCredito($total))
+            // lo pagado a cuenta en la propia venta no va en la cuota: SUNAT solo espera el saldo fiado
+            $comprobante->loadMissing('cuentaPorCobrar.cobros');
+            $pendiente = round($total - (float) ($comprobante->cuentaPorCobrar?->abonoInicial()?->monto ?? 0), 2);
+
+            $invoice->setFormaPago(new FormaPagoCredito($pendiente))
                 ->setCuotas([(new Cuota)
                     ->setMoneda('PEN')
-                    ->setMonto($total)
+                    ->setMonto($pendiente)
                     ->setFechaPago(Carbon::parse($vencimiento->format('Y-m-d'), 'America/Lima'))]);
         } else {
             $invoice->setFormaPago(new FormaPagoContado);

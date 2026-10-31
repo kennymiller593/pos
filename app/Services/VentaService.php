@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\AperturaCaja;
 use App\Models\Auditoria;
 use App\Models\Cliente;
+use App\Models\Cobro;
 use App\Models\Comprobante;
 use App\Models\ComprobanteSunat;
 use App\Models\CuentaPorCobrar;
@@ -44,7 +45,9 @@ class VentaService
      *
      * $datos ya validados: tipo_comprobante_codigo, cliente_id?, es_credito,
      * items[{presentacion_id, cantidad}], pagos[{medio_pago_codigo, monto, referencia?}],
-     * puntos_canjeados? (su valor ya viene repartido como descuento en los items)
+     * puntos_canjeados? (su valor ya viene repartido como descuento en los items),
+     * abono?{medio_pago_codigo, monto, referencia?} solo con es_credito: lo que el cliente
+     * paga ahora a cuenta; queda como cobro del turno y la deuda nace por el saldo.
      *
      * @throws ErrorDeNegocio
      */
@@ -69,8 +72,12 @@ class VentaService
         $puntosCanjeados = (int) ($datos['puntos_canjeados'] ?? 0);
         $this->puntos->validarCanje($usuario->empresa, $cliente, $puntosCanjeados, (float) $totales['descuentos']);
 
+        // "paga ahora, a cuenta": solo lo que queda fiado consume la linea de credito
+        $abono = $esCredito ? $this->normalizarAbono($datos['abono'] ?? null, $totalVenta) : null;
+        $saldoCredito = round($totalVenta - ($abono['monto'] ?? 0), 2);
+
         if ($esCredito) {
-            $this->validarLineaDeCredito($cliente, $totalVenta);
+            $this->validarLineaDeCredito($cliente, $saldoCredito);
             $datos['pagos'] = [];
         } else {
             $this->validarPagos($datos['pagos'] ?? [], $totalVenta);
@@ -79,13 +86,13 @@ class VentaService
         $this->validarStock($lineas, $sucursalId);
         $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
-        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
+        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $abono, $saldoCredito, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
             // dentro de la transaccion se vuelve a validar con bloqueo: dos cajas vendiendo
             // el mismo producto a la vez se serializan aqui y la segunda ve el stock real
             $this->validarStock($lineas, $sucursalId, bloquear: true);
 
             if ($esCredito) {
-                $this->validarLineaDeCredito($cliente, $totalVenta, bloquear: true);
+                $this->validarLineaDeCredito($cliente, $saldoCredito, bloquear: true);
             }
 
             // con el cliente bloqueado: dos cajas no canjean los mismos puntos a la vez
@@ -130,14 +137,18 @@ class VentaService
             ]);
 
             if ($esCredito) {
-                CuentaPorCobrar::create([
+                $cuenta = CuentaPorCobrar::create([
                     'empresa_id' => $empresaId,
                     'comprobante_id' => $comprobante->id,
                     'cliente_id' => $cliente->id,
                     'monto_total' => $totalVenta,
-                    'monto_pagado' => 0,
-                    'estado' => 'pendiente',
+                    'monto_pagado' => $abono['monto'] ?? 0,
+                    'estado' => $abono ? 'parcial' : 'pendiente',
                 ]);
+
+                if ($abono) {
+                    $this->registrarAbonoInicial($cuenta, $abono, $apertura, $usuario);
+                }
             }
 
             foreach ($lineas as $linea) {
@@ -406,8 +417,9 @@ class VentaService
             throw new ErrorDeNegocio('Una nota de crédito no se puede anular.');
         }
 
+        // el abono dejado en la propia venta se revierte con ella; un cobro posterior ya no
         $cuenta = $comprobante->cuentaPorCobrar;
-        if ($cuenta && (float) $cuenta->monto_pagado > 0) {
+        if ($cuenta && $cuenta->cobros()->where('abono_inicial', false)->exists()) {
             throw new ErrorDeNegocio('No se puede anular: la venta al crédito ya tiene cobros registrados.');
         }
 
@@ -459,7 +471,17 @@ class VentaService
 
             // los pagos dejan de ser ingresos validos (el arqueo del turno abierto se ajusta solo)
             $comprobante->pagos()->delete();
-            $comprobante->cuentaPorCobrar?->delete();
+
+            // solo se revierte el abono dejado en la propia venta; si entre la anulación y su confirmación
+            // (baja pendiente en SUNAT) se cobró algo más, ese dinero ya está en caja y no se puede borrar
+            $cuenta = $comprobante->cuentaPorCobrar;
+            if ($cuenta) {
+                if ($cuenta->cobros()->where('abono_inicial', false)->exists()) {
+                    throw new ErrorDeNegocio('No se puede anular: la venta al crédito ya tiene cobros registrados.');
+                }
+                $cuenta->cobros()->where('abono_inicial', true)->delete();
+                $cuenta->delete();
+            }
 
             // se quitan los puntos que dio la venta y se devuelven los que se canjearon en ella
             $this->puntos->porAnulacion($comprobante, $usuario);
@@ -611,7 +633,54 @@ class VentaService
         return (float) $presentacion->precio_venta;
     }
 
-    private function validarLineaDeCredito(Cliente $cliente, float $totalVenta, bool $bloquear = false): void
+    /**
+     * Abono que el cliente deja al fiar ("paga ahora, a cuenta"): null si no hubo.
+     * Debe ser mayor a 0 y menor al total; si lo cubre, la venta es al contado.
+     *
+     * @return array{medio_pago_codigo: string, monto: float, referencia: ?string}|null
+     *
+     * @throws ErrorDeNegocio
+     */
+    private function normalizarAbono(?array $abono, float $totalVenta): ?array
+    {
+        if (! $abono || ! isset($abono['monto']) || $abono['monto'] === '') {
+            return null;
+        }
+
+        $monto = round((float) $abono['monto'], 2);
+
+        if ($monto <= 0) {
+            throw new ErrorDeNegocio('El monto a cuenta debe ser mayor a 0.');
+        }
+
+        if ($monto >= $totalVenta - 0.005) {
+            throw new ErrorDeNegocio('El abono cubre el total de la venta: regístrala al contado en vez de fiarla.');
+        }
+
+        return [
+            'medio_pago_codigo' => (string) $abono['medio_pago_codigo'],
+            'monto' => $monto,
+            'referencia' => filled($abono['referencia'] ?? null) ? (string) $abono['referencia'] : null,
+        ];
+    }
+
+    /** El abono inicial entra como cobro del turno abierto, marcado para que la anulación de la venta lo revierta. */
+    private function registrarAbonoInicial(CuentaPorCobrar $cuenta, array $abono, AperturaCaja $apertura, Usuario $usuario): Cobro
+    {
+        return Cobro::create([
+            'empresa_id' => $cuenta->empresa_id,
+            'cuenta_id' => $cuenta->id,
+            'apertura_id' => $apertura->id,
+            'usuario_id' => $usuario->id,
+            'medio_pago_codigo' => $abono['medio_pago_codigo'],
+            'monto' => $abono['monto'],
+            'referencia' => $abono['referencia'],
+            'abono_inicial' => true,
+        ]);
+    }
+
+    /** $saldoFiado es lo que queda por cobrar de la venta (total menos el abono a cuenta, si lo hubo). */
+    private function validarLineaDeCredito(Cliente $cliente, float $saldoFiado, bool $bloquear = false): void
     {
         if ($bloquear) {
             // serializa dos ventas al credito simultaneas del mismo cliente
@@ -630,10 +699,11 @@ class VentaService
             ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0) as saldo')
             ->value('saldo');
 
-        if ($deuda + $totalVenta > $limite) {
+        if ($deuda + $saldoFiado > $limite) {
             $disponible = number_format(max(0, $limite - $deuda), 2);
+            $fiado = number_format($saldoFiado, 2);
 
-            throw new ErrorDeNegocio("La venta excede el crédito de \"{$cliente->nombre}\" (disponible: S/ {$disponible}).");
+            throw new ErrorDeNegocio("El saldo fiado (S/ {$fiado}) excede el crédito de \"{$cliente->nombre}\" (disponible: S/ {$disponible}).");
         }
     }
 

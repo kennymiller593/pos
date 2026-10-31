@@ -735,6 +735,38 @@ const puedeFiar = computed(() =>
     clienteSeleccionado.value && Number(clienteSeleccionado.value.limite_credito ?? 0) > 0,
 )
 
+// crédito con abono: el cliente paga una parte ahora (un solo medio) y solo el saldo queda fiado
+const ABONO_VACIO = () => ({ activo: false, monto: '', medio_pago_codigo: 'efectivo', referencia: '' })
+const abono = ref(ABONO_VACIO())
+const inputAbono = ref(null)
+const montoAbono = computed(() => (abono.value.activo ? Math.round(Number(abono.value.monto || 0) * 100) / 100 : 0))
+const saldoCredito = computed(() => Math.round((total.value - montoAbono.value) * 100) / 100)
+const abonoCubreTotal = computed(() => abono.value.activo && montoAbono.value >= total.value - 0.005)
+const abonoEsBilletera = computed(() => abono.value.activo && BILLETERAS.includes(abono.value.medio_pago_codigo))
+const abonoValido = computed(() => {
+    if (!abono.value.activo) return true
+    if (!(montoAbono.value > 0) || abonoCubreTotal.value) return false
+    return !referenciaObligatoria(abono.value.medio_pago_codigo) || !!abono.value.referencia.trim()
+})
+const abonoErrorMensaje = computed(() => {
+    if (!abono.value.activo) return null
+    if (abonoCubreTotal.value) return 'El abono cubre el total: registra la venta al contado.'
+    if (!(montoAbono.value > 0)) return 'Ingresa cuánto paga ahora.'
+    if (referenciaObligatoria(abono.value.medio_pago_codigo) && !abono.value.referencia.trim()) return 'Ingresa el número de operación del abono.'
+    return null
+})
+
+// la referencia es de un medio concreto: al cambiar de medio no debe quedar pegada al nuevo
+function elegirMedioAbono(codigo) {
+    if (abono.value.medio_pago_codigo !== codigo) abono.value.referencia = ''
+    abono.value.medio_pago_codigo = codigo
+}
+
+function alternarAbono() {
+    abono.value.activo = !abono.value.activo
+    if (abono.value.activo && window.matchMedia('(pointer: fine)').matches) nextTick(() => inputAbono.value?.focus())
+}
+
 // la factura solo puede emitirse a un cliente con RUC
 const facturaSinRuc = computed(() =>
     tipoComprobante.value === '01' && clienteSeleccionado.value?.tipo_documento_codigo !== '6',
@@ -744,7 +776,7 @@ const puedeCobrar = computed(() => {
     if (procesando.value || !carrito.value.length || hayDescuentosInvalidos.value) return false
     if (facturaSinRuc.value) return false
     if (condicion.value === 'credito') {
-        return puedeFiar.value && total.value <= creditoDisponible.value + 0.001
+        return puedeFiar.value && abonoValido.value && saldoCredito.value <= creditoDisponible.value + 0.001
     }
     if (esEfectivoSimple.value) return recibido.value !== '' && Number(recibido.value) >= total.value - 0.001
     return pagos.value.length > 0 && pagos.value.every(lineaValida) && Math.abs(restante.value) < 0.005
@@ -760,6 +792,7 @@ function abrirCobro() {
     canalVenta.value = 'tienda'
     modoMixto.value = false
     pagos.value = [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: '' }]
+    abono.value = ABONO_VACIO()
     modalCobro.value = true
     // en el celular no se enfoca: abriria el teclado y taparia el boton de confirmar
     if (window.matchMedia('(pointer: fine)').matches) {
@@ -941,6 +974,14 @@ function cobrar() {
         cotizacion_id: cotizacionEnVenta.value?.id ?? null,
         puntos_canjeados: puntosCanjeados.value,
         es_credito: esCredito,
+        // fiado con abono: lo que paga ahora se registra como cobro y solo el saldo queda de deuda
+        abono: esCredito && abono.value.activo
+            ? {
+                medio_pago_codigo: abono.value.medio_pago_codigo,
+                monto: Number(montoAbono.value.toFixed(2)),
+                referencia: abono.value.referencia.trim() || null,
+            }
+            : null,
         items: carrito.value.map((i) => ({
             presentacion_id: i.presentacion.id,
             cantidad: Number(i.cantidad),
@@ -1725,6 +1766,10 @@ const claseInput =
                                         <template v-else>¡Venta registrada!</template>
                                     </h3>
                                     <p v-if="datosVenta" class="mt-0.5 text-2xl font-bold tracking-tight text-[#10B981] dark:text-emerald-400">{{ soles(datosVenta.total) }}</p>
+                                    <p v-if="datosVenta?.abono > 0" class="mt-1 text-sm text-[#64748B] dark:text-neutral-400" data-venta-abono>
+                                        A cuenta <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(datosVenta.abono) }}</span><template v-if="datosVenta.abono_medio"> ({{ datosVenta.abono_medio }})</template>
+                                        · Saldo fiado <span class="font-semibold text-amber-700 dark:text-amber-300">{{ soles(datosVenta.saldo) }}</span>
+                                    </p>
                                     <p v-if="datosVenta?.puntos" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-[#64748B] dark:text-neutral-400" data-puntos-venta>
                                         <Star class="size-3.5 fill-amber-400 text-amber-400" />
                                         <span v-if="datosVenta.puntos.canjeados > 0">Canjeó {{ datosVenta.puntos.canjeados }}</span>
@@ -2128,21 +2173,110 @@ const claseInput =
                         Para fiar, primero elige un cliente en el carrito.
                     </p>
 
-                    <!-- Crédito: resumen -->
-                    <div v-if="condicion === 'credito'" class="mt-4 rounded-xl bg-amber-50 p-4 text-sm dark:bg-amber-950/40">
-                        <div class="flex justify-between">
-                            <span class="text-neutral-600 dark:text-neutral-300">Crédito disponible de {{ clienteSeleccionado.nombre }}</span>
-                            <span class="font-semibold">{{ soles(creditoDisponible) }}</span>
+                    <!-- Crédito: abono opcional y resumen -->
+                    <div v-if="condicion === 'credito'" class="mt-4 rounded-xl bg-amber-50 p-4 text-sm dark:bg-amber-950/40" data-credito-resumen>
+                        <div class="flex justify-between gap-3">
+                            <span class="min-w-0 truncate text-neutral-600 dark:text-neutral-300">Crédito disponible de {{ clienteSeleccionado.nombre }}</span>
+                            <span class="shrink-0 font-semibold">{{ soles(creditoDisponible) }}</span>
+                        </div>
+
+                        <!-- ¿paga algo ahora? -->
+                        <div class="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-3 py-2.5 dark:border-amber-900/60 dark:bg-neutral-900">
+                            <span class="font-medium">¿Paga algo ahora?</span>
+                            <button
+                                type="button"
+                                role="switch"
+                                :aria-checked="abono.activo"
+                                class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors"
+                                :class="abono.activo ? 'bg-amber-500' : 'bg-stone-300 dark:bg-neutral-700'"
+                                data-abono-toggle
+                                @click="alternarAbono"
+                            >
+                                <span class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform" :class="abono.activo ? 'translate-x-5' : ''" />
+                            </button>
+                        </div>
+
+                        <template v-if="abono.activo">
+                            <label class="mt-3 mb-1 block text-sm font-medium" for="abono_monto">Paga ahora</label>
+                            <div class="relative">
+                                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-neutral-400">S/</span>
+                                <input
+                                    id="abono_monto"
+                                    ref="inputAbono"
+                                    v-model="abono.monto"
+                                    type="number"
+                                    inputmode="decimal"
+                                    step="0.01"
+                                    min="0"
+                                    :max="total"
+                                    placeholder="0.00"
+                                    class="h-11 w-full rounded-xl border border-stone-300 bg-white pr-3 pl-9 text-right text-base font-semibold focus:border-amber-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                    data-abono-monto
+                                    @focus="$event.target.select()"
+                                />
+                            </div>
+
+                            <div class="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5" data-abono-medios>
+                                <button
+                                    v-for="m in mediosOrdenados"
+                                    :key="m.codigo"
+                                    type="button"
+                                    class="flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-xs font-medium transition-colors"
+                                    :class="abono.medio_pago_codigo === m.codigo
+                                        ? 'border-amber-500 bg-amber-100 text-amber-900 ring-1 ring-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                                        : 'border-stone-300 bg-white text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                    :data-abono-medio="m.codigo"
+                                    @click="elegirMedioAbono(m.codigo)"
+                                >
+                                    <component :is="ICONO_MEDIO[m.codigo] ?? Banknote" class="size-4" />
+                                    <span class="w-full truncate text-center">{{ NOMBRE_CORTO[m.codigo] ?? m.nombre }}</span>
+                                </button>
+                            </div>
+
+                            <!-- billetera: QR para que el cliente escanee el abono -->
+                            <div v-if="abonoEsBilletera" class="mt-3">
+                                <PanelBilletera
+                                    :codigo="abono.medio_pago_codigo"
+                                    :nombre="medioDe(abono.medio_pago_codigo)?.nombre ?? ''"
+                                    :datos="cobrosQr[abono.medio_pago_codigo] ?? null"
+                                    :monto="montoAbono"
+                                >
+                                    <template #vacio>
+                                        Confirma el abono en tu celular y registra la venta.
+                                    </template>
+                                </PanelBilletera>
+                            </div>
+                            <input
+                                v-if="medioDe(abono.medio_pago_codigo)?.requiere_referencia"
+                                v-model="abono.referencia"
+                                type="text"
+                                :placeholder="referenciaObligatoria(abono.medio_pago_codigo) ? 'N° de operación / referencia' : 'N° de operación (opcional)'"
+                                class="mt-2 h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm focus:border-amber-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                data-abono-referencia
+                            />
+                        </template>
+
+                        <!-- resumen: cuánto paga y cuánto queda fiado -->
+                        <div class="mt-3 space-y-1 border-t border-amber-200 pt-3 dark:border-amber-900/60">
+                            <div class="flex justify-between text-neutral-600 dark:text-neutral-300">
+                                <span>Total de la venta</span>
+                                <span>{{ soles(total) }}</span>
+                            </div>
+                            <div v-if="abono.activo" class="flex justify-between text-neutral-600 dark:text-neutral-300" data-abono-acuenta>
+                                <span>A cuenta ({{ NOMBRE_CORTO[abono.medio_pago_codigo] ?? medioDe(abono.medio_pago_codigo)?.nombre }})</span>
+                                <span>− {{ soles(montoAbono) }}</span>
+                            </div>
+                            <div class="flex justify-between text-base font-semibold" data-abono-saldo>
+                                <span>Queda como deuda</span>
+                                <span :class="saldoCredito <= creditoDisponible + 0.001 ? 'text-amber-800 dark:text-amber-300' : 'text-red-700 dark:text-red-400'">{{ soles(Math.max(0, saldoCredito)) }}</span>
+                            </div>
                         </div>
                         <p
-                            class="mt-2 font-medium"
-                            :class="total <= creditoDisponible + 0.001
-                                ? 'text-amber-800 dark:text-amber-300'
-                                : 'text-red-700 dark:text-red-400'"
+                            v-if="abonoErrorMensaje || saldoCredito > creditoDisponible + 0.001"
+                            class="mt-2 rounded-xl bg-red-100 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-500/15 dark:text-red-300"
+                            data-abono-error
                         >
-                            {{ total <= creditoDisponible + 0.001
-                                ? `El total de ${soles(total)} quedará como deuda del cliente.`
-                                : `La venta excede el crédito disponible.` }}
+                            {{ abonoErrorMensaje ?? `La deuda de ${soles(saldoCredito)} excede el crédito disponible.` }}
                         </p>
                     </div>
 
@@ -2328,7 +2462,9 @@ const claseInput =
                             {{ procesando
                                 ? 'Registrando venta...'
                                 : condicion === 'credito'
-                                    ? `Fiar · ${soles(total)}`
+                                    ? abono.activo && abonoValido
+                                        ? `Fiar ${soles(saldoCredito)} · a cuenta ${soles(montoAbono)}`
+                                        : `Fiar · ${soles(total)}`
                                     : esBilletera
                                         ? `Ya pagó · Confirmar ${soles(total)}`
                                         : `Confirmar venta · ${soles(total)}` }}

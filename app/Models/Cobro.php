@@ -23,12 +23,14 @@ class Cobro extends Model
         'medio_pago_codigo',
         'monto',
         'referencia',
+        'abono_inicial',
     ];
 
     protected function casts(): array
     {
         return [
             'monto' => 'decimal:2',
+            'abono_inicial' => 'boolean',
             'creado_en' => 'datetime',
         ];
     }

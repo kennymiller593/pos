@@ -31,6 +31,7 @@ class ComprobantePdfService
             'sucursal:id,nombre,direccion',
             'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',
             'sunat:comprobante_id,estado',
+            'cuentaPorCobrar.cobros.medioPago:codigo,nombre',
         ]);
 
         $empresa = $comprobante->empresa;
@@ -45,6 +46,8 @@ class ComprobantePdfService
             'hash' => $comprobante->hash_cpe,
             'letras' => NumeroALetras::enSoles((float) $comprobante->total),
             'motivoNota' => NotaCreditoService::MOTIVOS[trim((string) $comprobante->motivo_nota)] ?? null,
+            // venta fiada con abono en el momento: lo pagado a cuenta y el saldo
+            'abono' => $comprobante->cuentaPorCobrar?->abonoInicial(),
         ])
             ->setOption('page-size', $hoja === 'A5' ? 'A5' : 'A4')
             // en A5 la plantilla A4 entra reducida al 70 %
