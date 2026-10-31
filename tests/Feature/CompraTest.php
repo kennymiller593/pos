@@ -89,6 +89,27 @@ class CompraTest extends TestCase
         $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->missing('productos.0.presentaciones.0.ultimo_costo'));
     }
 
+    public function test_sin_compras_la_referencia_sale_de_la_ultima_capa_de_inventario(): void
+    {
+        // stock que entró sin compra (migración o ajuste): su costo es la referencia, llevado a cada presentación
+        $producto = $this->crearProducto(precio: 13.00);
+        $unidad = $producto->presentaciones->first();
+        $caja12 = $this->agregarPresentacion($producto, 'Caja x12', 12, 145.00);
+        $this->darStock($producto, 10, 7.00, diasAtras: 5);
+        $this->darStock($producto, 4, 7.50);
+
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p
+            ->where('productos.0.presentaciones.0.id', $unidad->id)->where('productos.0.presentaciones.0.ultimo_costo', fn ($v) => (float) $v === 7.5)
+            ->where('productos.0.presentaciones.1.id', $caja12->id)->where('productos.0.presentaciones.1.ultimo_costo', fn ($v) => (float) $v === 90.0));
+
+        // una compra registrada manda sobre la capa
+        $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-1', 'fecha' => now()->toDateString(), 'es_credito' => false,
+            'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 2, 'costo_unitario' => 8.00]],
+        ])->assertSessionHas('success');
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn ($p) => $p->where('productos.0.presentaciones.0.ultimo_costo', fn ($v) => (float) $v === 8.0));
+    }
+
     public function test_al_comprar_sugiere_los_lotes_vigentes_registrados_en_cualquier_sucursal(): void
     {
         $producto = $this->crearProducto(precio: 20.00, atributos: ['controla_lote' => true]);

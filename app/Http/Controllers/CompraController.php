@@ -157,6 +157,14 @@ class CompraController extends Controller
             ->orderBy('compra_detalles.presentacion_id')->orderByDesc('compras.fecha')->orderByDesc('compras.creado_en')
             ->toBase()->get()->pluck('costo_unitario', 'presentacion_id');
 
+        // sin compras (stock inicial, ajuste de entrada, migración): el costo de la última capa de inventario,
+        // por unidad base; se lleva a la presentación con su factor
+        $costoCapa = DB::table('capas_costo')
+            ->where('empresa_id', $empresaId)
+            ->selectRaw('DISTINCT ON (producto_id) producto_id, costo_unitario')
+            ->orderBy('producto_id')->orderByDesc('fecha_ingreso')->orderByDesc('id')
+            ->get()->pluck('costo_unitario', 'producto_id');
+
         // lotes vigentes de cada producto ya registrados en cualquier sucursal (los más recientes primero):
         // la misma mercadería repartida entre tiendas trae el mismo lote, así no se escribe dos veces
         $lotesRecientes = Lote::query()
@@ -189,7 +197,11 @@ class CompraController extends Controller
                     'factor_conversion' => (float) $pres->factor_conversion,
                     'es_default' => $pres->es_default,
                     'codigo_barras' => $pres->codigo_barras,
-                    'ultimo_costo' => isset($ultimoCosto[$pres->id]) ? (float) $ultimoCosto[$pres->id] : null,
+                    'ultimo_costo' => match (true) {
+                        isset($ultimoCosto[$pres->id]) => (float) $ultimoCosto[$pres->id],
+                        isset($costoCapa[$p->id]) => round((float) $costoCapa[$p->id] * (float) $pres->factor_conversion, 2),
+                        default => null,
+                    },
                 ]),
             ]),
             'tiposComprobante' => TipoComprobante::whereIn('codigo', ['01', '03', '00'])->orderBy('codigo')->get(['codigo', 'nombre']),
