@@ -67,6 +67,8 @@
     <style>:root { --marca: {{ $tienda['colores'][0] }}; --marca-oscuro: {{ $tienda['colores'][1] }}; --marca-suave: {{ $tienda['colores'][2] }}; --sobre-marca: {{ $tienda['colores'][3] }}; --marca-texto: {{ $tienda['colores'][4] }}; }
         /* el tono oscuro (barra superior, pie, mosaicos) sale del color de la tienda mezclado con azul noche */
         :root { --mercado-fondo: {{ $tienda['secundario'][0] }}; --sobre-fondo: {{ $tienda['secundario'][2] }}; --boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][0] : 'var(--marca)' }}; --sobre-boton-carrito: {{ $tienda['secundario_propio'] ? $tienda['secundario'][2] : 'var(--sobre-marca)' }}; }
+        /* las vistas compartidas con la clásica (ficha del producto, tarjeta de relacionados) usan estos nombres: sin ellos el botón "Añadir al pedido" salía transparente */
+        :root { --secundario: var(--mercado-fondo); --secundario-oscuro: {{ $tienda['secundario'][1] }}; --sobre-secundario: var(--sobre-fondo); }
         @if (! $tienda['secundario_propio'])@supports (color: color-mix(in srgb, red 50%, blue)) { :root { --mercado-fondo: color-mix(in srgb, var(--marca) 22%, #0b1627); } }@endif
         /* las vistas compartidas con la clásica (producto, páginas) se ensanchan igual que el resto de Mercado */
         [data-plantilla="mercado"] .max-w-7xl { max-width: 100rem; }
@@ -337,13 +339,14 @@
     {{-- WhatsApp flotante (lo reemplaza el chatbot si está encendido) --}}
     @if ($whatsapp && ! $asistente)
         <a href="{{ $whatsapp }}" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp" title="Escríbenos por WhatsApp" data-whatsapp-flotante
-            class="group fixed right-4 bottom-4 z-40 h-14 items-center rounded-full bg-[#25D366] text-white shadow-lg ring-4 shadow-black/25 ring-white transition-colors hover:bg-[#1eb957] sm:right-6 sm:bottom-6 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
-            <span class="grid size-14 shrink-0 place-items-center">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-7'])</span>
+            class="group fixed right-3 bottom-3 z-40 h-11 items-center rounded-full bg-[#25D366] text-white shadow-lg ring-2 shadow-black/25 ring-white transition-colors hover:bg-[#1eb957] sm:right-6 sm:bottom-6 sm:h-14 sm:ring-4 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
+            <span class="grid size-11 shrink-0 place-items-center sm:size-14">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-6 sm:size-7'])</span>
             <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-48 group-hover:pr-5 lg:block">Consulta precios aquí</span>
         </a>
     @endif
     @if ($asistente)
-        @include('tienda.asistente')
+        {{-- en el celular el avatar va más chico: a tamaño completo tapaba el botón de la tarjeta de la derecha --}}
+        @include('tienda.asistente', ['flotanteCompacto' => true])
     @endif
     @yield('barra_movil')
 

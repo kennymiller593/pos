@@ -2,14 +2,19 @@
 @php
     $colorBot = $asistente['color'] ?: 'var(--marca)';
     $sobreBot = $asistente['sobre'] ?? 'var(--sobre-marca)';
+    // flotanteCompacto: en el celular el botón va de 44 px pegado a la esquina (lo pide la plantilla mercado,
+    // donde a 56 px tapaba el botón "Agregar" de la tarjeta de la derecha)
+    $compacto = $flotanteCompacto ?? false;
+    $claseBoton = $compacto ? 'right-3 bottom-3 h-11 ring-2 sm:right-6 sm:bottom-6 sm:h-14 sm:ring-4' : 'right-4 bottom-4 h-14 ring-4 sm:right-6 sm:bottom-6';
+    $claseAvatar = $compacto ? 'size-11 sm:size-14' : 'size-14';
 @endphp
 <div id="asistente" data-asistente style="--bot: {{ $colorBot }}; --sobre-bot: {{ $sobreBot }};">
     {{-- en celular va encima del botón de WhatsApp; en PC, encima de WhatsApp y del pedido --}}
     <button type="button" data-bot-abrir data-necesita-bot aria-label="Hablar con {{ $asistente['nombre'] }}" title="Hablar con {{ $asistente['nombre'] }}"
-        class="group fixed right-4 bottom-4 z-40 h-14 cursor-pointer items-center rounded-full bg-(--bot) text-(--sobre-bot) shadow-lg ring-4 shadow-black/25 ring-white transition-transform hover:scale-105 sm:right-6 sm:bottom-6 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
-        <span class="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full">
+        class="group fixed {{ $claseBoton }} z-40 cursor-pointer items-center rounded-full bg-(--bot) text-(--sobre-bot) shadow-lg shadow-black/25 ring-white transition-transform hover:scale-105 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
+        <span class="grid {{ $claseAvatar }} shrink-0 place-items-center overflow-hidden rounded-full">
             @if ($asistente['avatar'])
-                <img src="{{ $asistente['avatar'] }}" alt="" class="size-14 object-cover">
+                <img src="{{ $asistente['avatar'] }}" alt="" class="{{ $claseAvatar }} object-cover">
             @else
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-7" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
             @endif
