@@ -158,7 +158,7 @@ const claseSeccion = 'rounded-2xl border border-slate-200 p-4 dark:border-neutra
                     </button>
                 </div>
 
-                <div class="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                <div class="scroll-fino flex-1 space-y-4 overflow-y-auto px-5 py-4">
                     <!-- ===== Efectivo ===== -->
                     <section :class="claseSeccion">
                         <div class="flex flex-wrap items-center justify-between gap-3">

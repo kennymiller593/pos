@@ -265,7 +265,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 class="mt-2 rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950/60"
                             >
                                 <p class="mb-1 text-[11px] font-semibold tracking-wider text-neutral-400 uppercase">Este rol puede</p>
-                                <ul class="max-h-36 space-y-0.5 overflow-y-auto text-xs text-neutral-600 dark:text-neutral-300">
+                                <ul class="scroll-fino max-h-36 space-y-0.5 overflow-y-auto text-xs text-neutral-600 dark:text-neutral-300">
                                     <li v-for="d in permisosRolElegido" :key="d" class="flex gap-1.5">
                                         <span class="text-emerald-600 dark:text-emerald-400">•</span>
                                         <span>{{ d }}</span>

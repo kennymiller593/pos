@@ -1712,7 +1712,7 @@ const claseInput =
                         <X class="size-4" />
                     </button>
 
-                    <div class="min-h-0 flex-1 overflow-y-auto">
+                    <div class="scroll-fino min-h-0 flex-1 overflow-y-auto">
                         <!-- Cabecera -->
                         <div class="grid gap-4 border-b border-[#E2E8F0] px-5 py-4 pr-12 sm:px-6 md:grid-cols-2 dark:border-neutral-800">
                             <div class="flex items-start gap-3">
@@ -2029,7 +2029,7 @@ const claseInput =
         <Teleport to="body">
             <div v-if="modalCobro" class="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
                 <div class="fixed inset-0 bg-neutral-950/60" @click="modalCobro = false" />
-                <div class="relative max-h-[94vh] w-full max-w-md min-w-0 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 supports-[height:100dvh]:max-h-[94dvh] sm:p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                <div class="scroll-fino relative max-h-[94vh] w-full max-w-md min-w-0 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 supports-[height:100dvh]:max-h-[94dvh] sm:p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                     <div class="mb-4 flex items-center justify-between">
                         <h3 class="text-lg font-semibold tracking-tight">Cobrar {{ soles(total) }}</h3>
                         <button

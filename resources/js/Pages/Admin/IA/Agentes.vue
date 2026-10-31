@@ -212,7 +212,7 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                         <h3 class="text-lg font-semibold tracking-tight">{{ editando ? 'Editar agente' : 'Nuevo agente' }}</h3>
                         <button type="button" class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 dark:hover:bg-neutral-800" @click="modal = false"><X class="size-5" /></button>
                     </div>
-                    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino min-h-0 flex-1 overflow-y-auto px-6 py-4">
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div>
                                 <label :class="claseLabel" for="ag_nombre">Nombre</label>
@@ -332,7 +332,7 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                         <h3 class="text-lg font-semibold tracking-tight">Probar "{{ agentePrueba?.nombre }}"</h3>
                         <button type="button" class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 dark:hover:bg-neutral-800" @click="modalPrueba = false"><X class="size-5" /></button>
                     </div>
-                    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino min-h-0 flex-1 overflow-y-auto px-6 py-4">
                         <div class="grid gap-3">
                             <div>
                                 <label :class="claseLabel" for="pr_empresa">Responder con el catálogo de</label>

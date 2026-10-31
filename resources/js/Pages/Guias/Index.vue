@@ -282,7 +282,7 @@ const claseIcono = 'rounded-lg p-2 text-neutral-500 hover:bg-stone-100 hover:tex
                         </button>
                     </div>
 
-                    <div class="max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
+                    <div class="scroll-fino max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
                         <!-- Respuesta de SUNAT -->
                         <div
                             v-if="ver.estado === 'anulada'"

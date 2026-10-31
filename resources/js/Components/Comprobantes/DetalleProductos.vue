@@ -34,7 +34,7 @@ const cantidadTexto = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFra
                 <p v-if="cargando" class="px-5 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">Cargando...</p>
                 <template v-else>
                     <!-- celular: una fila por producto -->
-                    <div class="max-h-[70vh] divide-y divide-[#F1F5F9] overflow-y-auto sm:hidden dark:divide-neutral-800">
+                    <div class="scroll-fino max-h-[70vh] divide-y divide-[#F1F5F9] overflow-y-auto sm:hidden dark:divide-neutral-800">
                         <div v-for="(d, i) in detalles" :key="d.id" class="flex gap-3 px-5 py-3 text-sm">
                             <span class="w-5 shrink-0 text-[#94A3B8] tabular-nums">{{ i + 1 }}</span>
                             <div class="min-w-0 flex-1">

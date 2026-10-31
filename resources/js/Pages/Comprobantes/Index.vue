@@ -902,7 +902,7 @@ const claseInput =
                     <!-- items para devolucion parcial -->
                     <div v-if="formNota.motivo === '07'" class="mt-4">
                         <p class="mb-2 text-sm font-medium">Productos a devolver</p>
-                        <div class="max-h-48 space-y-2 overflow-y-auto pr-1">
+                        <div class="scroll-fino max-h-48 space-y-2 overflow-y-auto pr-1">
                             <div
                                 v-for="d in comprobanteNota.detalles"
                                 :key="d.id"
@@ -1060,7 +1060,7 @@ const claseInput =
                         </div>
                         <div
                             v-if="resultadosClienteConv.length"
-                            class="mt-1 max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-xl border border-stone-200 dark:divide-neutral-800 dark:border-neutral-800"
+                            class="scroll-fino mt-1 max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-xl border border-stone-200 dark:divide-neutral-800 dark:border-neutral-800"
                         >
                             <button
                                 v-for="cli in resultadosClienteConv"
