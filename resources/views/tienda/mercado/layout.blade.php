@@ -4,8 +4,9 @@
     Comparte con la plantilla clásica el pedido (carrito), el buscador con sugerencias y el chatbot (tienda.js).
 --}}
 @php
-    $titulo = trim($__env->yieldContent('titulo')) ?: ($tienda['seo']['titulo'] ?: "{$tienda['nombre']} | Tienda en línea".($contactos['ciudad'] ? " en {$contactos['ciudad']}" : ''));
-    $resumen = \Illuminate\Support\Str::squish(trim($__env->yieldContent('resumen')) ?: ($tienda['seo']['descripcion'] ?: ($tienda['descripcion'] ?: "Tienda en línea de {$tienda['nombre']}. Mira nuestros productos y haz tu pedido por WhatsApp.")));
+    // @section ya escapa su texto y aquí se vuelve a escapar al imprimirlo: se deshace uno para que 1" no salga como 1&quot;
+    $titulo = trim(html_entity_decode($__env->yieldContent('titulo'), ENT_QUOTES | ENT_HTML5)) ?: ($tienda['seo']['titulo'] ?: "{$tienda['nombre']} | Tienda en línea".($contactos['ciudad'] ? " en {$contactos['ciudad']}" : ''));
+    $resumen = \Illuminate\Support\Str::squish(trim(html_entity_decode($__env->yieldContent('resumen'), ENT_QUOTES | ENT_HTML5)) ?: ($tienda['seo']['descripcion'] ?: ($tienda['descripcion'] ?: "Tienda en línea de {$tienda['nombre']}. Mira nuestros productos y haz tu pedido por WhatsApp.")));
     $canonica = trim($__env->yieldContent('canonica')) ?: $tienda['url'];
     $absoluta = fn (?string $ruta) => $ruta ? (str_starts_with($ruta, 'http') ? $ruta : rtrim($tienda['url'], '/').$ruta) : null;
     $imagenSocial = $absoluta(trim($__env->yieldContent('imagen')) ?: ($tienda['logo'] ?: $categorias->firstWhere('imagen', '!=', null)?->imagen));

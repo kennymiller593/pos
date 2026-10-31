@@ -183,6 +183,25 @@ class TiendaEnLineaTest extends TestCase
 
     // ---------------- tienda pública ----------------
 
+    public function test_el_titulo_no_escapa_dos_veces_y_sigue_seguro(): void
+    {
+        $this->crearProducto(precio: 30, atributos: ['nombre' => 'Aspersor 1" plast. & riego', 'codigo_interno' => 'P0009']);
+
+        foreach (['clasica', 'mercado'] as $plantilla) {
+            $this->publicar(['plantilla' => $plantilla]);
+
+            $this->tienda('/catalogo/aspersor-1-plast-riego')
+                ->assertOk()
+                ->assertSee('<title>Aspersor 1&quot; plast. &amp; riego · Agro Campo</title>', false)
+                ->assertDontSee('&amp;quot;', false);
+
+            // lo que escribe el visitante sigue saliendo escapado
+            $this->tienda('/catalogo?q='.urlencode('<script>x</script>'))
+                ->assertOk()
+                ->assertDontSee('<script>x</script>', false);
+        }
+    }
+
     public function test_la_portada_muestra_el_catalogo_con_buscador_y_contactos(): void
     {
         $this->publicar(['descripcion' => 'Insumos para tu campo', 'telefono' => '(01) 246 1234', 'email' => 'ventas@agro.pe', 'direccion' => 'Av. Los Agricultores 245', 'horario' => 'Lunes a sábado', 'instagram' => '@agrocampo']);
