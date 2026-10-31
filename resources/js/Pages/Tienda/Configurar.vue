@@ -46,7 +46,7 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
     { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'color_secundario', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
-    { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_titulo', 'portada_boton', 'anuncio'] },
+    { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_solo_foto', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'medicion', nombre: 'Medición', campos: ['medicion_ga4', 'medicion_meta', 'medicion_tiktok', 'medicion_clarity', 'medicion_google_verificacion'] },
@@ -117,6 +117,7 @@ const form = useForm({
     anuncio: props.tienda.config.anuncio ?? '',
     portada_imagen: null, // archivo nuevo, si se elige uno
     portada_imagen_quitar: false,
+    portada_solo_foto: props.tienda.config.portada_solo_foto ?? false,
     favicon: null, // ícono de la pestaña nuevo, si se elige uno
     favicon_quitar: false,
     banners: bannersGuardados(),
@@ -930,10 +931,10 @@ function guardarDescripcion() {
                     <!-- Foto de portada -->
                     <div>
                         <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(de fondo en la campaña de la portada, detrás del título y los destacados)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
-                        <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-neutral-800">
-                            <img :src="fotoPortada" alt="Foto de portada" class="aspect-[16/7] w-full object-cover" />
-                            <!-- el mismo velo que lleva en la tienda, para ver cómo se leerá el título -->
-                            <div class="pointer-events-none absolute inset-0 flex items-center bg-gradient-to-r from-neutral-950/85 via-neutral-950/55 to-neutral-950/15 px-5">
+                        <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 bg-stone-100 dark:border-neutral-800 dark:bg-neutral-800">
+                            <!-- entera si la foto ya trae su texto; si no, recortada y con el velo que lleva en la tienda, para ver cómo se leerá el título -->
+                            <img :src="fotoPortada" alt="Foto de portada" :class="form.portada_solo_foto ? 'h-auto w-full' : 'aspect-[16/7] w-full object-cover'" />
+                            <div v-if="!form.portada_solo_foto" class="pointer-events-none absolute inset-0 flex items-center bg-gradient-to-r from-neutral-950/85 via-neutral-950/55 to-neutral-950/15 px-5">
                                 <p class="max-w-[60%] text-lg leading-tight font-semibold text-white">{{ form.portada_titulo || 'El título de tu tienda' }}</p>
                             </div>
                             <div class="absolute top-2 right-2 flex gap-1.5">
@@ -958,7 +959,19 @@ function guardarDescripcion() {
                         </button>
                         <input ref="inputPortada" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Foto de portada" @change="elegirFoto" />
                         <p v-if="form.errors.portada_imagen" :class="claseError">{{ form.errors.portada_imagen }}</p>
-                        <p v-else :class="claseAyuda">Horizontal y de al menos 1600 px de ancho. JPG, PNG o WEBP, hasta 6 MB. Se oscurece un poco para que el título se lea.</p>
+                        <p v-else :class="claseAyuda">Horizontal y de al menos 1600 px de ancho. JPG, PNG o WEBP, hasta 6 MB.{{ form.portada_solo_foto ? '' : ' Se oscurece un poco para que el título se lea.' }}</p>
+                        <label v-if="fotoPortada" class="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 px-4 py-3 dark:border-neutral-800" data-solo-foto>
+                            <span>
+                                <span class="block text-sm font-medium">La foto ya tiene su propio texto</span>
+                                <span class="block text-xs text-neutral-500 dark:text-neutral-400">
+                                    {{ form.portada_solo_foto
+                                        ? 'Se muestra entera, sin recortes y sin el título ni los botones encima. Al tocarla se abre el catálogo.'
+                                        : 'Márcalo si es un diseño con texto (una campaña, una promoción): se verá completa y sin nada encima.' }}
+                                </span>
+                            </span>
+                            <input v-model="form.portada_solo_foto" type="checkbox" class="peer sr-only" />
+                            <span :class="claseInterruptor" aria-hidden="true" />
+                        </label>
                     </div>
 
                     <!-- Textos -->

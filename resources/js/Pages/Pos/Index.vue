@@ -181,13 +181,21 @@ function avisarSinStock(mensaje) {
 function agregar(producto, presentacion = null, conSonido = true) {
     presentacion = presentacion ?? presentacionDefault(producto)
 
+    // cuánto se agrega con un clic: 1 presentación; si el producto se vende por fracción y queda menos
+    // que eso (0.5 kg), se agrega lo que queda en vez de rechazarlo
+    let cantidad = 1
+
     // no dejar pasar al carrito mas de lo que hay en stock (en unidades base)
     if (producto.controla_stock) {
         const enCarrito = carrito.value
             .filter((i) => i.producto.id === producto.id)
             .reduce((suma, i) => suma + Number(i.cantidad || 0) * Number(i.presentacion.factor_conversion), 0)
+        const factor = Number(presentacion.factor_conversion)
+        const restante = Number(producto.stock) - enCarrito
 
-        if (enCarrito + Number(presentacion.factor_conversion) > producto.stock) {
+        if (restante > 0 && restante < factor && producto.permite_fraccion) {
+            cantidad = Math.round((restante / factor) * 1000) / 1000
+        } else if (enCarrito + factor > producto.stock) {
             avisarSinStock(producto.stock <= 0
                 ? `"${producto.nombre}" no tiene stock.`
                 : `No hay más stock de "${producto.nombre}" (${producto.stock} disp. y ya tienes ${enCarrito} en el carrito).`)
@@ -198,9 +206,9 @@ function agregar(producto, presentacion = null, conSonido = true) {
 
     const existente = carrito.value.find((i) => i.presentacion.id === presentacion.id)
     if (existente) {
-        existente.cantidad = Number(existente.cantidad) + 1
+        existente.cantidad = Math.round((Number(existente.cantidad) + cantidad) * 1000) / 1000
     } else {
-        carrito.value.push({ producto, presentacion, cantidad: 1, precio: '', precioCotizado: null, descuento: '', conDescuento: false })
+        carrito.value.push({ producto, presentacion, cantidad, precio: '', precioCotizado: null, descuento: '', conDescuento: false })
     }
     if (conSonido) pitido('ok')
     return true

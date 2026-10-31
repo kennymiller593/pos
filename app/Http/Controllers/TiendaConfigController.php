@@ -230,6 +230,7 @@ class TiendaConfigController extends Controller
             // diseño de la tienda y apariencia de la portada (opcionales: quien no los manda conserva lo que tenía)
             'plantilla' => ['sometimes', Rule::in(Tienda::PLANTILLAS)],
             'portada_estilo' => ['sometimes', Rule::in(Tienda::ESTILOS)],
+            'portada_solo_foto' => ['sometimes', 'boolean'],
             'portada_titulo' => ['nullable', 'string', 'max:80'],
             'portada_boton' => ['nullable', 'string', 'max:30'],
             'anuncio' => ['nullable', 'string', 'max:120'],

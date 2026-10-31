@@ -183,6 +183,32 @@ class TiendaEnLineaTest extends TestCase
 
     // ---------------- tienda pública ----------------
 
+    public function test_una_portada_con_su_propio_texto_se_muestra_entera_y_sin_titulo_encima(): void
+    {
+        Storage::fake('public');
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+        $guardar(['portada_estilo' => 'foto', 'portada_solo_foto' => true, 'portada_imagen' => UploadedFile::fake()->image('campania.jpg', 1600, 600)])->assertSessionHasNoErrors();
+        $foto = $this->empresa->fresh()->tienda_config['portada_imagen'];
+        $this->assertTrue($this->empresa->fresh()->tienda_config['portada_solo_foto']);
+
+        foreach (['clasica', 'mercado'] as $plantilla) {
+            $this->publicar(['plantilla' => $plantilla, 'portada_estilo' => 'foto', 'portada_imagen' => $foto, 'portada_solo_foto' => true, 'portada_titulo' => 'Compra y gana']);
+
+            $this->tienda('/')
+                ->assertOk()
+                ->assertSee('data-portada-sola', false)
+                ->assertSee('<h1 class="sr-only">Compra y gana</h1>', false) // el título queda para los buscadores
+                ->assertSee('alt="Compra y gana"', false)
+                ->assertDontSee('object-cover" src="'.$foto, false)
+                ->assertDontSee('from-neutral-950/85', false) // sin el velo oscuro
+                ->assertDontSee('from-slate-950/90', false);
+        }
+
+        // sin la opción, la portada sigue como siempre: con su texto encima
+        $this->publicar(['plantilla' => 'mercado', 'portada_estilo' => 'foto', 'portada_imagen' => $foto, 'portada_solo_foto' => false, 'portada_titulo' => 'Compra y gana']);
+        $this->tienda('/')->assertDontSee('data-portada-sola', false)->assertSee('data-portada-foto', false)->assertSee('>Compra y gana</h1>', false);
+    }
+
     public function test_el_buscador_encuentra_por_la_descripcion(): void
     {
         $this->publicar();

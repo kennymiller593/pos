@@ -114,7 +114,16 @@
 @section('contenido')
     @if ($portada)
         {{-- Portada: el dueño elige entre vitrina de productos, foto grande o solo texto --}}
-        @if ($tienda['portada']['estilo'] === 'foto')
+        @if ($tienda['portada']['estilo'] === 'foto' && $tienda['portada']['solo_foto'])
+            {{-- la foto ya trae su propio texto: entera, sin velo ni título encima --}}
+            <section class="bg-(--secundario)" data-portada="foto" data-portada-sola>
+                <h1 class="sr-only">{{ $tienda['portada']['titulo'] }}</h1>
+                <a href="/catalogo" class="block" aria-label="{{ $tienda['portada']['boton'] }}">
+                    <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['portada']['titulo'] }}" fetchpriority="high" class="block h-auto w-full"
+                        @if ($tienda['portada']['imagen_movil']) srcset="{{ $tienda['portada']['imagen_movil'] }} 900w, {{ $tienda['portada']['imagen'] }} 1600w" sizes="100vw" @endif>
+                </a>
+            </section>
+        @elseif ($tienda['portada']['estilo'] === 'foto')
             <section class="relative isolate overflow-hidden bg-(--secundario)" data-portada="foto">
                 {{-- en el celular se descarga la versión chica --}}
                 <img src="{{ $tienda['portada']['imagen'] }}" alt="{{ $tienda['nombre'] }}" fetchpriority="high" class="absolute inset-0 -z-10 size-full object-cover"

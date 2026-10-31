@@ -38,6 +38,7 @@ class Tienda
         'portada_estilo' => 'vitrina',
         'portada_imagen' => null,
         'portada_imagen_movil' => null, // la misma foto, más chica, para el celular
+        'portada_solo_foto' => false, // la foto ya trae su propio texto: se muestra completa, sin título ni velo encima
         'favicon' => null, // ícono de la pestaña del navegador (PNG cuadrado); sin él se usa el logo
         'portada_titulo' => null,
         'portada_boton' => null,

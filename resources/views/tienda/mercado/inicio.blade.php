@@ -115,6 +115,20 @@
                 $ofertas = $destacados ? $destacados['productos']->filter(fn ($p) => $p['imagen'])->take(3)->values() : collect();
                 $conLateral = $ofertas->isNotEmpty() || $fotoCampana;
             @endphp
+            @if ($fondoPortada && $tienda['portada']['solo_foto'])
+                {{-- La foto del dueño ya trae su propio texto: se muestra entera, sin recortes ni nada encima --}}
+                <section class="mt-4 overflow-hidden rounded-3xl bg-slate-100 sm:mt-6" data-portada="mercado" data-portada-sola>
+                    <h1 class="sr-only">{{ $tienda['portada']['titulo'] }}</h1>
+                    <a href="/catalogo" class="block" aria-label="{{ $tienda['portada']['boton'] }}">
+                        <picture>
+                            @if ($tienda['portada']['imagen_movil'])
+                                <source media="(max-width: 639px)" srcset="{{ $tienda['portada']['imagen_movil'] }}">
+                            @endif
+                            <img src="{{ $fondoPortada }}" alt="{{ $tienda['portada']['titulo'] }}" fetchpriority="high" class="block h-auto w-full">
+                        </picture>
+                    </a>
+                </section>
+            @else
             {{-- Campaña: panel en el color de la tienda con el título, los botones y los productos de la semana --}}
             <section class="relative mt-4 overflow-hidden rounded-3xl sm:mt-6 {{ $fondoPortada ? 'bg-neutral-900 text-white' : 'bg-(--marca) text-(--sobre-marca)' }}" data-portada="mercado" @if ($fondoPortada) data-portada-foto @endif>
                 @if ($fondoPortada)
@@ -178,6 +192,7 @@
                     @endif
                 </div>
             </section>
+            @endif
 
             {{-- Banners del dueño --}}
             @if ($bannersRestantes)
