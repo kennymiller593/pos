@@ -929,7 +929,7 @@ function guardarDescripcion() {
                 <div class="mt-5 grid gap-5 lg:grid-cols-2">
                     <!-- Foto de portada -->
                     <div>
-                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(va al lado del título en la portada)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
+                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(de fondo en la campaña de la portada, detrás del título y los destacados)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
                         <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 dark:border-neutral-800">
                             <img :src="fotoPortada" alt="Foto de portada" class="aspect-[16/7] w-full object-cover" />
                             <!-- el mismo velo que lleva en la tienda, para ver cómo se leerá el título -->

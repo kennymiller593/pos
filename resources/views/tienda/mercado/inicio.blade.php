@@ -13,9 +13,11 @@
     };
     $canonica = rtrim($tienda['url'], '/').($categoria ? $categoria->url : ($portada ? '/' : '/catalogo')).($pagina > 1 ? "?page={$pagina}" : '');
 
-    // la campaña de la portada: la foto de portada; si no hay, el primer banner; si no, solo el texto
-    $fotoCampana = $portada ? ($tienda['portada']['imagen'] ?: ($banners[0]['imagen'] ?? null)) : null;
-    $bannersRestantes = $portada ? array_values(array_filter($banners, fn ($b) => $b['imagen'] !== $fotoCampana || $tienda['portada']['imagen'])) : [];
+    // la foto de portada del dueño va de fondo en la campaña, siempre (los destacados se ponen encima);
+    // sin foto, el panel es del color de la tienda y al costado va el primer banner si no hay destacados
+    $fondoPortada = $portada ? $tienda['portada']['imagen'] : null;
+    $fotoCampana = $portada && ! $fondoPortada ? ($banners[0]['imagen'] ?? null) : null;
+    $bannersRestantes = $portada ? array_values(array_filter($banners, fn ($b) => $b['imagen'] !== $fotoCampana)) : [];
 
     // datos estructurados: los mismos de la plantilla clásica (negocio con sus sedes y coordenadas; lista de productos con su ruta)
     // datos estructurados del negocio: el buscador puede mostrar teléfono, dirección, horario y mapa
@@ -114,9 +116,20 @@
                 $conLateral = $ofertas->isNotEmpty() || $fotoCampana;
             @endphp
             {{-- Campaña: panel en el color de la tienda con el título, los botones y los productos de la semana --}}
-            <section class="relative mt-4 overflow-hidden rounded-3xl bg-(--marca) text-(--sobre-marca) sm:mt-6" data-portada="mercado">
-                <div class="pointer-events-none absolute -top-24 -right-16 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
-                <div class="pointer-events-none absolute -bottom-32 left-1/3 size-96 rounded-full bg-black/10 blur-3xl" aria-hidden="true"></div>
+            <section class="relative mt-4 overflow-hidden rounded-3xl sm:mt-6 {{ $fondoPortada ? 'bg-neutral-900 text-white' : 'bg-(--marca) text-(--sobre-marca)' }}" data-portada="mercado" @if ($fondoPortada) data-portada-foto @endif>
+                @if ($fondoPortada)
+                    {{-- la foto del dueño, con el mismo velo que ve en su panel para que el título se lea --}}
+                    <picture>
+                        @if ($tienda['portada']['imagen_movil'])
+                            <source media="(max-width: 639px)" srcset="{{ $tienda['portada']['imagen_movil'] }}">
+                        @endif
+                        <img src="{{ $fondoPortada }}" alt="" fetchpriority="high" class="pointer-events-none absolute inset-0 size-full object-cover">
+                    </picture>
+                    <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-neutral-950/85 via-neutral-950/55 to-neutral-950/25" aria-hidden="true"></div>
+                @else
+                    <div class="pointer-events-none absolute -top-24 -right-16 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
+                    <div class="pointer-events-none absolute -bottom-32 left-1/3 size-96 rounded-full bg-black/10 blur-3xl" aria-hidden="true"></div>
+                @endif
                 <div class="relative grid gap-7 px-5 py-7 sm:px-10 sm:py-12 {{ $conLateral ? 'lg:grid-cols-[1fr_1.15fr] lg:items-center lg:gap-10' : 'lg:py-16' }}">
                     <div class="{{ $conLateral ? '' : 'max-w-3xl' }}">
                         <p class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase ring-1 ring-white/20">@include('tienda.mercado.icono', ['n' => 'chispa', 'clase' => 'size-3.5']){{ $tienda['anuncio'] ? 'Campaña' : 'Tienda en línea' }}</p>

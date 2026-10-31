@@ -1654,4 +1654,27 @@ class TiendaEnLineaTest extends TestCase
         $guardar(['color_secundario' => ''])->assertSessionHasNoErrors();
         $this->assertNull($this->empresa->fresh()->tienda_config['color_secundario']);
     }
+
+    public function test_en_mercado_la_foto_de_portada_sale_de_fondo_aunque_haya_destacados(): void
+    {
+        // con destacados con foto y foto de portada: las dos cosas, la foto detrás y los productos encima
+        $this->publicar(['plantilla' => 'mercado', 'portada_imagen' => '/storage/tienda/portada.jpg', 'portada_imagen_movil' => '/storage/tienda/portada-movil.jpg', 'banners' => [['imagen' => '/storage/tienda/banner1.jpg', 'titulo' => 'Oferta', 'destino' => null, 'valor' => null]]]);
+        $this->urea->update(['destacado' => true, 'imagen_url' => '/storage/productos/urea.jpg']);
+
+        $portada = $this->tienda('/')->assertOk()
+            ->assertSee('data-portada-foto', false)
+            ->assertSee('src="/storage/tienda/portada.jpg"', false)
+            ->assertSee('srcset="/storage/tienda/portada-movil.jpg"', false)
+            ->assertSee('data-ofertas', false)
+            ->assertSee('Urea 46% x 50 kg')
+            // el banner no se gasta en la campaña: sigue en su sección
+            ->assertSee('/storage/tienda/banner1.jpg', false)
+            ->getContent();
+        $this->assertLessThan(strpos($portada, 'data-ofertas'), strpos($portada, 'data-portada-foto'));
+
+        // sin foto de portada ni destacados con foto, el primer banner va al costado de la campaña
+        $this->urea->update(['destacado' => false, 'imagen_url' => null]);
+        $this->publicar(['plantilla' => 'mercado', 'banners' => [['imagen' => '/storage/tienda/banner1.jpg', 'titulo' => 'Oferta', 'destino' => null, 'valor' => null]]]);
+        $this->tienda('/')->assertOk()->assertDontSee('data-portada-foto', false)->assertSee('src="/storage/tienda/banner1.jpg"', false);
+    }
 }
