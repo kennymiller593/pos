@@ -118,14 +118,16 @@ class CajaTest extends TestCase
         $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('cajas', 2));
     }
 
-    public function test_egreso_mayor_al_efectivo_disponible_es_bloqueado(): void
+    public function test_egreso_mayor_al_efectivo_disponible_se_registra_y_la_caja_queda_en_negativo(): void
     {
+        // el dinero salió del negocio igual (pago del local, de un proveedor): se registra y el cierre muestra el negativo
         $apertura = $this->abrirCaja(100);
 
         $respuesta = $this->actingAs($this->admin)
-            ->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'Retiro grande', 'monto' => 500]);
+            ->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'Pago de local', 'monto' => 500]);
 
-        $respuesta->assertSessionHas('error');
-        $this->assertSame(0, $apertura->movimientos()->count());
+        $respuesta->assertSessionHas('success');
+        $this->assertSame(1, $apertura->movimientos()->count());
+        $this->assertEqualsWithDelta(-400.0, app(\App\Services\CajaService::class)->resumen($apertura)['esperado'], 0.001);
     }
 }

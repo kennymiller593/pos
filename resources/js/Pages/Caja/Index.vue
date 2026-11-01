@@ -578,6 +578,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <label :class="claseLabel" for="monto">Monto (S/) *</label>
                             <input id="monto" v-model="formMovimiento.monto" type="number" step="0.01" min="0.01" :class="claseInput" placeholder="0.00" />
                             <p v-if="formMovimiento.errors.monto" :class="claseError">{{ formMovimiento.errors.monto }}</p>
+                            <!-- un egreso mayor al efectivo no se bloquea (el dinero salió igual): se avisa que el cierre quedará en negativo -->
+                            <p
+                                v-else-if="formMovimiento.tipo === 'egreso' && apertura && Number(formMovimiento.monto) > Number(apertura.resumen.esperado) + 0.005"
+                                class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400"
+                                data-aviso-negativo
+                            >
+                                En caja hay {{ soles(apertura.resumen.esperado) }} en efectivo: con este egreso el esperado quedará en negativo. Se registra igual.
+                            </p>
                         </div>
                     </div>
 

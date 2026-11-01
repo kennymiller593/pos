@@ -204,15 +204,10 @@ class CajaController extends Controller
             'monto.gt' => 'El monto debe ser mayor a 0.',
         ]);
 
-        if ($datos['tipo'] === 'egreso') {
-            if (! $request->user()->can('caja.egresos')) {
-                return back()->with('error', 'Tu rol no puede registrar egresos de caja.');
-            }
-
-            $disponible = $this->caja->resumen($apertura)['esperado'];
-            if ($datos['monto'] > $disponible) {
-                return back()->with('error', 'No hay suficiente efectivo en caja para ese egreso (disponible: S/ '.number_format($disponible, 2).').');
-            }
+        // un egreso mayor al efectivo disponible no se bloquea: el dinero salió del negocio igual (pago del local,
+        // de un proveedor) y el cierre mostrará el negativo. La pantalla avisa antes de guardar.
+        if ($datos['tipo'] === 'egreso' && ! $request->user()->can('caja.egresos')) {
+            return back()->with('error', 'Tu rol no puede registrar egresos de caja.');
         }
 
         $movimiento = MovimientoCaja::create([
