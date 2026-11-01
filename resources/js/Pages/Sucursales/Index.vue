@@ -123,6 +123,22 @@ function agregarSerie() {
         })
 }
 
+// editar una serie existente: el formulario de abajo se llena con sus datos y el guardar la actualiza.
+// Si ya emitió comprobantes solo se puede avanzar el último número o cambiar la caja; el código queda fijo.
+const editando = computed(() => !!formSerie.serie_id)
+function editarSerie(serie) {
+    formSerie.clearErrors()
+    formSerie.serie_id = serie.id
+    formSerie.tipo_comprobante_codigo = serie.tipo_comprobante_codigo
+    formSerie.serie = serie.serie
+    formSerie.caja_id = serie.caja?.id ?? serie.caja_id ?? ''
+    formSerie.correlativo = serie.correlativo
+}
+function cancelarEdicion() {
+    formSerie.reset()
+    formSerie.clearErrors()
+}
+
 function eliminarSerie(serie) {
     router.delete(`/sucursales/${modalSeriesId.value}/series/${serie.id}`, { preserveScroll: true })
 }
@@ -412,7 +428,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
             <div v-if="sucursalSeries" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
                 <div class="fixed inset-0 bg-neutral-950/60" @click="modalSeriesId = null" />
                 <div
-                    class="relative w-full max-w-2xl rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    class="relative w-full min-w-0 max-w-2xl rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
                 >
                     <div class="mb-4 flex items-center justify-between">
                         <h3 class="font-semibold tracking-tight">Series de comprobantes · {{ sucursalSeries.nombre }}</h3>
@@ -425,8 +441,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </button>
                     </div>
 
-                    <!-- Lista -->
-                    <table class="w-full text-left text-sm">
+                    <!-- Lista (en celular se desliza de lado en vez de desbordar el modal) -->
+                    <div class="scroll-fino -mx-2 overflow-x-auto px-2">
+                    <table class="w-full min-w-[26rem] text-left text-sm">
                         <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
                             <tr>
                                 <th class="py-2.5 pr-3 font-semibold tracking-wider">Comprobante</th>
@@ -445,11 +462,19 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 </td>
                             </tr>
                             <tr v-for="serie in sucursalSeries.series" :key="serie.id">
-                                <td class="py-2.5 pr-3">{{ nombreTipo(serie.tipo_comprobante_codigo) }}</td>
+                                <td class="py-2.5 pr-3 whitespace-nowrap">{{ nombreTipo(serie.tipo_comprobante_codigo) }}</td>
                                 <td class="px-3 py-2.5 font-mono font-semibold">{{ serie.serie }}</td>
-                                <td class="px-3 py-2.5 text-neutral-500 dark:text-neutral-400">{{ serie.caja?.nombre ?? 'Toda la sucursal' }}</td>
+                                <td class="px-3 py-2.5 whitespace-nowrap text-neutral-500 dark:text-neutral-400">{{ serie.caja?.nombre ?? 'Toda la sucursal' }}</td>
                                 <td class="px-3 py-2.5 text-right tabular-nums">{{ serie.correlativo }}</td>
-                                <td class="py-2.5 pl-3 text-right">
+                                <td class="py-2.5 pl-3 text-right whitespace-nowrap">
+                                    <button
+                                        class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                                        :class="formSerie.serie_id === serie.id ? 'bg-stone-100 text-emerald-600 dark:bg-neutral-800 dark:text-emerald-400' : ''"
+                                        title="Editar serie"
+                                        @click="editarSerie(serie)"
+                                    >
+                                        <Pencil class="size-4" />
+                                    </button>
                                     <button
                                         v-if="serie.correlativo === 0"
                                         class="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
@@ -458,25 +483,30 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     >
                                         <Trash2 class="size-4" />
                                     </button>
-                                    <span v-else class="text-[11px] text-neutral-300 dark:text-neutral-600" title="Ya emitió comprobantes">en uso</span>
+                                    <span v-else class="ml-1 hidden text-[11px] text-neutral-300 sm:inline dark:text-neutral-600" title="Ya emitió comprobantes: solo se puede avanzar el número">en uso</span>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
+                    </div>
 
                     <!-- Agregar -->
                     <form
-                        class="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-stone-50 p-3 dark:bg-neutral-950"
+                        class="mt-4 flex flex-wrap items-center gap-2 rounded-xl p-3"
+                        :class="editando ? 'bg-emerald-50 ring-1 ring-emerald-200 dark:bg-emerald-950/30 dark:ring-emerald-900' : 'bg-stone-50 dark:bg-neutral-950'"
+                        data-form-serie
                         @submit.prevent="agregarSerie"
                     >
-                        <select v-model="formSerie.tipo_comprobante_codigo" :class="[claseInput, 'w-auto flex-1']">
+                        <p v-if="editando" class="w-full text-xs font-medium text-emerald-700 dark:text-emerald-400">Editando la serie {{ formSerie.serie }}</p>
+                        <select v-model="formSerie.tipo_comprobante_codigo" :disabled="editando" :class="[claseInput, 'w-auto flex-1 disabled:opacity-60']">
                             <option v-for="t in TIPOS_COMPROBANTE" :key="t.codigo" :value="t.codigo">{{ t.nombre }}</option>
                         </select>
                         <input
                             v-model="formSerie.serie"
                             type="text"
                             maxlength="4"
-                            :class="[claseInput, 'w-24 font-mono uppercase']"
+                            :disabled="editando && sucursalSeries.series.find((x) => x.id === formSerie.serie_id)?.correlativo > 0"
+                            :class="[claseInput, 'w-24 font-mono uppercase disabled:opacity-60']"
                             :placeholder="TIPOS_COMPROBANTE.find((t) => t.codigo === formSerie.tipo_comprobante_codigo)?.ejemplo"
                         />
                         <select v-model="formSerie.caja_id" :class="[claseInput, 'w-auto flex-1']">
@@ -494,9 +524,18 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             type="submit"
                             :disabled="formSerie.processing || !formSerie.serie"
                             class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            title="Agregar serie"
+                            :title="editando ? 'Guardar cambios' : 'Agregar serie'"
                         >
                             <Check class="size-5" />
+                        </button>
+                        <button
+                            v-if="editando"
+                            type="button"
+                            class="grid size-10 shrink-0 place-items-center rounded-xl border border-stone-300 text-neutral-500 hover:bg-white dark:border-neutral-700 dark:hover:bg-neutral-900"
+                            title="Cancelar edición"
+                            @click="cancelarEdicion"
+                        >
+                            <X class="size-5" />
                         </button>
                     </form>
                     <p v-if="formSerie.errors.serie || formSerie.errors.correlativo" :class="claseError">

@@ -8,6 +8,14 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
 import { puedeEscanear } from '@/composables/escaner'
 
+// la última elección de "Descontar de la caja abierta" se recuerda en este navegador: quien carga stock inicial
+// la desmarca una vez y no tiene que acordarse en cada compra
+const recordarPagoCaja = {
+    clave: 'compras.pagar_desde_caja',
+    leer() { try { return localStorage.getItem(this.clave) !== '0' } catch { return true } },
+    guardar(v) { try { localStorage.setItem(this.clave, v ? '1' : '0') } catch {} },
+}
+
 const props = defineProps({
     productos: { type: Array, required: true },
     tiposComprobante: { type: Array, required: true },
@@ -30,7 +38,7 @@ const form = useForm({
     fecha: fechaLocal(), // la de hoy en la hora local (no UTC: de noche marcaba mañana)
     es_credito: false,
     fecha_vencimiento: '',
-    pagar_desde_caja: props.caja.abierta, // al contado: como en el sistema anterior, la compra sale de la caja abierta
+    pagar_desde_caja: props.caja.abierta && recordarPagoCaja.leer(), // al contado sale de la caja abierta, salvo que el usuario lo haya desmarcado la última vez (p. ej. cargando stock inicial)
     medio_pago_codigo: 'efectivo',
     referencia_pago: '',
     items: [],
@@ -256,6 +264,8 @@ function guardar() {
         numero_lote: f.numero_lote.trim() || null,
         fecha_vencimiento: f.fecha_vencimiento || null,
     }))
+
+    if (!form.es_credito && props.caja.abierta && !cajaDeOtraSucursal.value) recordarPagoCaja.guardar(form.pagar_desde_caja)
 
     form.transform((data) => ({
         ...data,
