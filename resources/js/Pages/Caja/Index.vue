@@ -53,10 +53,17 @@ function estadoDiferencia(diferencia) {
 }
 
 // ---- abrir caja ----
+// la primera caja libre queda elegida; el monto inicial arranca en 0 (lo normal es abrir sin sencillo y escribirlo solo si hay)
+const cajaLibre = () => props.cajas.find((c) => !c.ocupada_por)?.id ?? ''
 const formAbrir = useForm({
-    caja_id: props.cajas.find((c) => !c.ocupada_por)?.id ?? '',
-    monto_inicial: '',
+    caja_id: cajaLibre(),
+    monto_inicial: '0',
 })
+// si cambia la lista (otra sucursal en el selector, alguien abrió la caja elegida) se vuelve a elegir una libre
+watch(() => props.cajas, (cajas) => {
+    if (!cajas.some((c) => c.id === formAbrir.caja_id && !c.ocupada_por)) formAbrir.caja_id = cajaLibre()
+})
+const unaSolaCaja = computed(() => props.cajas.length === 1)
 
 function abrir() {
     formAbrir.post('/caja/abrir', { preserveScroll: true })
@@ -183,7 +190,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 <div class="space-y-4">
                     <div>
                         <label :class="claseLabel" for="caja">Caja *</label>
-                        <select id="caja" v-model="formAbrir.caja_id" :class="claseInput">
+                        <!-- con una sola caja no hay nada que elegir: se muestra y listo -->
+                        <p v-if="!cajas.length" class="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300" data-sin-cajas>
+                            No hay cajas activas en tu sucursal. Pídele al administrador que cree una en Configuración.
+                        </p>
+                        <div v-else-if="unaSolaCaja" class="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium dark:border-neutral-700 dark:bg-neutral-950" data-caja-unica>
+                            {{ cajas[0].nombre }}{{ cajas[0].sucursal ? ` · ${cajas[0].sucursal}` : '' }}<span v-if="cajas[0].ocupada_por" class="ml-1 font-normal text-slate-500 dark:text-neutral-400"> — en uso por {{ cajas[0].ocupada_por }}</span>
+                        </div>
+                        <select v-else id="caja" v-model="formAbrir.caja_id" :class="claseInput">
                             <option value="" disabled>Elige una caja</option>
                             <option v-for="c in cajas" :key="c.id" :value="c.id" :disabled="!!c.ocupada_por">
                                 {{ c.nombre }}{{ c.sucursal ? ` · ${c.sucursal}` : '' }}{{ c.ocupada_por ? ` — en uso por ${c.ocupada_por}` : '' }}
@@ -201,6 +215,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             min="0"
                             :class="claseInput"
                             placeholder="0.00"
+                            @focus="$event.target.select()"
                         />
                         <p v-if="formAbrir.errors.monto_inicial" :class="claseError">{{ formAbrir.errors.monto_inicial }}</p>
                     </div>
@@ -426,6 +441,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <p class="text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">
                                         {{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}
                                     </p>
+                                    <p v-if="t.observaciones" class="mt-0.5 max-w-xs truncate text-xs text-slate-600 italic dark:text-neutral-300" :title="t.observaciones">
+                                        {{ t.observaciones }}
+                                    </p>
                                 </td>
                                 <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.monto_inicial) }}</td>
                                 <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.ventas_efectivo) }}</td>
@@ -609,7 +627,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
             </div>
         </Teleport>
 
-        <!-- Modal: cerrar caja (arqueo por medio de pago) -->
+        <!-- Modal: cerrar caja (resumen del turno prellenado, como el sistema anterior) -->
         <CierreCajaModal
             v-if="apertura"
             :abierto="modalCierre"

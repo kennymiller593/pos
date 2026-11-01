@@ -25,6 +25,7 @@ class AperturaCaja extends Model
         'abierta_en',
         'cerrada_en',
         'conteo_efectivo',
+        'observaciones',
     ];
 
     protected function casts(): array

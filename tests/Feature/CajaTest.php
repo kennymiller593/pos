@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AperturaCaja;
 use App\Models\Caja;
+use App\Models\MovimientoCaja;
 use App\Models\Sucursal;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
@@ -51,6 +52,58 @@ class CajaTest extends TestCase
             ->where('historial.data.0.monto_sistema', fn ($v) => abs($v - 120) < 0.001)
             ->where('historial.data.0.diferencia', fn ($v) => abs($v - (-5)) < 0.001)
         );
+    }
+
+    public function test_cierra_sin_contar_con_lo_esperado_y_guarda_la_observacion(): void
+    {
+        // como en el sistema anterior: los campos vienen prellenados con lo esperado y cerrar sin tocar nada deja la caja cuadrada
+        $apertura = $this->abrirCaja(100);
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'ingreso', 'concepto' => 'Sencillo', 'monto' => 20]);
+
+        $respuesta = $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null, 'observaciones' => '  Todo en orden  ']);
+        $respuesta->assertSessionHas('success', fn ($m) => str_contains($m, 'cuadrada'));
+
+        $apertura->refresh();
+        $this->assertEqualsWithDelta(120, (float) $apertura->monto_sistema, 0.001);
+        $this->assertEqualsWithDelta(120, (float) $apertura->monto_cierre, 0.001);
+        $this->assertSame('Todo en orden', $apertura->observaciones);
+
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina
+            ->where('historial.data.0.observaciones', 'Todo en orden')
+            ->where('historial.data.0.diferencia', fn ($v) => abs($v) < 0.001)
+        );
+    }
+
+    public function test_conteo_por_billetes_en_cero_cierra_con_cero_contado(): void
+    {
+        // el cajero abre el conteo por billetes y no escribe nada: contó 0, no "sin dato"
+        $apertura = $this->abrirCaja(120);
+
+        $respuesta = $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => 0, 'conteo' => ['200' => 0]]);
+        $respuesta->assertSessionHas('success', fn ($m) => str_contains($m, 'Faltan S/ 120.00'));
+
+        $apertura->refresh();
+        $this->assertEqualsWithDelta(0, (float) $apertura->monto_cierre, 0.001);
+        $this->assertNull($apertura->conteo_efectivo);
+    }
+
+    public function test_cierra_con_saldo_negativo_y_lo_declarado_por_medio(): void
+    {
+        // la caja puede quedar en negativo (compra mayor a lo vendido): el contado prellenado es negativo y se acepta
+        $apertura = $this->abrirCaja(0);
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'Compra de mercadería', 'monto' => 300]);
+        MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $apertura->id, 'usuario_id' => $this->admin->id, 'tipo' => 'ingreso', 'concepto' => 'Cobro por transferencia', 'monto' => 30, 'medio_pago_codigo' => 'transferencia']);
+
+        // efectivo tal cual (−300) y transferencia declarada en 25 en vez de 30: falta 5 en ese medio
+        $respuesta = $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => -300, 'declarados' => ['transferencia' => 25]]);
+        $respuesta->assertSessionHasNoErrors();
+        $respuesta->assertSessionHas('success', fn ($m) => str_contains($m, 'Faltan S/ 5.00 en Transferencia bancaria'));
+
+        $apertura->refresh();
+        $this->assertEqualsWithDelta(-300, (float) $apertura->monto_sistema, 0.001);
+        $this->assertEqualsWithDelta(-300, (float) $apertura->monto_cierre, 0.001);
+        $this->assertEqualsWithDelta(-5, (float) $apertura->cierresMedios()->where('medio_pago_codigo', 'transferencia')->value('diferencia'), 0.001);
+        $this->assertEqualsWithDelta(0, (float) $apertura->cierresMedios()->where('medio_pago_codigo', 'efectivo')->value('diferencia'), 0.001);
     }
 
     public function test_el_cajero_solo_ve_sus_propios_turnos_en_el_historial(): void

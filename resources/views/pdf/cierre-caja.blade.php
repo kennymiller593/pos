@@ -86,6 +86,11 @@
         <span class="der">{{ abs($diferenciaTotal) < 0.005 ? '' : $s(abs($diferenciaTotal)) }}</span>
     </div>
 
+    @if (filled($apertura->observaciones))
+        <div class="separador"></div>
+        <div><span class="negrita">Obs.:</span> {{ $apertura->observaciones }}</div>
+    @endif
+
     <div class="firma">Firma del cajero</div>
     <div class="pie">Impreso el {{ now()->format('d/m/Y H:i') }}</div>
 </body>

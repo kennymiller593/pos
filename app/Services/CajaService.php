@@ -102,9 +102,10 @@ class CajaService
      *
      * @param  array<string, float|null>  $declarados  codigo de medio => monto declarado (el efectivo es obligatorio)
      * @param  array<string, int>|null  $conteo  denominacion => cantidad (opcional)
+     * @param  string|null  $observaciones  nota corta del cajero al cerrar
      * @return list<array{codigo: string, nombre: string, esperado: float, declarado: float|null, diferencia: float}>
      */
-    public function cerrar(AperturaCaja $apertura, array $declarados, ?array $conteo = null): array
+    public function cerrar(AperturaCaja $apertura, array $declarados, ?array $conteo = null, ?string $observaciones = null): array
     {
         $cuadre = [];
 
@@ -132,6 +133,7 @@ class CajaService
             'monto_cierre' => $efectivo['declarado'] ?? $efectivo['esperado'],
             'monto_sistema' => $efectivo['esperado'],
             'conteo_efectivo' => $conteo ? array_filter($conteo, fn ($n) => (int) $n > 0) : null,
+            'observaciones' => $observaciones,
             'cerrada_en' => now(),
         ]);
 

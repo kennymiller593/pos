@@ -76,6 +76,7 @@ class CajaController extends Controller
                     'diferencia' => (float) $m->diferencia,
                 ])->values(),
                 'diferencia_total' => round((float) $turno->cierresMedios->sum('diferencia') ?: ((float) $turno->monto_cierre - (float) $turno->monto_sistema), 2),
+                'observaciones' => $turno->observaciones,
             ]);
 
         return Inertia::render('Caja/Index', [
@@ -237,16 +238,19 @@ class CajaController extends Controller
             return back()->with('error', 'No tienes una caja abierta.');
         }
 
+        // el efectivo contado y lo declarado por medio son opcionales: sin dato se cierra con lo que el sistema espera
+        // (como el sistema anterior de los clientes). Pueden ser negativos porque el saldo del turno puede quedar en negativo.
         $datos = $request->validate([
-            'monto_cierre' => ['required_without:conteo', 'nullable', 'numeric', 'min:0'],
+            'monto_cierre' => ['nullable', 'numeric', 'min:-99999999', 'max:99999999'],
             'conteo' => ['nullable', 'array'],
             'conteo.*' => ['nullable', 'integer', 'min:0'],
             'declarados' => ['nullable', 'array'],
-            'declarados.*' => ['nullable', 'numeric', 'min:0'],
+            'declarados.*' => ['nullable', 'numeric', 'min:-99999999', 'max:99999999'],
+            'observaciones' => ['nullable', 'string', 'max:500'],
         ], [
-            'monto_cierre.required_without' => 'Ingresa el efectivo contado.',
-            'monto_cierre.min' => 'El monto no puede ser negativo.',
-            'declarados.*.min' => 'El monto no puede ser negativo.',
+            'monto_cierre.numeric' => 'El efectivo contado debe ser un monto.',
+            'declarados.*.numeric' => 'Lo declarado debe ser un monto.',
+            'observaciones.max' => 'La observación no puede pasar de 500 caracteres.',
         ]);
 
         // el conteo por billetes/monedas, si viene, manda sobre el total escrito a mano
@@ -256,15 +260,16 @@ class CajaController extends Controller
             ->filter();
         $efectivo = $conteo->isNotEmpty()
             ? round($conteo->reduce(fn ($total, $n, $valor) => $total + $n * (float) $valor, 0.0), 2)
-            : (float) $datos['monto_cierre'];
+            : (isset($datos['monto_cierre']) && $datos['monto_cierre'] !== '' ? (float) $datos['monto_cierre'] : null);
 
         $declarados = collect($datos['declarados'] ?? [])
             ->map(fn ($v) => $v === null || $v === '' ? null : (float) $v)
             ->put('efectivo', $efectivo)
             ->all();
+        $observaciones = filled($datos['observaciones'] ?? null) ? trim($datos['observaciones']) : null;
 
         try {
-            $cuadre = DB::transaction(function () use ($apertura, $declarados, $conteo) {
+            $cuadre = DB::transaction(function () use ($apertura, $declarados, $conteo, $observaciones) {
                 // con la apertura bloqueada, las ventas en curso esperan y lo esperado es lo real
                 $bloqueada = AperturaCaja::lockForUpdate()->findOrFail($apertura->id);
 
@@ -272,7 +277,7 @@ class CajaController extends Controller
                     throw new ErrorDeNegocio('Esta caja ya fue cerrada.');
                 }
 
-                return $this->caja->cerrar($bloqueada, $declarados, $conteo->isNotEmpty() ? $conteo->all() : null);
+                return $this->caja->cerrar($bloqueada, $declarados, $conteo->isNotEmpty() ? $conteo->all() : null, $observaciones);
             });
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
@@ -333,7 +338,7 @@ class CajaController extends Controller
             'ancho' => $ancho,
         ])
             ->setOption('page-width', "{$ancho}mm")
-            ->setOption('page-height', (int) ceil(110 + count($medios) * 18 + count($apertura->conteo_efectivo ?? []) * 4).'mm')
+            ->setOption('page-height', (int) ceil(110 + count($medios) * 18 + count($apertura->conteo_efectivo ?? []) * 4 + (filled($apertura->observaciones) ? 6 + ceil(mb_strlen($apertura->observaciones) / ($ancho === 58 ? 36 : 50)) * 4 : 0)).'mm')
             ->setOption('margin-top', '3')
             ->setOption('margin-bottom', '3')
             ->setOption('margin-left', '4')
