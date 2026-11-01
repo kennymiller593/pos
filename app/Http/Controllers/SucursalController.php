@@ -31,6 +31,12 @@ class SucursalController extends Controller
                 ->orderBy('nombre')
                 ->get()
                 // usuarios que pueden trabajar en la sucursal: asignados a ella o sin restricción (todas)
+                // en_uso = ya emitió comprobantes (con llaves: devolver false desde each() cortaría el recorrido)
+                ->each(function (Sucursal $s) {
+                    foreach ($s->series as $serie) {
+                        $serie->en_uso = $serie->enUso();
+                    }
+                })
                 ->each(fn (Sucursal $s) => $s->usuarios_count = Usuario::query()
                     ->where('empresa_id', $s->empresa_id)
                     ->where('activo', true)
@@ -236,10 +242,12 @@ class SucursalController extends Controller
         if ($datos['serie_id'] ?? null) {
             $serie = SerieCorrelativo::findOrFail($datos['serie_id']);
 
-            if ($serie->correlativo > 0 && $serie->serie !== $datos['serie']) {
+            // con comprobantes emitidos el código queda fijo y el número solo avanza; sin emisiones se corrige libremente
+            $enUso = $serie->enUso();
+            if ($enUso && $serie->serie !== $datos['serie']) {
                 return back()->with('error', 'No puedes cambiar el código de una serie que ya emitió comprobantes.');
             }
-            if ($datos['correlativo'] < $serie->correlativo) {
+            if ($enUso && $datos['correlativo'] < $serie->correlativo) {
                 return back()->with('error', "El correlativo no puede retroceder (actual: {$serie->correlativo}).");
             }
 
@@ -269,7 +277,7 @@ class SucursalController extends Controller
         abort_unless($sucursal->empresa_id === $request->user()->empresa_id, 403);
         abort_unless($serie->sucursal_id === $sucursal->id, 404);
 
-        if ($serie->correlativo > 0) {
+        if ($serie->enUso()) {
             return back()->with('error', 'No puedes eliminar una serie que ya emitió comprobantes.');
         }
 

@@ -476,7 +476,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         <Pencil class="size-4" />
                                     </button>
                                     <button
-                                        v-if="serie.correlativo === 0"
+                                        v-if="!serie.en_uso"
                                         class="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                                         title="Eliminar serie"
                                         @click="eliminarSerie(serie)"
@@ -505,7 +505,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             v-model="formSerie.serie"
                             type="text"
                             maxlength="4"
-                            :disabled="editando && sucursalSeries.series.find((x) => x.id === formSerie.serie_id)?.correlativo > 0"
+                            :disabled="editando && !!sucursalSeries.series.find((x) => x.id === formSerie.serie_id)?.en_uso"
                             :class="[claseInput, 'w-24 font-mono uppercase disabled:opacity-60']"
                             :placeholder="TIPOS_COMPROBANTE.find((t) => t.codigo === formSerie.tipo_comprobante_codigo)?.ejemplo"
                         />

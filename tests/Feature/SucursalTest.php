@@ -151,18 +151,31 @@ class SucursalTest extends TestCase
             'correlativo' => 0,
         ])->assertSessionHas('error');
 
-        // el correlativo no puede retroceder
+        // registrada mal pero sin emitir nada: se corrige el código y el número (aunque retroceda)
         $this->actingAs($this->admin)->post($url, [
             'serie_id' => $serie->id,
             'tipo_comprobante_codigo' => '03',
-            'serie' => 'B005',
+            'serie' => 'B007',
             'caja_id' => null,
             'correlativo' => 50,
-        ])->assertSessionHas('error');
+        ])->assertSessionHas('success');
+        $this->assertSame(['B007', 50], [$serie->fresh()->serie, $serie->fresh()->correlativo]);
 
-        // no se elimina una serie con comprobantes emitidos
-        $this->actingAs($this->admin)->delete("{$url}/{$serie->id}")->assertSessionHas('error');
-        $this->assertNotNull($serie->fresh());
+        // la serie con la que ya se vendió no cambia de código, no retrocede ni se elimina
+        $this->abrirCaja(100);
+        $producto = $this->crearProducto(precio: 10.00);
+        $this->darStock($producto, 10, 5.00);
+        $this->venderContado($producto->presentaciones->first(), 1)->assertSessionHas('success');
+        $usada = SerieCorrelativo::where('empresa_id', $this->empresa->id)->where('tipo_comprobante_codigo', '00')->firstOrFail();
+        $this->assertTrue($usada->enUso());
+        $this->actingAs($this->admin)->post($url, ['serie_id' => $usada->id, 'tipo_comprobante_codigo' => '00', 'serie' => 'NV09', 'caja_id' => null, 'correlativo' => $usada->correlativo])->assertSessionHas('error');
+        $this->actingAs($this->admin)->post($url, ['serie_id' => $usada->id, 'tipo_comprobante_codigo' => '00', 'serie' => $usada->serie, 'caja_id' => null, 'correlativo' => 0])->assertSessionHas('error');
+        $this->actingAs($this->admin)->delete("{$url}/{$usada->id}")->assertSessionHas('error');
+        $this->assertNotNull($usada->fresh());
+        $this->actingAs($this->admin)->get('/sucursales')->assertInertia(fn ($p) => $p->where('sucursales.0.series', fn ($series) => collect($series)->contains(fn ($s) => $s['serie'] === $usada->serie && $s['en_uso'] === true)
+            // todas las series traen el dato, no solo la primera
+            && collect($series)->every(fn ($s) => is_bool($s['en_uso']))
+            && collect($series)->contains(fn ($s) => $s['serie'] === 'B007' && $s['en_uso'] === false)));
 
         // una serie sin emisiones si se elimina
         $sinUso = SerieCorrelativo::create([
