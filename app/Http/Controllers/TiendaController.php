@@ -423,6 +423,10 @@ class TiendaController extends Controller
                     'estilo' => $config['portada_estilo'],
                     'imagen' => $config['portada_imagen'],
                     'imagen_movil' => $config['portada_imagen_movil'],
+                    // todas las fotos de portada, la principal primero: con más de una se van pasando
+                    'fotos' => $config['portada_imagen']
+                        ? [['imagen' => $config['portada_imagen'], 'imagen_movil' => $config['portada_imagen_movil']], ...array_map(fn ($f) => ['imagen' => $f['imagen'], 'imagen_movil' => $f['imagen_movil'] ?? null], $config['portada_fotos'])]
+                        : [],
                     // solo tiene sentido con una foto: sin ella la portada sigue mostrando su texto
                     'solo_foto' => (bool) $config['portada_solo_foto'] && filled($config['portada_imagen']),
                     'titulo' => $config['portada_titulo'] ?: $nombre,

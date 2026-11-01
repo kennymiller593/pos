@@ -345,7 +345,7 @@
         <a href="{{ $whatsapp }}" target="_blank" rel="noopener" aria-label="Escríbenos por WhatsApp" title="Escríbenos por WhatsApp" data-whatsapp-flotante
             class="group fixed right-3 bottom-3 z-40 h-11 items-center rounded-full bg-[#25D366] text-white shadow-lg ring-2 shadow-black/25 ring-white transition-colors hover:bg-[#1eb957] sm:right-6 sm:bottom-6 sm:h-14 sm:ring-4 {{ $__env->hasSection('barra_movil') ? 'hidden sm:flex' : 'flex' }}">
             {{-- puntito rojo, como un mensaje sin leer: invita a tocar --}}
-            <span class="absolute top-0 right-0 size-3.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" data-whatsapp-aviso><span class="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75"></span></span>
+            <span class="absolute top-0 right-0 size-3.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" data-whatsapp-aviso><span class="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75 motion-reduce:animate-none"></span></span>
             <span class="grid size-11 shrink-0 place-items-center sm:size-14">@include('tienda.icono', ['n' => 'whatsapp', 'clase' => 'size-6 sm:size-7'])</span>
             <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-48 group-hover:pr-5 lg:block">Consulta precios aquí</span>
         </a>

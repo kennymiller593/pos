@@ -46,7 +46,7 @@ const soles = (n) => `S/ ${Number(n ?? 0).toLocaleString('es-PE', { minimumFract
 const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
     { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'color_secundario', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
-    { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_solo_foto', 'portada_titulo', 'portada_boton', 'anuncio'] },
+    { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_solo_foto', 'portada_fotos', 'portada_titulo', 'portada_boton', 'anuncio'] },
     { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'medicion', nombre: 'Medición', campos: ['medicion_ga4', 'medicion_meta', 'medicion_tiktok', 'medicion_clarity', 'medicion_google_verificacion'] },
@@ -75,6 +75,10 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', leerSeccion))
 
 // ---- configuración ----
 const nuevaClave = () => Math.random().toString(36).slice(2)
+// las fotos de portada de más (sin la principal), como filas del formulario
+const fotosExtraGuardadas = () =>
+    (props.tienda.config.portada_fotos ?? []).map((f) => ({ clave: Math.random().toString(36).slice(2), imagen: f.imagen, archivo: null, vista: null }))
+
 // los banners y las preguntas guardados, como filas del formulario
 const bannersGuardados = () =>
     (props.tienda.config.banners ?? []).map((b) => ({
@@ -118,6 +122,7 @@ const form = useForm({
     portada_imagen: null, // archivo nuevo, si se elige uno
     portada_imagen_quitar: false,
     portada_solo_foto: props.tienda.config.portada_solo_foto ?? false,
+    portada_fotos: fotosExtraGuardadas(),
     favicon: null, // ícono de la pestaña nuevo, si se elige uno
     favicon_quitar: false,
     banners: bannersGuardados(),
@@ -143,6 +148,8 @@ const form = useForm({
 function carga(datos) {
     return {
         ...datos,
+        con_portada_fotos: true,
+        portada_fotos: datos.portada_fotos.map((f) => ({ imagen: f.imagen ?? '', archivo: f.archivo })),
         con_banners: true,
         banners: datos.banners.map((b) => ({ imagen: b.imagen ?? '', archivo: b.archivo, titulo: b.titulo, destino: b.destino, categoria: b.categoria, url: b.url })),
         con_preguntas: true,
@@ -241,6 +248,32 @@ function quitarFoto() {
     form.portada_imagen_quitar = true
     if (inputPortada.value) inputPortada.value.value = ''
     if (form.portada_estilo === 'foto') form.portada_estilo = 'vitrina'
+    // sin principal no hay pase de fotos: se van también las de más (si no, la primera pasaría a ser la principal)
+    form.portada_fotos.forEach((f) => f.vista && URL.revokeObjectURL(f.vista))
+    form.portada_fotos = []
+}
+
+// ---- fotos de portada de más (se deslizan con la principal) ----
+const inputFotoExtra = ref(null)
+const maxFotosExtra = computed(() => props.tienda.limites.fotos_portada ?? 3)
+
+function elegirFotoExtra(evento) {
+    const archivo = evento.target.files?.[0]
+    evento.target.value = ''
+    if (!archivo) return
+    form.clearErrors('portada_fotos')
+    if (archivo.size > 6 * 1024 * 1024) {
+        form.setError('portada_fotos', 'Cada foto de portada debe pesar como máximo 6 MB.')
+        return
+    }
+    if (form.portada_fotos.length >= maxFotosExtra.value) return
+    form.portada_fotos.push({ clave: Math.random().toString(36).slice(2), imagen: null, archivo, vista: URL.createObjectURL(archivo) })
+}
+
+function quitarFotoExtra(indice) {
+    const [foto] = form.portada_fotos.splice(indice, 1)
+    if (foto?.vista) URL.revokeObjectURL(foto.vista)
+    form.clearErrors('portada_fotos')
 }
 
 // ---- ícono de la pestaña (favicon) ----
@@ -349,9 +382,11 @@ function guardar() {
         onSuccess: () => {
             limpiarFotoElegida()
             limpiarIconoElegido()
-            // los banners recién subidos ya tienen su dirección guardada
+            // los banners y las fotos recién subidos ya tienen su dirección guardada
             form.banners.forEach((b) => b.vista && URL.revokeObjectURL(b.vista))
             form.banners = bannersGuardados()
+            form.portada_fotos.forEach((f) => f.vista && URL.revokeObjectURL(f.vista))
+            form.portada_fotos = fotosExtraGuardadas()
             form.preguntas = preguntasGuardadas()
             form.defaults()
             // al guardar la dirección pierde la sección: se vuelve a poner
@@ -972,6 +1007,33 @@ function guardarDescripcion() {
                             <input v-model="form.portada_solo_foto" type="checkbox" class="peer sr-only" />
                             <span :class="claseInterruptor" aria-hidden="true" />
                         </label>
+
+                        <!-- Más fotos de portada: se van pasando con la principal -->
+                        <div v-if="fotoPortada" class="mt-4" data-portada-fotos>
+                            <p :class="claseLabel">Más fotos de portada <span class="font-normal text-neutral-400">(opcional, hasta {{ maxFotosExtra }} más)</span></p>
+                            <div class="mt-2 grid grid-cols-3 gap-2">
+                                <div v-for="(foto, i) in form.portada_fotos" :key="foto.clave" class="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 dark:border-neutral-800 dark:bg-neutral-800">
+                                    <img :src="foto.vista ?? foto.imagen" :alt="`Foto de portada ${i + 2}`" class="aspect-[16/9] w-full object-cover" />
+                                    <span class="absolute top-1.5 left-1.5 rounded-md bg-white/95 px-1.5 text-xs font-semibold text-neutral-800 shadow">{{ i + 2 }}</span>
+                                    <button type="button" class="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-lg bg-white/95 text-red-600 shadow hover:bg-white" :aria-label="`Quitar la foto ${i + 2}`" title="Quitar" @click="quitarFotoExtra(i)">
+                                        <Trash2 class="size-3.5" />
+                                    </button>
+                                </div>
+                                <button
+                                    v-if="form.portada_fotos.length < maxFotosExtra"
+                                    type="button"
+                                    class="flex aspect-[16/9] flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-stone-300 text-xs text-neutral-500 transition-colors hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-emerald-500 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
+                                    @click="inputFotoExtra?.click()"
+                                >
+                                    <ImagePlus class="size-5" />
+                                    Agregar foto
+                                </button>
+                            </div>
+                            <input ref="inputFotoExtra" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Más fotos de portada" @change="elegirFotoExtra" />
+                            <p v-if="form.errors.portada_fotos" :class="claseError">{{ form.errors.portada_fotos }}</p>
+                            <p v-else-if="Object.keys(form.errors).some((k) => k.startsWith('portada_fotos.'))" :class="claseError">Revisa las fotos: alguna no es una imagen válida.</p>
+                            <p v-else :class="claseAyuda">Con más de una foto, la portada las va pasando sola cada 5 segundos. Usa el mismo formato que la principal.</p>
+                        </div>
                     </div>
 
                     <!-- Textos -->

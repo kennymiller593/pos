@@ -20,6 +20,8 @@
             @endif
         </span>
         <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-56 group-hover:pr-5 group-focus-visible:max-w-56 group-focus-visible:pr-5 lg:block">Pregúntale a {{ $asistente['nombre'] }}</span>
+        {{-- puntito rojo, como un mensaje sin leer: invita a tocar (se oculta si hay respuestas por leer, que traen su propio globo) --}}
+        <span data-bot-aviso class="absolute top-0 right-0 size-3.5 rounded-full bg-red-500 ring-2 ring-white group-has-[[data-bot-globo]:not(.hidden)]:hidden" aria-hidden="true"><span class="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75 motion-reduce:animate-none"></span></span>
         {{-- respuestas de una persona del negocio que llegaron con el chat cerrado --}}
         <span data-bot-globo class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-red-500 px-1.5 text-center text-xs leading-6 font-bold text-white ring-2 ring-white"></span>
     </button>

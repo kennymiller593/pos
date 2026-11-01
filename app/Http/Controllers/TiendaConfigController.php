@@ -99,7 +99,7 @@ class TiendaConfigController extends Controller
                     'imagen_propia' => $c->imagen_propia !== null,
                     'ordenada' => $c->orden !== null,
                 ])->values(),
-                'limites' => ['banners' => Tienda::MAX_BANNERS, 'preguntas' => Tienda::MAX_PREGUNTAS],
+                'limites' => ['banners' => Tienda::MAX_BANNERS, 'preguntas' => Tienda::MAX_PREGUNTAS, 'fotos_portada' => Tienda::MAX_FOTOS_PORTADA],
             ],
             'resumen' => $this->catalogo->resumen($empresa),
             'maxDestacados' => CatalogoTiendaService::DESTACADOS,
@@ -122,7 +122,12 @@ class TiendaConfigController extends Controller
 
         $antes = ['slug' => $empresa->tienda_slug, 'publicada' => (bool) $empresa->tienda_publicada];
         $anterior = Tienda::config($empresa);
-        $fotosAnteriores = array_filter([$anterior['portada_imagen'], $anterior['portada_imagen_movil'], $anterior['favicon'], $anterior['chatbot_avatar'], ...array_column($anterior['banners'], 'imagen')]);
+        $fotosDe = fn (array $config) => [
+            $config['portada_imagen'], $config['portada_imagen_movil'], $config['favicon'], $config['chatbot_avatar'],
+            ...array_column($config['banners'], 'imagen'),
+            ...array_column($config['portada_fotos'], 'imagen'), ...array_column($config['portada_fotos'], 'imagen_movil'),
+        ];
+        $fotosAnteriores = array_filter($fotosDe($anterior));
 
         $config = $this->armarConfig(
             $request,
@@ -139,7 +144,7 @@ class TiendaConfigController extends Controller
         ]);
 
         // las fotos que se reemplazaron o se quitaron (portada o banners) ya no se usan
-        foreach (array_diff($fotosAnteriores, [$config['portada_imagen'], $config['portada_imagen_movil'], $config['favicon'], $config['chatbot_avatar'], ...array_column($config['banners'], 'imagen')]) as $sobrante) {
+        foreach (array_diff($fotosAnteriores, $fotosDe($config)) as $sobrante) {
             $portada->eliminar($sobrante);
         }
 
@@ -236,6 +241,11 @@ class TiendaConfigController extends Controller
             'anuncio' => ['nullable', 'string', 'max:120'],
             'portada_imagen' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
             'portada_imagen_quitar' => ['nullable', 'boolean'],
+            // fotos de portada además de la principal (solo cuentan si el formulario avisa que las manda)
+            'con_portada_fotos' => ['sometimes', 'boolean'],
+            'portada_fotos' => ['nullable', 'array', 'max:'.Tienda::MAX_FOTOS_PORTADA],
+            'portada_fotos.*.imagen' => ['nullable', 'string', 'max:500'],
+            'portada_fotos.*.archivo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:6144'],
             // ícono de la pestaña
             'favicon' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'favicon_quitar' => ['nullable', 'boolean'],
@@ -306,22 +316,36 @@ class TiendaConfigController extends Controller
             'portada_imagen.max' => 'La foto de portada no debe pesar más de 6 MB.',
             'direccion.max' => 'La dirección no puede pasar de 400 caracteres.',
             'horario.max' => 'El horario no puede pasar de 300 caracteres.',
+            'portada_fotos.max' => 'Como máximo '.Tienda::MAX_FOTOS_PORTADA.' fotos más de portada.',
+            'portada_fotos.*.archivo.image' => 'Cada foto de portada debe ser una imagen.',
+            'portada_fotos.*.archivo.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
+            'portada_fotos.*.archivo.max' => 'Cada foto de portada debe pesar como máximo 6 MB.',
             'portada_titulo.max' => 'El título no puede pasar de 80 caracteres.',
             'portada_boton.max' => 'El texto del botón no puede pasar de 30 caracteres.',
             'anuncio.max' => 'El anuncio no puede pasar de 120 caracteres.',
         ]);
 
-        // el estilo "foto grande" necesita una foto: la que ya tiene o la que está subiendo
+        $actual = Tienda::config($empresa);
+        // cada foto de más es una imagen: la que ya tenía guardada o la que está subiendo
+        $fotosGuardadas = array_column($actual['portada_fotos'], 'imagen');
+        $errores = [];
+        foreach ($datos['portada_fotos'] ?? [] as $i => $foto) {
+            if (! ($foto['archivo'] ?? null) && ! in_array($foto['imagen'] ?? null, $fotosGuardadas, true)) {
+                $errores["portada_fotos.{$i}.archivo"] = 'Sube esta foto de portada.';
+            }
+        }
+
+        // el estilo "foto grande" necesita una foto: la que ya tiene, la que está subiendo o alguna de las de más
         $tendraFoto = $request->hasFile('portada_imagen')
-            || (filled(Tienda::config($empresa)['portada_imagen']) && ! $request->boolean('portada_imagen_quitar'));
+            || (filled($actual['portada_imagen']) && ! $request->boolean('portada_imagen_quitar'))
+            || collect($datos['portada_fotos'] ?? [])->contains(fn ($f) => ($f['archivo'] ?? null) || in_array($f['imagen'] ?? null, $fotosGuardadas, true));
 
         if (($datos['portada_estilo'] ?? null) === 'foto' && ! $tendraFoto) {
             throw ValidationException::withMessages(['portada_imagen' => 'Para el estilo "Foto grande" sube una foto de portada.']);
         }
 
         // cada banner es una imagen: la que ya tenía guardada o la que está subiendo
-        $guardadas = array_column(Tienda::config($empresa)['banners'], 'imagen');
-        $errores = [];
+        $guardadas = array_column($actual['banners'], 'imagen');
 
         foreach ($datos['banners'] ?? [] as $i => $banner) {
             if (! ($banner['archivo'] ?? null) && ! in_array($banner['imagen'] ?? null, $guardadas, true)) {
@@ -401,6 +425,27 @@ class TiendaConfigController extends Controller
             $request->boolean('portada_imagen_quitar') => [null, null],
             default => [$actual['portada_imagen'], $actual['portada_imagen_movil']],
         };
+
+        if ($request->boolean('con_portada_fotos')) {
+            // las que ya estaban conservan su versión para el celular; las nuevas se guardan en los dos tamaños
+            $anteriores = collect($actual['portada_fotos'])->keyBy('imagen');
+            $config['portada_fotos'] = array_values(array_map(function (array $foto) use ($portadaNueva, $anteriores) {
+                if ($foto['archivo'] ?? null) {
+                    [$imagen, $movil] = $portadaNueva($foto['archivo']);
+
+                    return ['imagen' => $imagen, 'imagen_movil' => $movil];
+                }
+
+                return ['imagen' => $foto['imagen'], 'imagen_movil' => $anteriores[$foto['imagen']]['imagen_movil'] ?? null];
+            }, $datos['portada_fotos'] ?? []));
+        }
+
+        // sin foto principal, la primera de las de más pasa a serlo
+        if (! $config['portada_imagen'] && $config['portada_fotos']) {
+            $primera = array_shift($config['portada_fotos']);
+            [$config['portada_imagen'], $config['portada_imagen_movil']] = [$primera['imagen'], $primera['imagen_movil'] ?? null];
+            $config['portada_fotos'] = array_values($config['portada_fotos']);
+        }
 
         // texto por categoría: solo de categorías de la empresa y sin vacíos
         if (array_key_exists('categorias_texto', $datos)) {

@@ -209,6 +209,55 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/')->assertDontSee('data-portada-sola', false)->assertSee('data-portada-foto', false)->assertSee('>Compra y gana</h1>', false);
     }
 
+    public function test_la_portada_admite_mas_fotos_que_se_van_pasando(): void
+    {
+        Storage::fake('public');
+        $guardar = fn (array $cambios) => $this->actingAs($this->admin->fresh())->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', ...$cambios]));
+        $config = fn () => $this->empresa->fresh()->tienda_config;
+        $foto = fn (string $nombre) => UploadedFile::fake()->image($nombre, 1600, 600);
+
+        // la principal y dos más
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen' => $foto('uno.jpg'), 'con_portada_fotos' => true, 'portada_fotos' => [['archivo' => $foto('dos.jpg')], ['archivo' => $foto('tres.jpg')]]])->assertSessionHasNoErrors();
+        $fotos = $config()['portada_fotos'];
+        $this->assertCount(2, $fotos);
+        $this->assertStringStartsWith('/storage/tienda/', $fotos[0]['imagen']);
+        $this->assertStringStartsWith('/storage/tienda/', $fotos[0]['imagen_movil']);
+        $this->assertCount(6, Storage::disk('public')->allFiles('tienda')); // 3 fotos × (grande + celular)
+
+        // publicar() reemplaza toda la configuración: se conserva también la versión para el celular de la principal
+        $principal = ['portada_imagen' => $config()['portada_imagen'], 'portada_imagen_movil' => $config()['portada_imagen_movil']];
+        foreach (['clasica', 'mercado'] as $plantilla) {
+            $this->publicar(['plantilla' => $plantilla, 'portada_estilo' => 'foto', ...$principal, 'portada_fotos' => $fotos]);
+            $this->tienda('/')->assertOk()
+                ->assertSee('data-portada-fondo', false)
+                ->assertSeeInOrder([$config()['portada_imagen'], $fotos[0]['imagen'], $fotos[1]['imagen']], false)
+                ->assertSee('data-portada-punto', false);
+
+            // con la foto sola, las tres van enteras y deslizables
+            $this->publicar(['plantilla' => $plantilla, 'portada_estilo' => 'foto', ...$principal, 'portada_fotos' => $fotos, 'portada_solo_foto' => true]);
+            $this->tienda('/')->assertOk()->assertSee('data-portada-slider', false)->assertSee('data-portada-pista', false);
+        }
+
+        // no se puede "guardar" una foto que no subió esta tienda, ni pasar el máximo
+        $guardar(['con_portada_fotos' => true, 'portada_fotos' => [['imagen' => 'https://otro-sitio.com/foto.jpg']]])->assertSessionHasErrors('portada_fotos.0.archivo');
+        $guardar(['con_portada_fotos' => true, 'portada_fotos' => array_fill(0, Tienda::MAX_FOTOS_PORTADA + 1, ['archivo' => $foto('x.jpg')])])->assertSessionHasErrors('portada_fotos');
+
+        // guardar otra cosa las conserva; quitar una borra sus archivos
+        $guardar(['anuncio' => 'Hola'])->assertSessionHasNoErrors();
+        $this->assertCount(2, $config()['portada_fotos']);
+        $guardar(['con_portada_fotos' => true, 'portada_fotos' => [['imagen' => $fotos[1]['imagen']]]])->assertSessionHasNoErrors();
+        $this->assertSame([$fotos[1]['imagen']], array_column($config()['portada_fotos'], 'imagen'));
+        $this->assertSame($fotos[1]['imagen_movil'], $config()['portada_fotos'][0]['imagen_movil']);
+        $this->assertCount(4, Storage::disk('public')->allFiles('tienda'));
+
+        // sin principal, la primera de las de más pasa a serlo
+        $guardar(['portada_estilo' => 'foto', 'portada_imagen_quitar' => true, 'con_portada_fotos' => true, 'portada_fotos' => [['imagen' => $fotos[1]['imagen']]]])->assertSessionHasNoErrors();
+        $this->assertSame($fotos[1]['imagen'], $config()['portada_imagen']);
+        $this->assertSame([], $config()['portada_fotos']);
+        $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
+        $this->tienda('/')->assertOk()->assertDontSee('data-portada-fondo', false);
+    }
+
     public function test_el_buscador_encuentra_por_la_descripcion(): void
     {
         $this->publicar();
@@ -1328,7 +1377,7 @@ class TiendaEnLineaTest extends TestCase
         $this->assertCount(2, Storage::disk('public')->allFiles('tienda'));
         [$ancho] = getimagesizefromstring(Storage::disk('public')->get(substr($config['portada_imagen_movil'], strlen('/storage/'))));
         $this->assertSame(900, $ancho);
-        $this->tienda('/')->assertSee('srcset="'.$config['portada_imagen_movil'].' 900w, '.$config['portada_imagen'].' 1600w" sizes="100vw"', false);
+        $this->tienda('/')->assertSee('<source media="(max-width: 639px)" srcset="'.$config['portada_imagen_movil'].'">', false)->assertSee('src="'.$config['portada_imagen'].'"', false);
 
         // al reemplazar o quitar la foto se van las dos
         $guardar(['portada_estilo' => 'vitrina', 'portada_imagen_quitar' => true])->assertSessionHasNoErrors();

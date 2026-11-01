@@ -39,6 +39,7 @@ class Tienda
         'portada_imagen' => null,
         'portada_imagen_movil' => null, // la misma foto, más chica, para el celular
         'portada_solo_foto' => false, // la foto ya trae su propio texto: se muestra completa, sin título ni velo encima
+        'portada_fotos' => [], // fotos de portada además de la principal: [imagen, imagen_movil]; se van pasando solas
         'favicon' => null, // ícono de la pestaña del navegador (PNG cuadrado); sin él se usa el logo
         'portada_titulo' => null,
         'portada_boton' => null,
@@ -76,6 +77,9 @@ class Tienda
     ];
 
     public const MAX_BANNERS = 5;
+
+    /** Fotos de portada además de la principal (4 en total). */
+    public const MAX_FOTOS_PORTADA = 3;
 
     public const MAX_PREGUNTAS = 12;
 
@@ -363,6 +367,13 @@ class Tienda
         if (! in_array($config['portada_estilo'], self::ESTILOS, true) || ($config['portada_estilo'] === 'foto' && blank($config['portada_imagen']))) {
             $config['portada_estilo'] = self::CONFIG['portada_estilo'];
         }
+
+        // las fotos de más solo tienen sentido con una principal, y como máximo las permitidas
+        $config['portada_fotos'] = blank($config['portada_imagen']) ? [] : array_values(array_slice(
+            array_filter((array) $config['portada_fotos'], fn ($f) => is_array($f) && filled($f['imagen'] ?? null)),
+            0,
+            self::MAX_FOTOS_PORTADA,
+        ));
 
         return $config;
     }

@@ -700,3 +700,69 @@ if (medicion && (medicion.ga4 || medicion.meta || medicion.tiktok || medicion.cl
     })
 }
 
+
+// ---------------------------------------------------------------- portada con varias fotos
+// Se van pasando solas cada 5 s; los puntitos eligen una. Sin JavaScript queda la primera (o se deslizan con el dedo).
+const sinMovimiento = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const marcarPunto = (contenedor, indice) =>
+    contenedor.querySelectorAll('[data-portada-punto]').forEach((p, i) => (i === indice ? p.setAttribute('data-activo', '') : p.removeAttribute('data-activo')))
+
+// de fondo, detrás del texto: fundido entre una y otra
+document.querySelectorAll('[data-portada-fondo]').forEach((fondo) => {
+    const seccion = fondo.closest('[data-portada]') ?? fondo.parentElement
+    const fotos = [...fondo.querySelectorAll('[data-portada-slide]')]
+    let actual = 0
+    const mostrar = (indice) => {
+        actual = indice
+        fotos.forEach((f, i) => {
+            f.classList.toggle('opacity-100', i === indice)
+            f.classList.toggle('opacity-0', i !== indice)
+        })
+        marcarPunto(seccion, indice)
+    }
+    let pausaHasta = 0
+    if (!sinMovimiento) setInterval(() => Date.now() > pausaHasta && document.visibilityState === 'visible' && mostrar((actual + 1) % fotos.length), 5000)
+    seccion.querySelectorAll('[data-portada-punto]').forEach((p, i) =>
+        p.addEventListener('click', () => {
+            pausaHasta = Date.now() + 8000
+            mostrar(i)
+        }),
+    )
+})
+
+// enteras, una tras otra: se desplaza la pista; si el visitante la toca, se le deja un rato
+document.querySelectorAll('[data-portada-slider]').forEach((slider) => {
+    const pista = slider.querySelector('[data-portada-pista]')
+    const total = pista.children.length
+    let actual = 0
+    let pausaHasta = 0
+    const ir = (indice) => {
+        actual = (indice + total) % total
+        pista.scrollTo({ left: actual * pista.clientWidth, behavior: sinMovimiento ? 'auto' : 'smooth' })
+    }
+    pista.addEventListener('scroll', () => {
+        actual = Math.round(pista.scrollLeft / pista.clientWidth)
+        marcarPunto(slider.parentElement, actual)
+    }, { passive: true })
+    ;['pointerdown', 'touchstart', 'wheel'].forEach((evento) => pista.addEventListener(evento, () => (pausaHasta = Date.now() + 8000), { passive: true }))
+    if (!sinMovimiento) setInterval(() => Date.now() > pausaHasta && document.visibilityState === 'visible' && ir(actual + 1), 5000)
+    slider.parentElement.querySelectorAll('[data-portada-punto]').forEach((p, i) =>
+        p.addEventListener('click', () => {
+            pausaHasta = Date.now() + 8000
+            ir(i)
+        }),
+    )
+})
+
+// ---------------------------------------------------------------- aviso del chatbot
+// El puntito rojo del botón del asistente invita a abrirlo; una vez abierto en este navegador, ya no hace falta.
+const avisoBot = document.querySelector('[data-bot-aviso]')
+if (avisoBot) {
+    const visto = () => { try { return localStorage.getItem('bot-aviso-visto') === '1' } catch { return false } }
+    if (visto()) avisoBot.classList.add('hidden')
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('[data-bot-abrir]')) return
+        avisoBot.classList.add('hidden')
+        try { localStorage.setItem('bot-aviso-visto', '1') } catch {}
+    })
+}

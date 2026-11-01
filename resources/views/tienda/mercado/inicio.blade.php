@@ -117,28 +117,16 @@
             @endphp
             @if ($fondoPortada && $tienda['portada']['solo_foto'])
                 {{-- La foto del dueño ya trae su propio texto: se muestra entera, sin recortes ni nada encima --}}
-                <section class="mt-4 overflow-hidden rounded-3xl bg-slate-100 sm:mt-6" data-portada="mercado" data-portada-sola>
+                <section class="relative mt-4 overflow-hidden rounded-3xl bg-slate-100 sm:mt-6" data-portada="mercado" data-portada-sola>
                     <h1 class="sr-only">{{ $tienda['portada']['titulo'] }}</h1>
-                    <a href="/catalogo" class="block" aria-label="{{ $tienda['portada']['boton'] }}">
-                        <picture>
-                            @if ($tienda['portada']['imagen_movil'])
-                                <source media="(max-width: 639px)" srcset="{{ $tienda['portada']['imagen_movil'] }}">
-                            @endif
-                            <img src="{{ $fondoPortada }}" alt="{{ $tienda['portada']['titulo'] }}" fetchpriority="high" class="block h-auto w-full">
-                        </picture>
-                    </a>
+                    @include('tienda.portada-fotos', ['modo' => 'slider'])
                 </section>
             @else
             {{-- Campaña: panel en el color de la tienda con el título, los botones y los productos de la semana --}}
             <section class="relative mt-4 overflow-hidden rounded-3xl sm:mt-6 {{ $fondoPortada ? 'bg-neutral-900 text-white' : 'bg-(--marca) text-(--sobre-marca)' }}" data-portada="mercado" @if ($fondoPortada) data-portada-foto @endif>
                 @if ($fondoPortada)
-                    {{-- la foto del dueño, con el mismo velo que ve en su panel para que el título se lea --}}
-                    <picture>
-                        @if ($tienda['portada']['imagen_movil'])
-                            <source media="(max-width: 639px)" srcset="{{ $tienda['portada']['imagen_movil'] }}">
-                        @endif
-                        <img src="{{ $fondoPortada }}" alt="" fetchpriority="high" class="pointer-events-none absolute inset-0 size-full object-cover">
-                    </picture>
+                    {{-- la foto del dueño (o varias, que se van pasando), con el mismo velo que ve en su panel para que el título se lea --}}
+                    @include('tienda.portada-fotos', ['modo' => 'fondo'])
                     <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-neutral-950/85 via-neutral-950/55 to-neutral-950/25" aria-hidden="true"></div>
                 @else
                     <div class="pointer-events-none absolute -top-24 -right-16 size-80 rounded-full bg-white/10 blur-2xl" aria-hidden="true"></div>
