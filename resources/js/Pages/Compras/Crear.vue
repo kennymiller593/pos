@@ -14,6 +14,9 @@ const props = defineProps({
     sucursalDestino: { type: String, default: null },
     // viendo "todas las sucursales": se elige aquí cuál recibe la compra
     sucursales: { type: Array, default: () => [] },
+    // caja abierta de quien registra (para descontar la compra al contado) y los medios de pago
+    caja: { type: Object, default: () => ({ abierta: false, efectivo: 0 }) },
+    mediosPago: { type: Array, default: () => [] },
 })
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
@@ -27,6 +30,9 @@ const form = useForm({
     fecha: fechaLocal(), // la de hoy en la hora local (no UTC: de noche marcaba mañana)
     es_credito: false,
     fecha_vencimiento: '',
+    pagar_desde_caja: props.caja.abierta, // al contado: como en el sistema anterior, la compra sale de la caja abierta
+    medio_pago_codigo: 'efectivo',
+    referencia_pago: '',
     items: [],
 })
 
@@ -215,6 +221,13 @@ function subtotal(fila) {
 const total = computed(() => Math.round(filas.value.reduce((suma, f) => suma + subtotal(f), 0) * 100) / 100)
 const unidades = computed(() => filas.value.reduce((n, f) => n + Number(f.cantidad || 0), 0))
 
+// pago desde caja: con qué medio y si el efectivo del cajón alcanza (si no, se avisa pero no se bloquea)
+// solo se descuenta si la caja abierta es de la sucursal que recibe la compra
+const cajaDeOtraSucursal = computed(() => props.caja.abierta && props.sucursales.length > 0 && form.sucursal_id !== props.caja.sucursal_id)
+const descuentaDeCaja = computed(() => !form.es_credito && form.pagar_desde_caja && props.caja.abierta && !cajaDeOtraSucursal.value)
+const medioElegido = computed(() => props.mediosPago.find((m) => m.codigo === form.medio_pago_codigo))
+const cajaEnNegativo = computed(() => descuentaDeCaja.value && form.medio_pago_codigo === 'efectivo' && total.value > Number(props.caja.efectivo) + 0.005)
+
 const puedeGuardar = computed(() =>
     filas.value.length > 0 &&
     filas.value.every((f) =>
@@ -249,6 +262,9 @@ function guardar() {
         tipo_comprobante_codigo: data.tipo_comprobante_codigo || null,
         serie_numero: data.tipo_comprobante_codigo ? (data.serie_numero || null) : null,
         fecha_vencimiento: data.es_credito ? (data.fecha_vencimiento || null) : null,
+        pagar_desde_caja: descuentaDeCaja.value,
+        medio_pago_codigo: descuentaDeCaja.value ? data.medio_pago_codigo : null,
+        referencia_pago: descuentaDeCaja.value ? (data.referencia_pago || null) : null,
     })).post('/compras')
 }
 
@@ -432,6 +448,39 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                     </div>
                                     <p class="text-xs text-amber-800 sm:max-w-56 sm:pb-2.5 dark:text-amber-300">
                                         La deuda quedará en <strong>Cuentas por pagar</strong>.<template v-if="!proveedorSeleccionado"> Elige el proveedor.</template>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Contado: ¿el dinero salió de la caja abierta? -->
+                            <div v-else class="md:col-span-2">
+                                <div class="rounded-xl bg-slate-50 p-3 dark:bg-neutral-950/60" data-pago-caja>
+                                    <label class="flex cursor-pointer items-center justify-between gap-3">
+                                        <span>
+                                            <span class="block text-sm font-medium">Descontar de la caja abierta</span>
+                                            <span class="block text-xs text-[#64748B] dark:text-neutral-400">
+                                                <template v-if="!caja.abierta">No tienes caja abierta: la compra se registra sin tocar la caja.</template>
+                                                <template v-else-if="cajaDeOtraSucursal">Tu caja abierta ({{ caja.nombre }} · {{ caja.sucursal }}) es de otra sucursal: no se puede descontar de ella.</template>
+                                                <template v-else>Sale de {{ caja.nombre }}<template v-if="caja.sucursal"> · {{ caja.sucursal }}</template> y se ve en el cierre de ese turno.</template>
+                                            </span>
+                                        </span>
+                                        <input v-model="form.pagar_desde_caja" type="checkbox" :disabled="!caja.abierta || cajaDeOtraSucursal" class="size-5 shrink-0 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40" />
+                                    </label>
+                                    <div v-if="descuentaDeCaja" class="mt-3 grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <label :class="claseLabel" for="medio_pago">Pagado con</label>
+                                            <select id="medio_pago" v-model="form.medio_pago_codigo" :class="claseInput">
+                                                <option v-for="m in mediosPago" :key="m.codigo" :value="m.codigo">{{ m.nombre }}</option>
+                                            </select>
+                                            <p v-if="form.errors.medio_pago_codigo" :class="claseError">{{ form.errors.medio_pago_codigo }}</p>
+                                        </div>
+                                        <div v-if="medioElegido?.requiere_referencia">
+                                            <label :class="claseLabel" for="referencia_pago">N° de operación</label>
+                                            <input id="referencia_pago" v-model="form.referencia_pago" type="text" maxlength="100" :class="claseInput" placeholder="Opcional" />
+                                        </div>
+                                    </div>
+                                    <p v-if="cajaEnNegativo" class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400" data-aviso-negativo>
+                                        En caja hay {{ soles(caja.efectivo) }} en efectivo: con esta compra el efectivo esperado quedará en negativo. Se registra igual.
                                     </p>
                                 </div>
                             </div>
@@ -847,6 +896,10 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                             <div class="flex justify-between">
                                 <dt class="text-[#64748B] dark:text-neutral-400">Condición</dt>
                                 <dd class="font-medium">{{ form.es_credito ? 'Crédito' : 'Contado' }}</dd>
+                            </div>
+                            <div v-if="!form.es_credito" class="flex justify-between">
+                                <dt class="text-[#64748B] dark:text-neutral-400">Caja</dt>
+                                <dd class="font-medium">{{ descuentaDeCaja ? `Se descuenta (${medioElegido?.nombre ?? form.medio_pago_codigo})` : 'No se descuenta' }}</dd>
                             </div>
                         </dl>
                         <div class="mt-4 flex items-baseline justify-between border-t border-[#E2E8F0] pt-4 dark:border-neutral-800">

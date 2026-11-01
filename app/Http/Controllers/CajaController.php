@@ -94,14 +94,42 @@ class CajaController extends Controller
                 'monto_inicial' => (float) $apertura->monto_inicial,
                 'resumen' => $this->caja->resumen($apertura),
                 'medios' => $this->caja->resumenPorMedio($apertura),
-                'movimientos' => $apertura->movimientos()
-                    ->with('usuario:id,nombre_completo')
-                    ->latest('creado_en')
-                    ->limit(50)
-                    ->get(['id', 'tipo', 'concepto', 'monto', 'medio_pago_codigo', 'referencia', 'usuario_id', 'creado_en']),
+                'movimientos' => $this->movimientosDelTurno($apertura),
             ] : null,
             'denominaciones' => CajaService::DENOMINACIONES,
         ]);
+    }
+
+    /**
+     * Todo lo que salió o entró a mano en el turno: los movimientos manuales y también los pagos a proveedor
+     * (deudas pagadas y compras al contado descontadas de caja), que antes solo se veían en el total.
+     */
+    private function movimientosDelTurno(AperturaCaja $apertura): array
+    {
+        $manuales = $apertura->movimientos()
+            ->with('usuario:id,nombre_completo')
+            ->get(['id', 'tipo', 'concepto', 'monto', 'medio_pago_codigo', 'referencia', 'usuario_id', 'creado_en'])
+            ->map(fn ($m) => [
+                'id' => $m->id, 'tipo' => $m->tipo, 'origen' => 'manual', 'concepto' => $m->concepto, 'monto' => (float) $m->monto,
+                'medio_pago_codigo' => $m->medio_pago_codigo, 'referencia' => $m->referencia, 'usuario' => $m->usuario?->only(['id', 'nombre_completo']), 'creado_en' => $m->creado_en,
+            ]);
+
+        $pagos = $apertura->pagosProveedor()
+            ->with(['usuario:id,nombre_completo', 'cuenta.proveedor:id,razon_social', 'compra:id,proveedor_id,serie_numero', 'compra.proveedor' => fn ($q) => $q->withTrashed()->select(['id', 'razon_social'])])
+            ->get()
+            ->map(function ($p) {
+                $proveedor = $p->compra_id ? $p->compra?->proveedor?->razon_social : $p->cuenta?->proveedor?->razon_social;
+                $concepto = $p->compra_id
+                    ? 'Compra'.($p->compra?->serie_numero ? " {$p->compra->serie_numero}" : '').($proveedor ? " · {$proveedor}" : '')
+                    : 'Pago a proveedor'.($proveedor ? ": {$proveedor}" : '');
+
+                return [
+                    'id' => $p->id, 'tipo' => 'egreso', 'origen' => $p->compra_id ? 'compra' : 'cuenta_por_pagar', 'concepto' => $concepto, 'monto' => (float) $p->monto,
+                    'medio_pago_codigo' => $p->medio_pago_codigo, 'referencia' => $p->referencia, 'usuario' => $p->usuario?->only(['id', 'nombre_completo']), 'creado_en' => $p->creado_en,
+                ];
+            });
+
+        return $manuales->concat($pagos)->sortByDesc('creado_en')->take(50)->values()->all();
     }
 
     public function abrir(Request $request): RedirectResponse

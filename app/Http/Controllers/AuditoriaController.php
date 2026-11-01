@@ -18,6 +18,8 @@ class AuditoriaController extends Controller
         'usuario.creado' => 'Usuario creado',
         'usuario.actualizado' => 'Usuario actualizado',
         'caja.cierre_con_diferencia' => 'Cierre de caja con diferencia',
+        'caja.pago_compra' => 'Compra descontada de caja',
+        'compra.anulada' => 'Compra anulada',
         'soporte.ingreso' => 'Soporte de inkaPos entró a la cuenta',
         'soporte.salida' => 'Soporte de inkaPos salió de la cuenta',
     ];

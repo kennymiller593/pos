@@ -32,6 +32,12 @@ class CompraService
             throw new ErrorDeNegocio('No se puede anular: la deuda de esta compra ya tiene pagos registrados.');
         }
 
+        // pagada desde la caja: el dinero vuelve al cajón solo si ese turno sigue abierto
+        $pago = $compra->pagoCaja;
+        if ($pago && $pago->apertura?->cerrada_en) {
+            throw new ErrorDeNegocio('No se puede anular: esta compra se descontó de una caja que ya cerró. Registra un ingreso en caja por S/ '.number_format((float) $pago->monto, 2).' y un ajuste de stock.');
+        }
+
         DB::transaction(function () use ($compra, $usuario, $motivo) {
             $bloqueada = Compra::lockForUpdate()->find($compra->id);
 
@@ -83,6 +89,7 @@ class CompraService
             }
 
             $compra->cuentaPorPagar?->delete();
+            $compra->pagoCaja?->delete(); // el pago desde caja se deshace: el efectivo esperado vuelve a subir
 
             $compra->update([
                 'estado' => 'anulada',

@@ -50,6 +50,12 @@ class Compra extends Model
         return $this->hasOne(CuentaPorPagar::class, 'compra_id');
     }
 
+    /** Pago hecho desde la caja al registrar la compra al contado (a lo sumo uno). */
+    public function pagoCaja(): HasOne
+    {
+        return $this->hasOne(PagoProveedor::class, 'compra_id');
+    }
+
     public function anuladaPor(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'anulada_por');

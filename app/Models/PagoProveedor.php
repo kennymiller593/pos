@@ -18,6 +18,7 @@ class PagoProveedor extends Model
     protected $fillable = [
         'empresa_id',
         'cuenta_id',
+        'compra_id', // compra al contado pagada desde caja al registrarla (sin cuenta por pagar)
         'apertura_id',
         'usuario_id',
         'medio_pago_codigo',
@@ -41,6 +42,11 @@ class PagoProveedor extends Model
     public function cuenta(): BelongsTo
     {
         return $this->belongsTo(CuentaPorPagar::class, 'cuenta_id');
+    }
+
+    public function compra(): BelongsTo
+    {
+        return $this->belongsTo(Compra::class, 'compra_id');
     }
 
     public function apertura(): BelongsTo

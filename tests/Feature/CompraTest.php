@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\CapaCosto;
 use App\Models\Compra;
+use App\Models\CuentaPorPagar;
 use App\Models\MovimientoInventario;
 use App\Models\Proveedor;
+use App\Services\CajaService;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
@@ -228,6 +230,116 @@ class CompraTest extends TestCase
         // otra empresa no puede descargarla
         $this->crearEscenarioBase();
         $this->actingAs($this->admin)->get("/compras/{$compra->id}/pdf")->assertForbidden();
+    }
+
+    public function test_la_compra_al_contado_se_descuenta_de_la_caja_abierta(): void
+    {
+        $producto = $this->crearProducto(precio: 20.00);
+        $unidad = $producto->presentaciones->first();
+        $compra = fn (array $extra = []) => $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-'.random_int(1000, 9999), 'fecha' => now()->toDateString(), 'es_credito' => false,
+            'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 10, 'costo_unitario' => 8.00]], ...$extra,
+        ]);
+        $caja = app(CajaService::class);
+        $comprasAntes = Compra::count();
+        $cuentasAntes = CuentaPorPagar::count();
+
+        // sin caja abierta no hay de dónde descontar
+        $compra(['pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo'])->assertSessionHas('error');
+        $this->assertSame($comprasAntes, Compra::count());
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->where('caja.abierta', false));
+
+        $apertura = $this->abrirCaja(50);
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p
+            ->where('caja.abierta', true)->where('caja.efectivo', fn ($v) => (float) $v === 50.0)->has('mediosPago'));
+
+        // la compra de 80 sale del cajón aunque solo haya 50: se avisa en pantalla, no se bloquea (como en el sistema anterior)
+        $compra(['pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo'])->assertSessionHas('success');
+        $registrada = Compra::latest('creado_en')->first();
+        $pago = $registrada->pagoCaja;
+        $this->assertNotNull($pago);
+        $this->assertSame($apertura->id, $pago->apertura_id);
+        $this->assertEqualsWithDelta(80.0, (float) $pago->monto, 0.001);
+        $this->assertEqualsWithDelta(-30.0, $caja->resumen($apertura)['esperado'], 0.001);
+        $this->assertEqualsWithDelta(80.0, $caja->resumen($apertura)['egresos'], 0.001);
+        $this->assertSame($cuentasAntes, CuentaPorPagar::count()); // no pasa por cuentas por pagar
+
+        // y se ve en los movimientos del turno
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn (Assert $p) => $p
+            ->where('apertura.movimientos.0.origen', 'compra')
+            ->where('apertura.movimientos.0.tipo', 'egreso')
+            ->where('apertura.movimientos.0.monto', fn ($v) => (float) $v === 80.0));
+
+        // sin marcarlo, la caja no se toca
+        $compra(['pagar_desde_caja' => false])->assertSessionHas('success');
+        $this->assertEqualsWithDelta(-30.0, $caja->resumen($apertura)['esperado'], 0.001);
+
+        // al anular con el turno aún abierto, el dinero vuelve al cajón
+        $this->actingAs($this->admin)->post("/compras/{$registrada->id}/anular", ['motivo' => 'Error de registro'])->assertSessionHas('success');
+        $this->assertNull($registrada->fresh()->pagoCaja);
+        $this->assertEqualsWithDelta(50.0, $caja->resumen($apertura)['esperado'], 0.001);
+    }
+
+    public function test_pago_desde_caja_con_otro_medio_sin_medio_o_de_otra_sucursal(): void
+    {
+        $unidad = $this->crearProducto(precio: 20.00)->presentaciones->first();
+        $apertura = $this->abrirCaja(100);
+        $caja = app(CajaService::class);
+        $compra = fn (array $extra = []) => $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-'.random_int(1000, 9999), 'fecha' => now()->toDateString(), 'es_credito' => false,
+            'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 3, 'costo_unitario' => 10.00]], ...$extra,
+        ]);
+
+        // marcado sin decir con qué se pagó: no pasa
+        $compra(['pagar_desde_caja' => true])->assertSessionHasErrors('medio_pago_codigo');
+
+        // pagado por transferencia: queda en el cuadre de ese medio y el efectivo del cajón no cambia
+        $compra(['pagar_desde_caja' => true, 'medio_pago_codigo' => 'transferencia', 'referencia_pago' => 'OP-55'])->assertSessionHas('success');
+        $this->assertEqualsWithDelta(100.0, $caja->resumen($apertura)['esperado'], 0.001);
+        $transferencia = collect($caja->resumenPorMedio($apertura))->firstWhere('codigo', 'transferencia');
+        $this->assertEqualsWithDelta(30.0, $transferencia['pagos_proveedor'], 0.001);
+        $this->assertSame('OP-55', Compra::latest('id')->first()->pagoCaja->referencia); // id uuid v7: el último creado
+
+        // a crédito, lo de la caja se ignora: queda la deuda y ningún pago
+        $proveedor = Proveedor::create(['empresa_id' => $this->empresa->id, 'razon_social' => 'Insumos SAC', 'ruc' => '20'.random_int(100000000, 999999999)]);
+        $compra(['es_credito' => true, 'proveedor_id' => $proveedor->id, 'pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo'])->assertSessionHas('success');
+        $this->assertNull(Compra::where('es_credito', true)->latest('id')->first()->pagoCaja);
+        $this->assertEqualsWithDelta(100.0, $caja->resumen($apertura)['esperado'], 0.001);
+
+    }
+
+    public function test_no_se_descuenta_de_una_caja_de_otra_sucursal(): void
+    {
+        $unidad = $this->crearProducto(precio: 20.00)->presentaciones->first();
+        $otra = \App\Models\Sucursal::create(['empresa_id' => $this->empresa->id, 'codigo_sunat' => '0002', 'nombre' => 'Anexo', 'activo' => true]);
+        $cajaOtra = \App\Models\Caja::create(['empresa_id' => $this->empresa->id, 'sucursal_id' => $otra->id, 'nombre' => 'Caja Anexo', 'activo' => true]);
+        \App\Models\AperturaCaja::create(['empresa_id' => $this->empresa->id, 'caja_id' => $cajaOtra->id, 'usuario_id' => $this->admin->id, 'monto_inicial' => 300]);
+
+        // la compra entra a la sucursal principal; la caja abierta es del anexo: no se descuenta de ahí
+        $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-1', 'fecha' => now()->toDateString(), 'es_credito' => false,
+            'pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo',
+            'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 1, 'costo_unitario' => 10.00]],
+        ])->assertSessionHas('error');
+        $this->assertSame(0, \App\Models\PagoProveedor::whereNotNull('compra_id')->count());
+        $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->where('caja.sucursal_id', $otra->id)->where('caja.nombre', 'Caja Anexo'));
+    }
+
+    public function test_no_se_anula_una_compra_descontada_de_una_caja_que_ya_cerro(): void
+    {
+        $unidad = $this->crearProducto(precio: 20.00)->presentaciones->first();
+        $apertura = $this->abrirCaja(500);
+        $this->actingAs($this->admin)->post('/compras', [
+            'proveedor_id' => null, 'tipo_comprobante_codigo' => '00', 'serie_numero' => 'N-77', 'fecha' => now()->toDateString(), 'es_credito' => false,
+            'pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo',
+            'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 2, 'costo_unitario' => 10.00]],
+        ])->assertSessionHas('success');
+        $apertura->forceFill(['cerrada_en' => now()])->save();
+
+        $compra = Compra::latest('creado_en')->first();
+        $this->actingAs($this->admin)->post("/compras/{$compra->id}/anular", ['motivo' => 'Prueba'])->assertSessionHas('error');
+        $this->assertSame('registrada', $compra->fresh()->estado);
+        $this->assertNotNull($compra->fresh()->pagoCaja);
     }
 
     public function test_compra_sin_items_es_rechazada(): void

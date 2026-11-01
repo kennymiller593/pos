@@ -3,16 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Models\AperturaCaja;
+use App\Models\Auditoria;
 use App\Models\Compra;
 use App\Models\CompraDetalle;
 use App\Models\CuentaPorPagar;
 use App\Models\Lote;
+use App\Models\MedioPago;
+use App\Models\PagoProveedor;
 use App\Models\Producto;
 use App\Models\ProductoPresentacion;
 use App\Models\Proveedor;
 use App\Models\Sucursal;
 use App\Models\TipoComprobante;
 use App\Services\BusquedaProductos;
+use App\Services\CajaService;
 use App\Services\CompraService;
 use App\Services\InventarioService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
@@ -30,6 +35,7 @@ class CompraController extends Controller
         private readonly InventarioService $inventario,
         private readonly CompraService $comprasService,
         private readonly BusquedaProductos $busqueda,
+        private readonly CajaService $caja,
     ) {}
 
     public function index(Request $request): Response
@@ -205,6 +211,11 @@ class CompraController extends Controller
                 ]),
             ]),
             'tiposComprobante' => TipoComprobante::whereIn('codigo', ['01', '03', '00'])->orderBy('codigo')->get(['codigo', 'nombre']),
+            // la compra al contado puede descontarse de la caja abierta de quien la registra (como en el sistema anterior de los clientes)
+            'caja' => ($apertura = $this->caja->aperturaDe($request->user()))
+                ? ['abierta' => true, 'efectivo' => $this->caja->resumen($apertura)['esperado'], 'nombre' => $apertura->caja->nombre, 'sucursal_id' => $apertura->caja->sucursal_id, 'sucursal' => $apertura->caja->sucursal?->nombre]
+                : ['abierta' => false, 'efectivo' => 0],
+            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             // sucursal que recibe la mercadería: la del selector; viendo "todas", se elige en el formulario
             'sucursalDestino' => $this->contextoSucursal($request)->nombreDe($this->sucursalDeTrabajo($request)),
             'sucursales' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
@@ -226,6 +237,10 @@ class CompraController extends Controller
             'fecha' => ['required', 'date'],
             'es_credito' => ['required', 'boolean'],
             'fecha_vencimiento' => ['nullable', 'date', 'after_or_equal:fecha'],
+            // al contado: si se pagó con dinero de la caja abierta, con qué medio
+            'pagar_desde_caja' => ['sometimes', 'boolean'],
+            'medio_pago_codigo' => [Rule::requiredIf(fn () => ! $request->boolean('es_credito') && $request->boolean('pagar_desde_caja')), 'nullable', Rule::exists('medios_pago', 'codigo')],
+            'referencia_pago' => ['nullable', 'string', 'max:100'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.presentacion_id' => ['required', 'uuid'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
@@ -235,6 +250,7 @@ class CompraController extends Controller
         ], [
             'proveedor_id.required' => 'La compra a crédito necesita un proveedor para registrar la deuda.',
             'fecha.required' => 'Indica la fecha de la compra.',
+            'medio_pago_codigo.required' => 'Indica con qué se pagó la compra.',
             'fecha_vencimiento.after_or_equal' => 'El vencimiento no puede ser anterior a la fecha de compra.',
             'items.required' => 'Agrega al menos un producto.',
             'items.*.cantidad.gt' => 'La cantidad debe ser mayor a 0.',
@@ -246,6 +262,19 @@ class CompraController extends Controller
 
         if (! $sucursalId) {
             return back()->with('error', 'Elige la sucursal que recibe la compra.');
+        }
+
+        // compra al contado pagada con dinero de la caja: sale del turno abierto de quien la registra.
+        // Si el efectivo no alcanza no se bloquea (el cajero ya lo pagó): la pantalla avisa y el cierre lo muestra.
+        $pagarDesdeCaja = ! $datos['es_credito'] && $request->boolean('pagar_desde_caja');
+        $apertura = $pagarDesdeCaja ? $this->caja->aperturaDe($usuario) : null;
+
+        if ($pagarDesdeCaja && ! $apertura) {
+            return back()->with('error', 'Para descontar la compra de la caja primero abre caja, o desmarca "Descontar de la caja abierta".');
+        }
+        // el dinero sale de la caja de la sucursal que recibe la mercadería: así el cierre de cada sucursal cuadra con sus compras
+        if ($pagarDesdeCaja && $apertura->caja?->sucursal_id !== $sucursalId) {
+            return back()->with('error', 'Tu caja abierta es de otra sucursal. Registra la compra en esa sucursal o desmarca "Descontar de la caja abierta".');
         }
 
         // el mismo comprobante del proveedor no se registra dos veces
@@ -309,7 +338,7 @@ class CompraController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($datos, $lineas, $total, $usuario, $empresaId, $sucursalId) {
+            DB::transaction(function () use ($datos, $lineas, $total, $usuario, $empresaId, $sucursalId, $pagarDesdeCaja, $apertura) {
                 $compra = Compra::create([
                     'empresa_id' => $empresaId,
                     'sucursal_id' => $sucursalId,
@@ -330,6 +359,28 @@ class CompraController extends Controller
                         'proveedor_id' => $datos['proveedor_id'],
                         'monto_total' => round($total, 2),
                         'fecha_vencimiento' => $datos['fecha_vencimiento'] ?? null,
+                    ]);
+                }
+
+                // pagada al momento desde la caja: queda como pago a proveedor del turno, sin cuenta por pagar.
+                // Se relee la apertura con bloqueo: si la cerraron mientras se registraba, el pago no puede colgar de un turno cerrado
+                if ($pagarDesdeCaja) {
+                    AperturaCaja::lockForUpdate()->whereNull('cerrada_en')->find($apertura->id)
+                        ?? throw new ErrorDeNegocio('Tu caja se cerró mientras registrabas la compra. Ábrela de nuevo o desmarca "Descontar de la caja abierta".');
+                    PagoProveedor::create([
+                        'empresa_id' => $empresaId,
+                        'compra_id' => $compra->id,
+                        'apertura_id' => $apertura->id,
+                        'usuario_id' => $usuario->id,
+                        'medio_pago_codigo' => $datos['medio_pago_codigo'],
+                        'monto' => round($total, 2),
+                        'referencia' => filled($datos['referencia_pago'] ?? null) ? trim($datos['referencia_pago']) : null,
+                    ]);
+                    Auditoria::registrar($usuario, 'caja.pago_compra', 'compra', $compra->id, [
+                        'caja' => $apertura->caja?->nombre,
+                        'documento' => $compra->serie_numero,
+                        'medio' => $datos['medio_pago_codigo'],
+                        'monto' => round($total, 2),
                     ]);
                 }
 
@@ -373,6 +424,8 @@ class CompraController extends Controller
                     );
                 }
             });
+        } catch (ErrorDeNegocio $e) {
+            return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
             report($e);
 
@@ -380,7 +433,7 @@ class CompraController extends Controller
         }
 
         return redirect()->route('compras.index')
-            ->with('success', 'Compra registrada por S/ '.number_format($total, 2).'. Stock actualizado.');
+            ->with('success', 'Compra registrada por S/ '.number_format($total, 2).'. Stock actualizado.'.($pagarDesdeCaja ? ' Descontada de tu caja.' : ''));
     }
 
     public function anular(Request $request, Compra $compra): RedirectResponse
