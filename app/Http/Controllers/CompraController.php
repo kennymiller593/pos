@@ -270,11 +270,11 @@ class CompraController extends Controller
         $apertura = $pagarDesdeCaja ? $this->caja->aperturaDe($usuario) : null;
 
         if ($pagarDesdeCaja && ! $apertura) {
-            return back()->with('error', 'Para descontar la compra de la caja primero abre caja, o desmarca "Descontar de la caja abierta".');
+            return back()->with('error', 'Para pagar la compra con dinero de la caja primero abre caja, o desactiva "Pagar esta compra con dinero de la caja".');
         }
         // el dinero sale de la caja de la sucursal que recibe la mercadería: así el cierre de cada sucursal cuadra con sus compras
         if ($pagarDesdeCaja && $apertura->caja?->sucursal_id !== $sucursalId) {
-            return back()->with('error', 'Tu caja abierta es de otra sucursal. Registra la compra en esa sucursal o desmarca "Descontar de la caja abierta".');
+            return back()->with('error', 'Tu caja abierta es de otra sucursal. Registra la compra en esa sucursal o desactiva "Pagar esta compra con dinero de la caja".');
         }
 
         // el mismo comprobante del proveedor no se registra dos veces
@@ -366,7 +366,7 @@ class CompraController extends Controller
                 // Se relee la apertura con bloqueo: si la cerraron mientras se registraba, el pago no puede colgar de un turno cerrado
                 if ($pagarDesdeCaja) {
                     AperturaCaja::lockForUpdate()->whereNull('cerrada_en')->find($apertura->id)
-                        ?? throw new ErrorDeNegocio('Tu caja se cerró mientras registrabas la compra. Ábrela de nuevo o desmarca "Descontar de la caja abierta".');
+                        ?? throw new ErrorDeNegocio('Tu caja se cerró mientras registrabas la compra. Ábrela de nuevo o desactiva "Pagar esta compra con dinero de la caja".');
                     PagoProveedor::create([
                         'empresa_id' => $empresaId,
                         'compra_id' => $compra->id,
@@ -433,7 +433,7 @@ class CompraController extends Controller
         }
 
         return redirect()->route('compras.index')
-            ->with('success', 'Compra registrada por S/ '.number_format($total, 2).'. Stock actualizado.'.($pagarDesdeCaja ? ' Descontada de tu caja.' : ''));
+            ->with('success', 'Compra registrada por S/ '.number_format($total, 2).'. Stock actualizado.'.($pagarDesdeCaja ? ' El total se restó de tu caja.' : ''));
     }
 
     public function anular(Request $request, Compra $compra): RedirectResponse

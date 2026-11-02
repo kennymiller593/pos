@@ -457,14 +457,18 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                 <div class="rounded-xl bg-slate-50 p-3 dark:bg-neutral-950/60" data-pago-caja>
                                     <label class="flex cursor-pointer items-center justify-between gap-3">
                                         <span>
-                                            <span class="block text-sm font-medium">Descontar de la caja abierta</span>
+                                            <span class="block text-sm font-medium">Pagar esta compra con dinero de la caja</span>
                                             <span class="block text-xs text-[#64748B] dark:text-neutral-400">
-                                                <template v-if="!caja.abierta">No tienes caja abierta: la compra se registra sin tocar la caja.</template>
-                                                <template v-else-if="cajaDeOtraSucursal">Tu caja abierta ({{ caja.nombre }} · {{ caja.sucursal }}) es de otra sucursal: no se puede descontar de ella.</template>
-                                                <template v-else>Sale de {{ caja.nombre }}<template v-if="caja.sucursal"> · {{ caja.sucursal }}</template> y se ve en el cierre de ese turno.</template>
+                                                <template v-if="!caja.abierta">No tienes caja abierta: el stock entra igual, pero el pago no se registra en una caja.</template>
+                                                <template v-else-if="cajaDeOtraSucursal">Tu caja abierta ({{ caja.nombre }} · {{ caja.sucursal }}) es de otra sucursal: no se puede pagar con ella.</template>
+                                                <template v-else>Actívalo si el dinero sale de {{ caja.nombre }}<template v-if="caja.sucursal"> · {{ caja.sucursal }}</template>: el total se resta de la caja y se ve en su cierre. El stock entra igual, esté activado o no.</template>
                                             </span>
                                         </span>
-                                        <input v-model="form.pagar_desde_caja" type="checkbox" :disabled="!caja.abierta || cajaDeOtraSucursal" class="size-5 shrink-0 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40" />
+                                        <span class="relative inline-flex h-6 w-11 shrink-0 items-center">
+                                            <input v-model="form.pagar_desde_caja" type="checkbox" role="switch" :disabled="!caja.abierta || cajaDeOtraSucursal" class="peer absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed" aria-label="Pagar esta compra con dinero de la caja" />
+                                            <span class="absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-emerald-600 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-400 peer-focus-visible:ring-offset-2 peer-disabled:opacity-40 dark:bg-neutral-700 dark:peer-checked:bg-emerald-600 dark:peer-focus-visible:ring-offset-neutral-900" />
+                                            <span class="pointer-events-none absolute left-0.5 size-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5 peer-disabled:opacity-70" />
+                                        </span>
                                     </label>
                                     <div v-if="descuentaDeCaja" class="mt-3 grid gap-3 sm:grid-cols-2">
                                         <div>
@@ -899,7 +903,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                             </div>
                             <div v-if="!form.es_credito" class="flex justify-between">
                                 <dt class="text-[#64748B] dark:text-neutral-400">Caja</dt>
-                                <dd class="font-medium">{{ descuentaDeCaja ? `Se descuenta (${medioElegido?.nombre ?? form.medio_pago_codigo})` : 'No se descuenta' }}</dd>
+                                <dd class="font-medium">{{ descuentaDeCaja ? `Se paga con caja (${medioElegido?.nombre ?? form.medio_pago_codigo})` : 'No se resta dinero' }}</dd>
                             </div>
                         </dl>
                         <div class="mt-4 flex items-baseline justify-between border-t border-[#E2E8F0] pt-4 dark:border-neutral-800">
