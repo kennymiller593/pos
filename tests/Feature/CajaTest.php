@@ -171,6 +171,44 @@ class CajaTest extends TestCase
         $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('cajas', 2));
     }
 
+    public function test_historial_suma_todos_los_turnos_del_rango_y_el_total_por_todos_los_medios(): void
+    {
+        // 12 turnos cerrados (más que una página de 10): la suma debe incluirlos todos, no solo los visibles
+        for ($i = 1; $i <= 12; $i++) {
+            $turno = $this->abrirCaja(100);
+            MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'ingreso', 'concepto' => 'Venta suelta', 'monto' => 50, 'medio_pago_codigo' => 'efectivo']);
+            MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'ingreso', 'concepto' => 'Cobro Yape', 'monto' => 20, 'medio_pago_codigo' => 'yape']);
+            MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'egreso', 'concepto' => 'Pago', 'monto' => 10, 'medio_pago_codigo' => 'efectivo']);
+            $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null])->assertSessionHas('success');
+            // cada turno en un día distinto, del 1 al 12 de octubre
+            $turno->update(['abierta_en' => "2026-10-".str_pad((string) $i, 2, '0', STR_PAD_LEFT).' 08:00:00']);
+        }
+
+        // por turno: efectivo 100 + 50 - 10 = 140 esperado; total del turno = 140 + 20 (Yape) - 100 (inicial) = 60
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+            ->has('historial.data', 10)
+            ->where('historial.data.0.total_turno', fn ($v) => abs($v - 60) < 0.001)
+            ->where('suma.turnos', 12)
+            ->where('suma.inicial', fn ($v) => abs($v - 1200) < 0.001)
+            ->where('suma.ingresos', fn ($v) => abs($v - 600) < 0.001)
+            ->where('suma.egresos', fn ($v) => abs($v - 120) < 0.001)
+            ->where('suma.esperado', fn ($v) => abs($v - 1680) < 0.001)
+            ->where('suma.diferencia', fn ($v) => abs($v) < 0.001)
+            ->where('suma.total_turno', fn ($v) => abs($v - 720) < 0.001)
+        );
+
+        // filtrado del 1 al 5 de octubre: 5 turnos
+        $this->actingAs($this->admin)->get('/caja?desde=2026-10-01&hasta=2026-10-05')->assertInertia(fn ($p) => $p
+            ->has('historial.data', 5)
+            ->where('suma.turnos', 5)
+            ->where('suma.total_turno', fn ($v) => abs($v - 300) < 0.001)
+            ->where('filtros.desde', '2026-10-01')
+        );
+
+        // un rango invertido se rechaza
+        $this->actingAs($this->admin)->get('/caja?desde=2026-10-05&hasta=2026-10-01')->assertSessionHasErrors('hasta');
+    }
+
     public function test_egreso_mayor_al_efectivo_disponible_se_registra_y_la_caja_queda_en_negativo(): void
     {
         // el dinero salió del negocio igual (pago del local, de un proveedor): se registra y el cierre muestra el negativo

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Link, useForm, usePage } from '@inertiajs/vue3'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import {
     ArrowDownCircle,
     ArrowUpCircle,
@@ -26,13 +26,17 @@ const props = defineProps({
     cajas: { type: Array, required: true },
     apertura: { type: Object, default: null },
     historial: { type: Object, required: true },
+    suma: { type: Object, default: null },
+    filtros: { type: Object, default: () => ({ desde: null, hasta: null }) },
     denominaciones: { type: Array, default: () => ['200', '100', '50', '20', '10', '5', '2', '1', '0.50', '0.20', '0.10'] },
 })
 
 const { imprimirTicket } = useImpresion()
 const { puede } = usePermisos()
 
-const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
+const formatoSoles = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// negativos con el signo delante: −S/ 1,359.18
+const soles = (n) => { const v = Number(n ?? 0); return `${v < 0 ? '−' : ''}S/ ${formatoSoles.format(Math.abs(v))}` }
 const hora = (fecha) => new Date(fecha).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
 const fechaHora = (iso) => {
     const f = new Date(iso)
@@ -115,6 +119,22 @@ const mediosTurno = computed(() => props.apertura?.medios ?? [])
 const columnasCuadre = computed(() =>
     COLUMNAS_CUADRE.filter((c) => mediosTurno.value.some((m) => Math.abs(Number(m[c.clave] ?? 0)) >= 0.005)))
 const totalCuadre = (clave) => mediosTurno.value.reduce((s, m) => s + Number(m[clave] ?? 0), 0)
+
+// ---- historial: rango de fechas y suma (como el sistema anterior) ----
+const rango = ref({ desde: props.filtros?.desde ?? '', hasta: props.filtros?.hasta ?? '' })
+const isoLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+function filtrarHistorial(valores = rango.value) {
+    rango.value = { ...valores }
+    router.get('/caja', { desde: rango.value.desde || undefined, hasta: rango.value.hasta || undefined }, { preserveScroll: true, preserveState: true, only: ['historial', 'suma', 'filtros'] })
+}
+function rangoRapido(tipo) {
+    const hoy = new Date()
+    if (tipo === 'mes') return filtrarHistorial({ desde: isoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: isoLocal(hoy) })
+    if (tipo === 'semana') return filtrarHistorial({ desde: isoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 6)), hasta: isoLocal(hoy) })
+    return filtrarHistorial({ desde: '', hasta: '' })
+}
+const hayRango = computed(() => !!(props.filtros?.desde || props.filtros?.hasta))
+const claseTotal = (n) => (Number(n) < 0 ? 'text-red-600 dark:text-red-400' : '')
 
 // ---- historial ----
 const expandidos = ref(new Set())
@@ -407,8 +427,39 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
         <!-- ============ Historial de turnos ============ -->
         <div class="mt-6 overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
             <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
-                <h2 class="font-semibold tracking-tight">Historial de turnos</h2>
-                <p class="text-xs text-neutral-500 dark:text-neutral-400">Arqueos de caja cerrados</p>
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 class="font-semibold tracking-tight">Historial de turnos</h2>
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Arqueos de caja cerrados</p>
+                    </div>
+                    <form class="flex flex-wrap items-end gap-2" data-filtro-historial @submit.prevent="filtrarHistorial()">
+                        <label class="text-xs text-neutral-500 dark:text-neutral-400">
+                            Desde
+                            <input v-model="rango.desde" type="date" :max="rango.hasta || undefined" class="mt-0.5 block h-9 rounded-xl border border-stone-300 bg-white px-2 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100" />
+                        </label>
+                        <label class="text-xs text-neutral-500 dark:text-neutral-400">
+                            Hasta
+                            <input v-model="rango.hasta" type="date" :min="rango.desde || undefined" class="mt-0.5 block h-9 rounded-xl border border-stone-300 bg-white px-2 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100" />
+                        </label>
+                        <button type="submit" class="h-9 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700">Ver</button>
+                        <div class="flex gap-1">
+                            <button type="button" class="h-9 rounded-xl border border-stone-200 px-3 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="rangoRapido('semana')">7 días</button>
+                            <button type="button" class="h-9 rounded-xl border border-stone-200 px-3 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="rangoRapido('mes')">Este mes</button>
+                            <button v-if="hayRango" type="button" class="h-9 rounded-xl px-3 text-xs font-medium text-neutral-500 hover:bg-stone-50 dark:hover:bg-neutral-800" @click="rangoRapido('todo')">Todo</button>
+                        </div>
+                    </form>
+                </div>
+                <!-- en celular la fila Suma queda al fondo de la tabla deslizable: el total va también aquí arriba -->
+                <div v-if="suma && suma.turnos > 0" class="mt-3 grid grid-cols-2 gap-2 sm:hidden" data-suma-movil>
+                    <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950">
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Total del rango · {{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}</p>
+                        <p class="text-base font-bold" :class="claseTotal(suma.total_turno)">{{ soles(suma.total_turno) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950">
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Efectivo esperado</p>
+                        <p class="text-base font-bold" :class="claseTotal(suma.esperado)">{{ soles(suma.esperado) }}</p>
+                    </div>
+                </div>
             </div>
 
             <div class="@container relative overflow-x-auto">
@@ -423,14 +474,15 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Esperado</th>
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Contado</th>
                             <th class="px-3 py-3 text-right font-semibold tracking-wider">Diferencia</th>
+                            <th class="px-3 py-3 text-right font-semibold tracking-wider" title="Lo que entró menos lo que salió por todos los medios (efectivo, Yape, transferencia...), sin el monto inicial">Total turno</th>
                             <th class="px-4 py-3"><span class="sr-only">Acciones</span></th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                         <tr v-if="!historial.data.length">
-                            <td colspan="9" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                            <td colspan="10" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
-                                    Aún no hay turnos cerrados.
+                                    {{ hayRango ? 'No hay turnos cerrados en ese rango de fechas.' : 'Aún no hay turnos cerrados.' }}
                                 </div>
                             </td>
                         </tr>
@@ -459,6 +511,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                         {{ estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).texto }}
                                     </span>
                                 </td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap font-semibold" :class="claseTotal(t.total_turno)">{{ soles(t.total_turno) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex justify-end gap-1">
                                         <button
@@ -485,7 +538,7 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 </td>
                             </tr>
                             <tr v-if="expandidos.has(t.id) && t.medios?.length" class="bg-slate-50 dark:bg-neutral-950/50">
-                                <td colspan="9" class="px-4 py-3">
+                                <td colspan="10" class="px-4 py-3">
                                     <table class="w-full max-w-xl text-sm">
                                         <thead class="text-xs text-slate-500 uppercase dark:text-neutral-500">
                                             <tr>
@@ -513,6 +566,24 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </tr>
                         </template>
                     </tbody>
+                    <!-- Suma de todos los turnos del rango (no solo de esta página), como el sistema anterior -->
+                    <tfoot v-if="suma && suma.turnos > 0" class="border-t-2 border-stone-200 bg-stone-50 font-semibold dark:border-neutral-700 dark:bg-neutral-950" data-suma-historial>
+                        <tr>
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                Suma
+                                <span class="block text-xs font-normal text-neutral-500 dark:text-neutral-400">{{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}{{ hayRango ? '' : ' · todo el historial' }}</span>
+                            </td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.inicial) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.ventas_efectivo) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{{ soles(suma.ingresos) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap text-red-600 dark:text-red-400">{{ soles(suma.egresos) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap" :class="claseTotal(suma.esperado)">{{ soles(suma.esperado) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.contado) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap" :class="Math.abs(suma.diferencia) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : suma.diferencia > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'">{{ suma.diferencia > 0 ? '+' : '' }}{{ soles(suma.diferencia) }}</td>
+                            <td class="px-3 py-3 text-right whitespace-nowrap text-base" :class="claseTotal(suma.total_turno)">{{ soles(suma.total_turno) }}</td>
+                            <td class="px-4 py-3"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
 

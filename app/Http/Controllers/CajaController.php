@@ -36,13 +36,27 @@ class CajaController extends Controller
 
         $veTodas = $usuario->can('caja.ver_todas');
 
+        // rango de fechas del historial (por día de apertura del turno)
+        $filtros = $request->validate([
+            'desde' => ['nullable', 'date_format:Y-m-d'],
+            'hasta' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:desde'],
+        ]);
+        $desde = $filtros['desde'] ?? null;
+        $hasta = $filtros['hasta'] ?? null;
+
         // turnos cerrados: quien puede ver todas las cajas ve todos; los demas solo los suyos
-        $historial = AperturaCaja::query()
+        $turnos = AperturaCaja::query()
             ->where('empresa_id', $usuario->empresa_id)
             ->whereNotNull('cerrada_en')
             ->when(! $veTodas, fn ($q) => $q->where('usuario_id', $usuario->id))
             // la sucursal elegida en el selector (null = todas las que puede ver)
             ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->whereHas('caja', fn ($c) => $c->whereIn('sucursal_id', $ids)))
+            ->when($desde, fn ($q, $d) => $q->whereDate('abierta_en', '>=', $d))
+            ->when($hasta, fn ($q, $h) => $q->whereDate('abierta_en', '<=', $h));
+
+        $suma = $this->sumaHistorial((clone $turnos)->select('id'));
+
+        $historial = (clone $turnos)
             ->with(['caja:id,nombre,sucursal_id', 'caja.sucursal:id,nombre', 'usuario:id,nombre_completo', 'cierresMedios.medioPago:codigo,nombre'])
             ->withSum(['movimientos as ingresos' => fn ($q) => $q->where('tipo', 'ingreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['movimientos as egresos' => fn ($q) => $q->where('tipo', 'egreso')->where('medio_pago_codigo', 'efectivo')], 'monto')
@@ -77,10 +91,14 @@ class CajaController extends Controller
                 ])->values(),
                 'diferencia_total' => round((float) $turno->cierresMedios->sum('diferencia') ?: ((float) $turno->monto_cierre - (float) $turno->monto_sistema), 2),
                 'observaciones' => $turno->observaciones,
+                // lo que dejó el turno por todos los medios (efectivo, Yape, transferencia...), sin el monto inicial
+                'total_turno' => $this->totalTurno($turno),
             ]);
 
         return Inertia::render('Caja/Index', [
             'historial' => $historial,
+            'suma' => $suma,
+            'filtros' => ['desde' => $desde, 'hasta' => $hasta],
             'cajas' => $cajas->map(fn ($caja) => [
                 'id' => $caja->id,
                 'nombre' => $caja->nombre,
@@ -228,6 +246,42 @@ class CajaController extends Controller
         }
 
         return back()->with('success', $datos['tipo'] === 'ingreso' ? 'Ingreso registrado.' : 'Egreso registrado.');
+    }
+
+    /** Lo que dejó un turno por todos los medios, sin el monto inicial (turnos antiguos sin cuadre por medio: solo efectivo). */
+    private function totalTurno(AperturaCaja $turno): float
+    {
+        $esperado = $turno->cierresMedios->isNotEmpty()
+            ? (float) $turno->cierresMedios->sum('esperado')
+            : (float) $turno->monto_sistema;
+
+        return round($esperado - (float) $turno->monto_inicial, 2);
+    }
+
+    /**
+     * Totales de todos los turnos del filtro (no solo de la página visible), como la fila "Suma" del sistema anterior.
+     * Una sola consulta con subconsultas por turno.
+     */
+    private function sumaHistorial($ids): array
+    {
+        $porTurno = DB::table('aperturas_caja as a')
+            ->whereIn('a.id', $ids)
+            ->selectRaw("a.monto_inicial, a.monto_sistema, a.monto_cierre,
+                (SELECT COALESCE(SUM(monto), 0) FROM pagos WHERE apertura_id = a.id AND medio_pago_codigo = 'efectivo')
+                  + (SELECT COALESCE(SUM(monto), 0) FROM cobros WHERE apertura_id = a.id AND medio_pago_codigo = 'efectivo') AS ventas_efectivo,
+                (SELECT COALESCE(SUM(monto), 0) FROM movimientos_caja WHERE apertura_id = a.id AND tipo = 'ingreso' AND medio_pago_codigo = 'efectivo') AS ingresos,
+                (SELECT COALESCE(SUM(monto), 0) FROM movimientos_caja WHERE apertura_id = a.id AND tipo = 'egreso' AND medio_pago_codigo = 'efectivo')
+                  + (SELECT COALESCE(SUM(monto), 0) FROM pagos_proveedor WHERE apertura_id = a.id AND medio_pago_codigo = 'efectivo') AS egresos,
+                COALESCE((SELECT SUM(esperado) FROM cierres_caja_medios WHERE apertura_id = a.id), a.monto_sistema) - a.monto_inicial AS total_turno,
+                COALESCE((SELECT SUM(diferencia) FROM cierres_caja_medios WHERE apertura_id = a.id), a.monto_cierre - a.monto_sistema) AS diferencia");
+
+        $t = DB::query()->fromSub($porTurno, 't')->selectRaw('COUNT(*) AS turnos,
+            COALESCE(SUM(monto_inicial), 0) AS inicial, COALESCE(SUM(ventas_efectivo), 0) AS ventas_efectivo,
+            COALESCE(SUM(ingresos), 0) AS ingresos, COALESCE(SUM(egresos), 0) AS egresos,
+            COALESCE(SUM(monto_sistema), 0) AS esperado, COALESCE(SUM(monto_cierre), 0) AS contado,
+            COALESCE(SUM(diferencia), 0) AS diferencia, COALESCE(SUM(total_turno), 0) AS total_turno')->first();
+
+        return collect((array) $t)->map(fn ($v, $k) => $k === 'turnos' ? (int) $v : round((float) $v, 2))->all();
     }
 
     public function cerrar(Request $request): RedirectResponse
