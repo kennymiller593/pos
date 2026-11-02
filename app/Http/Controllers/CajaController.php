@@ -93,6 +93,8 @@ class CajaController extends Controller
                 'observaciones' => $turno->observaciones,
                 // lo que dejó el turno por todos los medios (efectivo, Yape, transferencia...), sin el monto inicial
                 'total_turno' => $this->totalTurno($turno),
+                // cada ingreso y egreso del turno (ventas sueltas, taxi, compras pagadas con caja...) para revisarlo después de cerrado
+                'movimientos' => $this->movimientosDelTurno($turno, null),
             ]);
 
         return Inertia::render('Caja/Index', [
@@ -123,7 +125,7 @@ class CajaController extends Controller
      * Todo lo que salió o entró a mano en el turno: los movimientos manuales y también los pagos a proveedor
      * (deudas pagadas y compras al contado descontadas de caja), que antes solo se veían en el total.
      */
-    private function movimientosDelTurno(AperturaCaja $apertura): array
+    private function movimientosDelTurno(AperturaCaja $apertura, ?int $limite = 50): array
     {
         $manuales = $apertura->movimientos()
             ->with('usuario:id,nombre_completo')
@@ -148,7 +150,9 @@ class CajaController extends Controller
                 ];
             });
 
-        return $manuales->concat($pagos)->sortByDesc('creado_en')->take(50)->values()->all();
+        $todos = $manuales->concat($pagos)->sortByDesc('creado_en');
+
+        return ($limite ? $todos->take($limite) : $todos)->values()->all();
     }
 
     public function abrir(Request $request): RedirectResponse

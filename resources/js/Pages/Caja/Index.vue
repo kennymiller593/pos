@@ -6,8 +6,7 @@ import {
     ArrowUpCircle,
     Banknote,
     CheckCircle2,
-    ChevronDown,
-    ChevronRight,
+    ListChecks,
     Printer,
     Clock,
     Lock,
@@ -137,12 +136,9 @@ const hayRango = computed(() => !!(props.filtros?.desde || props.filtros?.hasta)
 const claseTotal = (n) => (Number(n) < 0 ? 'text-red-600 dark:text-red-400' : '')
 
 // ---- historial ----
-const expandidos = ref(new Set())
-function alternarTurno(id) {
-    const s = new Set(expandidos.value)
-    s.has(id) ? s.delete(id) : s.add(id)
-    expandidos.value = s
-}
+// detalle de un turno cerrado (medios de pago y movimientos) en un modal
+const turnoDetalle = ref(null)
+const totalMovs = (t, tipo) => (t?.movimientos ?? []).filter((m) => m.tipo === tipo).reduce((a, m) => a + Number(m.monto), 0)
 const claseDiferencia = (d) => {
     const n = Number(d ?? 0)
     if (Math.abs(n) < 0.005) return 'text-emerald-600 dark:text-emerald-400'
@@ -488,8 +484,12 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </tr>
                         <template v-for="t in historial.data" :key="t.id">
                             <tr class="transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800/50">
-                                <td class="px-4 py-3">
-                                    <p class="font-medium whitespace-nowrap">{{ t.caja }} · {{ t.usuario ?? '—' }}</p>
+                                <!-- tocar el turno también abre el detalle: en celular el botón queda al final de la tabla -->
+                                <td class="cursor-pointer px-4 py-3" @click="turnoDetalle = t">
+                                    <p class="flex items-center gap-1 font-medium whitespace-nowrap">
+                                        {{ t.caja }} · {{ t.usuario ?? '—' }}
+                                        <span v-if="t.movimientos?.length" class="text-xs font-normal text-indigo-600 sm:hidden dark:text-emerald-400">· {{ t.movimientos.length }} mov.</span>
+                                    </p>
                                     <p class="text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">
                                         {{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}
                                     </p>
@@ -515,15 +515,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <td class="px-4 py-3">
                                     <div class="flex justify-end gap-1">
                                         <button
-                                            v-if="t.medios?.length"
                                             type="button"
                                             class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                                            :aria-label="expandidos.has(t.id) ? 'Ocultar detalle por medio' : 'Ver detalle por medio'"
-                                            :title="expandidos.has(t.id) ? 'Ocultar detalle' : 'Detalle por medio de pago'"
-                                            @click="alternarTurno(t.id)"
+                                            aria-label="Ver detalle del turno"
+                                            title="Ver medios de pago y movimientos del turno"
+                                            :data-ver-turno="t.id"
+                                            @click="turnoDetalle = t"
                                         >
-                                            <ChevronDown v-if="expandidos.has(t.id)" class="size-4" />
-                                            <ChevronRight v-else class="size-4" />
+                                            <ListChecks class="size-4" />
                                         </button>
                                         <button
                                             type="button"
@@ -535,33 +534,6 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                             <Printer class="size-4" />
                                         </button>
                                     </div>
-                                </td>
-                            </tr>
-                            <tr v-if="expandidos.has(t.id) && t.medios?.length" class="bg-slate-50 dark:bg-neutral-950/50">
-                                <td colspan="10" class="px-4 py-3">
-                                    <table class="w-full max-w-xl text-sm">
-                                        <thead class="text-xs text-slate-500 uppercase dark:text-neutral-500">
-                                            <tr>
-                                                <th class="py-1.5 pr-3 text-left font-semibold tracking-wider">Medio</th>
-                                                <th class="px-3 py-1.5 text-right font-semibold tracking-wider">Esperado</th>
-                                                <th class="px-3 py-1.5 text-right font-semibold tracking-wider">Declarado</th>
-                                                <th class="py-1.5 pl-3 text-right font-semibold tracking-wider">Diferencia</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-slate-200/70 dark:divide-neutral-800">
-                                            <tr v-for="m in t.medios" :key="m.codigo">
-                                                <td class="py-1.5 pr-3 font-medium whitespace-nowrap">{{ m.nombre }}</td>
-                                                <td class="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">{{ soles(m.esperado) }}</td>
-                                                <td class="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">
-                                                    <template v-if="m.declarado !== null && m.declarado !== undefined">{{ soles(m.declarado) }}</template>
-                                                    <span v-else class="text-xs text-slate-400 italic dark:text-neutral-500">no verificado</span>
-                                                </td>
-                                                <td class="py-1.5 pl-3 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseDiferencia(m.diferencia)">
-                                                    {{ m.declarado === null || m.declarado === undefined ? '—' : textoDiferencia(m.diferencia) }}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
                                 </td>
                             </tr>
                         </template>
@@ -606,6 +578,134 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </template>
             </div>
         </div>
+
+        <!-- Modal: detalle de un turno cerrado -->
+        <Teleport to="body">
+            <div v-if="turnoDetalle" class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" data-modal-turno @keydown.esc="turnoDetalle = null">
+                <div class="fixed inset-0 bg-neutral-950/60" @click="turnoDetalle = null" />
+                <div class="relative flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-2xl border border-stone-200 bg-white text-neutral-900 shadow-xl sm:rounded-2xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                    <div class="flex items-start justify-between gap-3 border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
+                        <div class="min-w-0">
+                            <h3 class="font-semibold tracking-tight">{{ turnoDetalle.caja }} · {{ turnoDetalle.usuario ?? '—' }}</h3>
+                            <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fechaHora(turnoDetalle.abierta_en) }} → {{ fechaHora(turnoDetalle.cerrada_en) }}</p>
+                        </div>
+                        <div class="flex shrink-0 gap-1">
+                            <button
+                                type="button"
+                                class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                                aria-label="Imprimir ticket de cierre"
+                                title="Imprimir ticket de cierre"
+                                @click="imprimirTicket(`/caja/turnos/${turnoDetalle.id}/ticket`)"
+                            >
+                                <Printer class="size-5" />
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                                aria-label="Cerrar"
+                                @click="turnoDetalle = null"
+                            >
+                                <X class="size-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-5 overflow-y-auto px-5 py-4">
+                        <!-- resumen del efectivo -->
+                        <dl class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Inicial</dt>
+                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.monto_inicial) }}</dd>
+                            </div>
+                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Ventas efectivo</dt>
+                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.ventas_efectivo) }}</dd>
+                            </div>
+                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Esperado</dt>
+                                <dd class="font-semibold tabular-nums" :class="claseTotal(turnoDetalle.monto_sistema)">{{ soles(turnoDetalle.monto_sistema) }}</dd>
+                            </div>
+                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Contado</dt>
+                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.monto_cierre) }}</dd>
+                            </div>
+                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Diferencia</dt>
+                                <dd class="font-semibold tabular-nums" :class="claseDiferencia(turnoDetalle.diferencia_total ?? turnoDetalle.diferencia)">{{ estadoDiferencia(Number(turnoDetalle.diferencia_total ?? turnoDetalle.diferencia ?? 0)).texto }}</dd>
+                            </div>
+                            <div class="rounded-xl bg-indigo-50 px-3 py-2 dark:bg-emerald-500/10">
+                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Total turno</dt>
+                                <dd class="font-bold tabular-nums" :class="claseTotal(turnoDetalle.total_turno)">{{ soles(turnoDetalle.total_turno) }}</dd>
+                            </div>
+                        </dl>
+
+                        <p v-if="turnoDetalle.observaciones" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                            <span class="font-semibold">Obs.:</span> {{ turnoDetalle.observaciones }}
+                        </p>
+
+                        <!-- movimientos -->
+                        <div data-movimientos-turno>
+                            <div class="mb-1.5 flex items-baseline justify-between gap-3">
+                                <h4 class="text-sm font-semibold">Movimientos del turno <span class="font-normal text-neutral-500 dark:text-neutral-400">· {{ turnoDetalle.movimientos?.length ?? 0 }}</span></h4>
+                                <p v-if="turnoDetalle.movimientos?.length" class="text-xs whitespace-nowrap tabular-nums">
+                                    <span class="text-emerald-600 dark:text-emerald-400">+ {{ soles(totalMovs(turnoDetalle, 'ingreso')) }}</span>
+                                    <span class="text-neutral-400"> · </span>
+                                    <span class="text-red-600 dark:text-red-400">− {{ soles(totalMovs(turnoDetalle, 'egreso')) }}</span>
+                                </p>
+                            </div>
+                            <p v-if="!turnoDetalle.movimientos?.length" class="rounded-xl bg-stone-50 px-3 py-6 text-center text-sm text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">Sin ingresos ni egresos en este turno.</p>
+                            <ul v-else class="divide-y divide-stone-100 dark:divide-neutral-800">
+                                <li v-for="m in [...turnoDetalle.movimientos].reverse()" :key="m.id" class="flex items-start justify-between gap-3 py-2.5">
+                                    <div class="flex min-w-0 items-start gap-2.5">
+                                        <ArrowUpCircle v-if="m.tipo === 'ingreso'" class="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                        <ArrowDownCircle v-else class="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" />
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-medium break-words">
+                                                {{ m.concepto }}
+                                                <span v-if="m.origen && m.origen !== 'manual'" class="ml-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 align-middle text-[11px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{{ m.origen === 'compra' ? 'Compra' : 'Cuenta por pagar' }}</span>
+                                                <span v-if="m.medio_pago_codigo && m.medio_pago_codigo !== 'efectivo'" class="ml-1 inline-flex rounded-full bg-stone-100 px-2 py-0.5 align-middle text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{{ nombreMedioPago(m.medio_pago_codigo) }}</span>
+                                            </p>
+                                            <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fechaHora(m.creado_en) }}<template v-if="m.usuario"> · {{ m.usuario.nombre_completo }}</template></p>
+                                        </div>
+                                    </div>
+                                    <p class="shrink-0 text-sm font-semibold whitespace-nowrap tabular-nums" :class="m.tipo === 'ingreso' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
+                                        {{ m.tipo === 'ingreso' ? '+' : '−' }} {{ soles(m.monto) }}
+                                    </p>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- cuadre por medio -->
+                        <div v-if="turnoDetalle.medios?.length">
+                            <h4 class="mb-1.5 text-sm font-semibold">Por medio de pago</h4>
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-slate-500 dark:text-neutral-500">
+                                    <tr>
+                                        <th class="py-1.5 pr-2 text-left font-medium">Medio</th>
+                                        <th class="px-2 py-1.5 text-right font-medium">Esperado</th>
+                                        <th class="px-2 py-1.5 text-right font-medium">Declarado</th>
+                                        <th class="py-1.5 pl-2 text-right font-medium">Dif.</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
+                                    <tr v-for="m in turnoDetalle.medios" :key="m.codigo">
+                                        <td class="py-1.5 pr-2 font-medium">{{ m.nombre }}</td>
+                                        <td class="px-2 py-1.5 text-right whitespace-nowrap tabular-nums">{{ soles(m.esperado) }}</td>
+                                        <td class="px-2 py-1.5 text-right whitespace-nowrap tabular-nums">
+                                            <template v-if="m.declarado !== null && m.declarado !== undefined">{{ soles(m.declarado) }}</template>
+                                            <span v-else class="text-xs text-slate-400 italic dark:text-neutral-500">no verificado</span>
+                                        </td>
+                                        <td class="py-1.5 pl-2 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseDiferencia(m.diferencia)">
+                                            {{ m.declarado === null || m.declarado === undefined ? '—' : textoDiferencia(m.diferencia) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
 
         <!-- Modal: registrar movimiento -->
         <Teleport to="body">

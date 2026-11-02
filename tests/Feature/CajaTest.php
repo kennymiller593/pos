@@ -171,6 +171,20 @@ class CajaTest extends TestCase
         $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('cajas', 2));
     }
 
+    public function test_historial_muestra_los_ingresos_y_egresos_de_un_turno_ya_cerrado(): void
+    {
+        $turno = $this->abrirCaja(0);
+        MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'ingreso', 'concepto' => 'venta por unidad de plantines', 'monto' => 8.5, 'medio_pago_codigo' => 'efectivo']);
+        MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'egreso', 'concepto' => 'pago de taxi', 'monto' => 4, 'medio_pago_codigo' => 'efectivo']);
+        $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null])->assertSessionHas('success');
+
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+            ->where('apertura', null)
+            ->has('historial.data.0.movimientos', 2)
+            ->where('historial.data.0.movimientos', fn ($movs) => collect($movs)->pluck('concepto')->sort()->values()->all() === ['pago de taxi', 'venta por unidad de plantines'])
+        );
+    }
+
     public function test_historial_suma_todos_los_turnos_del_rango_y_el_total_por_todos_los_medios(): void
     {
         // 12 turnos cerrados (más que una página de 10): la suma debe incluirlos todos, no solo los visibles
