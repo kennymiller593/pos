@@ -39,6 +39,7 @@ use App\Http\Controllers\InicioController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\NotificacionController;
+use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProveedorController;
@@ -338,6 +339,23 @@ Route::middleware('auth')->group(function () {
         Route::post('/cotizaciones/{cotizacion}/correo', [CotizacionController::class, 'correo'])->whereUuid('cotizacion')->middleware('throttle:30,1')->name('cotizaciones.correo');
     });
     Route::post('/cotizaciones/{cotizacion}/anular', [CotizacionController::class, 'anular'])->whereUuid('cotizacion')->middleware('can:cotizaciones.anular')->name('cotizaciones.anular');
+
+    // ---- pedidos / encargos (no reservan stock; los adelantos entran a caja y la venta nace al entregar desde el POS) ----
+    Route::middleware('can:pedidos.ver')->group(function () {
+        Route::get('/pedidos', [PedidoController::class, 'index'])->name('pedidos.index');
+        Route::get('/pedidos/{pedido}/ticket', [PedidoController::class, 'ticket'])->whereUuid('pedido')->name('pedidos.ticket');
+    });
+    Route::middleware('can:pedidos.gestionar')->group(function () {
+        Route::get('/pedidos/crear', [PedidoController::class, 'crear'])->name('pedidos.crear');
+        Route::get('/pedidos/clientes', [PosController::class, 'clientes'])->name('pedidos.clientes');
+        Route::post('/pedidos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pedidos.clientes.crear');
+        Route::post('/pedidos', [PedidoController::class, 'store'])->name('pedidos.store');
+        Route::get('/pedidos/{pedido}/editar', [PedidoController::class, 'editar'])->whereUuid('pedido')->name('pedidos.editar');
+        Route::put('/pedidos/{pedido}', [PedidoController::class, 'update'])->whereUuid('pedido')->name('pedidos.update');
+        Route::post('/pedidos/{pedido}/adelantos', [PedidoController::class, 'adelanto'])->whereUuid('pedido')->name('pedidos.adelanto');
+        Route::post('/pedidos/{pedido}/listo', [PedidoController::class, 'listo'])->whereUuid('pedido')->name('pedidos.listo');
+    });
+    Route::post('/pedidos/{pedido}/anular', [PedidoController::class, 'anular'])->whereUuid('pedido')->middleware('can:pedidos.anular')->name('pedidos.anular');
 
     // ---- guias de remision (sustentan el traslado; no mueven stock ni caja) ----
     Route::middleware('can:guias.ver')->group(function () {

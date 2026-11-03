@@ -20,6 +20,9 @@ final class Permisos
         'cotizaciones.ver' => 'Ver cotizaciones',
         'cotizaciones.gestionar' => 'Crear, editar y enviar cotizaciones',
         'cotizaciones.anular' => 'Anular cotizaciones',
+        'pedidos.ver' => 'Ver pedidos (encargos)',
+        'pedidos.gestionar' => 'Registrar pedidos, recibir adelantos y marcarlos listos',
+        'pedidos.anular' => 'Anular pedidos',
         'guias.ver' => 'Ver guías de remisión',
         'guias.gestionar' => 'Emitir guías de remisión y enviarlas a SUNAT',
         'guias.anular' => 'Anular guías de remisión',
@@ -78,6 +81,7 @@ final class Permisos
             'pos.vender', 'pos.precio_manual',
             'caja.operar', 'caja.egresos',
             'cotizaciones.ver', 'cotizaciones.gestionar',
+            'pedidos.ver', 'pedidos.gestionar',
             'guias.ver', 'guias.gestionar',
             'comprobantes.ver', 'comprobantes.sunat', 'comprobantes.convertir',
             'clientes.ver', 'clientes.gestionar',
@@ -90,6 +94,7 @@ final class Permisos
             'pos.vender',
             'caja.operar',
             'cotizaciones.ver', 'cotizaciones.gestionar',
+            'pedidos.ver', 'pedidos.gestionar',
             'guias.ver', 'guias.gestionar',
             'comprobantes.ver',
             'clientes.ver', 'clientes.gestionar',
@@ -107,6 +112,7 @@ final class Permisos
             'mezclas.ver', 'mezclas.gestionar',
             'guias.ver', 'guias.gestionar',
             'clientes.ver',
+            'pedidos.ver',
         ],
     ];
 

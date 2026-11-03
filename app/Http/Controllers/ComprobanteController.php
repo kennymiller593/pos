@@ -61,7 +61,7 @@ class ComprobanteController extends Controller
             'filtros' => $filtros,
             'usaCanalVenta' => $request->user()->empresa->usaCanalVenta(),
             'orden' => ['columna' => $orden, 'dir' => $dir],
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             // nombre de cada unidad para el detalle (KGM -> Kilogramo)
             'unidades' => UnidadMedida::pluck('nombre', 'codigo'),
         ]);
@@ -521,7 +521,7 @@ class ComprobanteController extends Controller
             'items' => [$esParcial ? 'required' : 'nullable', 'array'],
             'items.*.detalle_id' => ['required', 'uuid'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
-            'medio_pago_codigo' => ['nullable', Rule::exists('medios_pago', 'codigo')],
+            'medio_pago_codigo' => ['nullable', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'items.required' => 'Elige los productos a devolver.',

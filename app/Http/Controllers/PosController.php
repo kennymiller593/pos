@@ -4,19 +4,23 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
 use App\Jobs\EnviarComprobanteSunat;
+use App\Models\AperturaCaja;
 use App\Models\Categoria;
 use App\Models\Cliente;
 use App\Models\Comprobante;
 use App\Models\CuentaPorCobrar;
 use App\Models\MedioPago;
 use App\Models\MovimientoPuntos;
+use App\Models\Pedido;
 use App\Models\Producto;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
 use App\Services\CobroQrService;
 use App\Services\CotizacionService;
+use App\Services\PedidoService;
 use App\Services\PuntosService;
 use App\Services\VentaService;
+use App\Support\ContextoSucursal;
 use App\Support\DocumentoIdentidad;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -33,6 +37,7 @@ class PosController extends Controller
         private readonly CajaService $caja,
         private readonly VentaService $ventas,
         private readonly CotizacionService $cotizaciones,
+        private readonly PedidoService $pedidos,
         private readonly PuntosService $puntos,
     ) {}
 
@@ -81,14 +86,76 @@ class PosController extends Controller
                 ]),
             ]),
             'categorias' => Categoria::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre']),
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             // QR de Yape/Plin para mostrar al cliente: el de la sucursal de la caja o, si no tiene, el de la empresa
             'cobrosQr' => app(CobroQrService::class)->de($request->user()->empresa, $apertura->caja->sucursal),
             'tiposDocumento' => TipoDocumentoIdentidad::orderBy('codigo')->get(['codigo', 'nombre']),
-            'cotizacion' => $this->cotizacionParaCarrito($request),
+            'cotizacion' => $request->filled('pedido') ? null : $this->cotizacionParaCarrito($request),
+            // /pos?pedido={id}: el pedido que se entrega (productos, precios fijados, cliente y adelanto)
+            'pedido' => $this->pedidoParaCarrito($request, $apertura),
             // reglas del programa de puntos, o null si la empresa no lo usa
             'puntos' => $this->puntos->reglas($request->user()->empresa),
         ]);
+    }
+
+    /**
+     * /pos?pedido={id}: el pedido abierto se carga en el carrito para entregarlo. Se respetan los precios
+     * fijados al pedir y el adelanto ya recibido se descuenta de lo que hay que cobrar.
+     */
+    private function pedidoParaCarrito(Request $request, AperturaCaja $apertura): ?array
+    {
+        if (! $request->filled('pedido')) {
+            return null;
+        }
+
+        $pedido = $this->pedidos->paraVender($request->user()->empresa_id, $request->query('pedido'));
+        $permitidas = ContextoSucursal::de($request)->permitidas;
+
+        if (! $pedido || ($permitidas !== null && ! in_array($pedido->sucursal_id, $permitidas, true))) {
+            $request->session()->flash('error', 'Ese pedido ya no está abierto o no es de tu sucursal.');
+
+            return null;
+        }
+
+        // el pedido se cobra desde una caja de su sede: no se carga un carrito que luego no se podrá cobrar
+        if ($apertura->caja->sucursal_id !== $pedido->sucursal_id) {
+            $nombre = $pedido->sucursal?->nombre ?? 'otra sucursal';
+            $request->session()->flash('error', "El pedido {$pedido->codigo()} es de la sucursal {$nombre}: para entregarlo abre una caja de esa sucursal.");
+
+            return null;
+        }
+
+        $cliente = $pedido->cliente;
+
+        return [
+            'id' => $pedido->id,
+            'codigo' => $pedido->codigo(),
+            'estado' => $pedido->estado,
+            'fecha_entrega' => $pedido->fecha_entrega->toDateString(),
+            'hora_entrega' => $pedido->horaEntrega(),
+            'total' => (float) $pedido->total,
+            'adelanto' => $pedido->totalAdelantos(),
+            'saldo' => $pedido->saldo(),
+            'sucursal_id' => $pedido->sucursal_id,
+            'cliente' => $cliente && ! $cliente->trashed() ? [
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre,
+                'tipo_documento_codigo' => $cliente->tipo_documento_codigo,
+                'numero_documento' => $cliente->numero_documento,
+                'direccion' => $cliente->direccion,
+                'email' => $cliente->email,
+                'telefono' => $cliente->telefono,
+                'limite_credito' => (float) $cliente->limite_credito,
+                'deuda' => (float) CuentaPorCobrar::where('cliente_id', $cliente->id)->where('estado', '!=', 'pagado')->sum(DB::raw('monto_total - monto_pagado')),
+            ] : null,
+            'items' => $pedido->detalles->map(fn ($d) => [
+                'presentacion_id' => $d->presentacion_id,
+                'descripcion' => $d->descripcion,
+                'cantidad' => (float) $d->cantidad,
+                'precio_unitario' => (float) $d->precio_unitario,
+                'descuento' => (float) $d->descuento,
+            ]),
+        ];
     }
 
     /**
@@ -143,7 +210,7 @@ class PosController extends Controller
             Cliente::query()
                 ->where('empresa_id', $request->user()->empresa_id)
                 ->addSelect([
-                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'email', 'limite_credito', 'puntos',
+                    'id', 'nombre', 'tipo_documento_codigo', 'numero_documento', 'direccion', 'email', 'telefono', 'limite_credito', 'puntos',
                     'deuda' => CuentaPorCobrar::query()
                         ->selectRaw('COALESCE(SUM(monto_total - monto_pagado), 0)')
                         ->whereColumn('cliente_id', 'clientes.id')
@@ -231,10 +298,15 @@ class PosController extends Controller
         $empresa = $request->user()->empresa;
         $tiposPermitidos = ! $empresa->facturacion_electronica ? 'in:00' : ($empresa->esRus() ? 'in:00,03' : 'in:00,03,01');
 
+        // entrega de un pedido: los pagos pueden ir vacíos (el adelanto puede cubrir todo); el servicio
+        // comprueba que pagos + adelanto cuadren con el total
+        $entregaPedido = $request->filled('pedido_id');
+
         $datos = $request->validate([
             'tipo_comprobante_codigo' => ['required', $tiposPermitidos],
             'cliente_id' => [$esCredito ? 'required' : 'nullable', 'uuid'],
             'cotizacion_id' => ['nullable', 'uuid'],
+            'pedido_id' => ['nullable', 'uuid'],
             'puntos_canjeados' => ['nullable', 'integer', 'min:0'],
             'es_credito' => ['required', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
@@ -242,13 +314,13 @@ class PosController extends Controller
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
             'items.*.descuento' => ['nullable', 'numeric', 'min:0'],
             'items.*.precio_unitario' => ['nullable', 'numeric', 'gt:0'],
-            'pagos' => [$esCredito ? 'nullable' : 'required', 'array'],
-            'pagos.*.medio_pago_codigo' => ['required', 'exists:medios_pago,codigo'],
+            'pagos' => [$esCredito || $entregaPedido ? 'nullable' : 'required', 'array'],
+            'pagos.*.medio_pago_codigo' => ['required', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'pagos.*.monto' => ['required', 'numeric', 'gt:0'],
             'pagos.*.referencia' => ['nullable', 'string', 'max:100'],
             // "paga ahora, a cuenta": abono que el cliente deja al fiar (solo con es_credito)
             'abono' => ['nullable', 'array'],
-            'abono.medio_pago_codigo' => ['required_with:abono', 'exists:medios_pago,codigo'],
+            'abono.medio_pago_codigo' => ['required_with:abono', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'abono.monto' => ['required_with:abono', 'numeric', 'gt:0'],
             'abono.referencia' => ['nullable', 'string', 'max:100'],
             'clave' => ['nullable', 'uuid'],
@@ -264,20 +336,10 @@ class PosController extends Controller
             'abono.medio_pago_codigo.exists' => 'Elige un medio de pago válido para el abono.',
         ]);
 
-        // venta de una cotizacion vigente: sus precios se respetan aunque el rol no pueda cambiar precios
-        $cotizacion = $this->cotizaciones->paraVender($empresa->id, $datos['cotizacion_id'] ?? null);
-        $cotizados = $this->cotizaciones->preciosVigentes($cotizacion);
-
-        $conPrecioManual = collect($datos['items'])->contains(fn ($i) => filled($i['precio_unitario'] ?? null)
-            && abs((float) $i['precio_unitario'] - ($cotizados[$i['presentacion_id']] ?? -1)) >= 0.005);
-        if ($conPrecioManual && ! $request->user()->can('pos.precio_manual')) {
-            return back()->with('error', 'Tu rol no puede cambiar el precio de lista. Pide a un administrador o cajero que lo haga.');
-        }
-
         // la misma venta enviada dos veces (doble clic, recarga, respuesta que no llegó) se registra una sola vez:
         // el POS manda una clave por carrito y con ella se devuelve la venta ya hecha en vez de repetirla
         $claveCache = filled($datos['clave'] ?? null) ? "pos.venta.{$request->user()->id}.{$datos['clave']}" : null;
-        $firma = md5(json_encode([$datos['tipo_comprobante_codigo'], $datos['cliente_id'] ?? null, $esCredito, $datos['items'], $datos['pagos'] ?? [], $datos['abono'] ?? null]));
+        $firma = md5(json_encode([$datos['tipo_comprobante_codigo'], $datos['cliente_id'] ?? null, $esCredito, $datos['items'], $datos['pagos'] ?? [], $datos['abono'] ?? null, $datos['pedido_id'] ?? null]));
         if ($claveCache && ($previa = Cache::get($claveCache)) && $previa['firma'] === $firma) {
             $registrada = Comprobante::whereKey($previa['id'])->where('empresa_id', $empresa->id)->first();
             if ($registrada) {
@@ -285,8 +347,50 @@ class PosController extends Controller
             }
         }
 
+        $pedido = $entregaPedido ? $this->pedidos->paraVender($empresa->id, $datos['pedido_id']) : null;
+        if ($entregaPedido && ! $pedido) {
+            return back()->with('error', 'Este pedido ya fue entregado o anulado (quizá por otro usuario). Revisa la lista de pedidos antes de volver a cobrar.');
+        }
+
+        // venta de una cotizacion vigente o entrega de un pedido: sus precios se respetan aunque el rol no pueda cambiar precios
+        $cotizacion = $pedido ? null : $this->cotizaciones->paraVender($empresa->id, $datos['cotizacion_id'] ?? null);
+        $cotizados = $this->cotizaciones->preciosVigentes($cotizacion) + $this->pedidos->preciosFijados($pedido);
+
+        if ($pedido) {
+            try {
+                $this->pedidos->validarEntrega($pedido, $apertura, $esCredito);
+            } catch (ErrorDeNegocio $e) {
+                return back()->with('error', $e->getMessage());
+            }
+            // el adelanto lo pone el servidor desde el pedido, nunca el navegador; y la venta va al cliente del pedido
+            $datos['adelanto'] = ['monto' => $pedido->totalAdelantos(), 'referencia' => $pedido->codigo()];
+            if ($pedido->cliente && ! $pedido->cliente->trashed()) {
+                $datos['cliente_id'] = $pedido->cliente_id;
+            }
+        }
+
+        $conPrecioManual = collect($datos['items'])->contains(fn ($i) => filled($i['precio_unitario'] ?? null)
+            && abs((float) $i['precio_unitario'] - ($cotizados[$i['presentacion_id']] ?? -1)) >= 0.005);
+        if ($conPrecioManual && ! $request->user()->can('pos.precio_manual')) {
+            return back()->with('error', 'Tu rol no puede cambiar el precio de lista. Pide a un administrador o cajero que lo haga.');
+        }
+
         try {
-            $comprobante = $this->ventas->registrar($request->user(), $apertura, $datos);
+            // la venta y el "entregado" del pedido van juntos y con el pedido bloqueado: dos cajas con el mismo
+            // pedido cargado no lo entregan dos veces (la segunda ve que ya no está abierto)
+            $comprobante = DB::transaction(function () use ($request, $apertura, $datos, $pedido) {
+                if ($pedido && ! Pedido::whereKey($pedido->id)->abiertos()->lockForUpdate()->exists()) {
+                    throw new ErrorDeNegocio('Este pedido ya fue entregado o anulado por otro usuario: no se registró la venta.');
+                }
+
+                $comprobante = $this->ventas->registrar($request->user(), $apertura, $datos);
+
+                if ($pedido) {
+                    $this->pedidos->marcarEntregado($pedido, $comprobante);
+                }
+
+                return $comprobante;
+            });
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
         } catch (\Throwable $e) {
@@ -308,11 +412,11 @@ class PosController extends Controller
             EnviarComprobanteSunat::dispatchAfterResponse($comprobante->id);
         }
 
-        return $this->respuestaVenta($comprobante, $esCredito);
+        return $this->respuestaVenta($comprobante, $esCredito, pedido: $pedido);
     }
 
     /** Vuelve al POS con el aviso y los datos de la venta para el modal de venta exitosa. */
-    private function respuestaVenta(Comprobante $comprobante, bool $esCredito, bool $yaRegistrada = false): RedirectResponse
+    private function respuestaVenta(Comprobante $comprobante, bool $esCredito, bool $yaRegistrada = false, ?Pedido $pedido = null): RedirectResponse
     {
         $numero = "{$comprobante->serie}-".str_pad($comprobante->correlativo, 6, '0', STR_PAD_LEFT);
         $total = number_format((float) $comprobante->total, 2);
@@ -330,6 +434,7 @@ class PosController extends Controller
 
         $mensaje = match (true) {
             $yaRegistrada => "La venta {$numero} por S/ {$total} ya estaba registrada; no se repitió.",
+            $pedido !== null => "Pedido {$pedido->codigo()} entregado con {$numero} por S/ {$total}: adelanto S/ ".number_format($pedido->totalAdelantos(), 2).', cobrado ahora S/ '.number_format(max(0, (float) $comprobante->total - $pedido->totalAdelantos()), 2).'.',
             $esCredito && $abono => "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\": a cuenta S/ ".number_format((float) $abono->monto, 2).', saldo S/ '.number_format($saldo, 2).'.',
             $esCredito => "Venta {$numero} al crédito por S/ {$total} registrada a \"{$comprobante->cliente_nombre}\".",
             default => "Venta {$numero} registrada por S/ {$total}.",
@@ -354,6 +459,8 @@ class PosController extends Controller
                 'abono' => (float) ($abono?->monto ?? 0),
                 'abono_medio' => $abono?->medioPago?->nombre,
                 'saldo' => $saldo,
+                // entrega de un pedido: lo que ya estaba adelantado (el POS limpia el pedido cargado)
+                'pedido' => $pedido ? ['id' => $pedido->id, 'codigo' => $pedido->codigo(), 'adelanto' => $pedido->totalAdelantos()] : null,
             ])
             ->with('success', $mensaje);
     }

@@ -18,6 +18,7 @@ import {
     ChevronDown,
     CreditCard,
     Compass,
+    ClipboardList,
     FileText,
     Bot,
     BrainCircuit,
@@ -102,6 +103,7 @@ const menuBase = [
             { label: 'POS', href: '/pos', icon: ShoppingCart, permiso: 'pos.vender' },
             { label: 'Comprobantes', href: '/comprobantes', icon: ReceiptText, permiso: 'comprobantes.ver' },
             { label: 'Cotizaciones', href: '/cotizaciones', icon: FileText, permiso: 'cotizaciones.ver' },
+            { label: 'Pedidos', href: '/pedidos', icon: ClipboardList, permiso: 'pedidos.ver' },
             { label: 'Guías de remisión', href: '/guias', icon: Navigation, permiso: 'guias.ver' },
             { label: 'Cuentas por cobrar', href: '/cuentas-por-cobrar', icon: HandCoins, permiso: 'cuentas_cobrar.ver' },
         ],
@@ -255,6 +257,9 @@ const ICONOS_NOTIFICACION = {
     lotes_por_vencer: CalendarClock,
     por_cobrar: HandCoins,
     por_pagar: Banknote,
+    pedidos_atrasados: CalendarClock,
+    pedidos_hoy: ClipboardList,
+    pedidos_manana: ClipboardList,
 }
 
 const notificaciones = ref({ items: [], total: 0 })
@@ -757,7 +762,10 @@ watch(
                                 class="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-[#F1F5F9] dark:hover:bg-neutral-800"
                                 @click="notiAbierto = false">
                                 <div
-                                    class="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+                                    class="grid size-9 shrink-0 place-items-center rounded-xl"
+                                    :class="item.clave === 'pedidos_atrasados'
+                                        ? 'bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-400'
+                                        : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400'">
                                     <component :is="ICONOS_NOTIFICACION[item.clave] ?? Bell" class="size-4.5" />
                                 </div>
                                 <div class="min-w-0">

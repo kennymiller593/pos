@@ -10,6 +10,7 @@ use App\Models\UnidadMedida;
 use App\Services\CajaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -66,7 +67,7 @@ class CuentaPorCobrarController extends Controller
             'cuentas' => $cuentas,
             'filtros' => $filtros,
             'resumen' => $resumen,
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             'cajaAbierta' => ($apertura = $this->caja->aperturaDe($request->user())) !== null,
             // cada sucursal cobra sus propias deudas: la pantalla apaga "Cobrar" en las de otra sucursal
             'cajaSucursalId' => $apertura?->caja?->sucursal_id,
@@ -106,7 +107,7 @@ class CuentaPorCobrarController extends Controller
 
         $datos = $request->validate([
             'monto' => ['required', 'numeric', 'gt:0', "max:{$saldo}"],
-            'medio_pago_codigo' => ['required', 'exists:medios_pago,codigo'],
+            'medio_pago_codigo' => ['required', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'monto.required' => 'Ingresa el monto del cobro.',

@@ -12,7 +12,9 @@ use App\Models\ComprobanteSunat;
 use App\Models\CuentaPorCobrar;
 use App\Models\DetalleConsumoCapa;
 use App\Models\Empresa;
+use App\Models\MedioPago;
 use App\Models\Pago;
+use App\Models\Pedido;
 use App\Models\ProductoPresentacion;
 use App\Models\SerieCorrelativo;
 use App\Models\TipoAfectacionIgv;
@@ -48,6 +50,8 @@ class VentaService
      * puntos_canjeados? (su valor ya viene repartido como descuento en los items),
      * abono?{medio_pago_codigo, monto, referencia?} solo con es_credito: lo que el cliente
      * paga ahora a cuenta; queda como cobro del turno y la deuda nace por el saldo.
+     * adelanto?{monto, referencia?}: lo arma el controlador desde el pedido que se entrega (nunca viene
+     * del cliente); ese dinero ya entró a caja el día que lo dejaron, aquí solo completa el total.
      *
      * @throws ErrorDeNegocio
      */
@@ -76,17 +80,22 @@ class VentaService
         $abono = $esCredito ? $this->normalizarAbono($datos['abono'] ?? null, $totalVenta) : null;
         $saldoCredito = round($totalVenta - ($abono['monto'] ?? 0), 2);
 
+        $adelanto = round((float) ($datos['adelanto']['monto'] ?? 0), 2);
+
         if ($esCredito) {
+            if ($adelanto > 0) {
+                throw new ErrorDeNegocio('Un pedido con adelanto se entrega al contado: el saldo se cobra ahora.');
+            }
             $this->validarLineaDeCredito($cliente, $saldoCredito);
             $datos['pagos'] = [];
         } else {
-            $this->validarPagos($datos['pagos'] ?? [], $totalVenta);
+            $this->validarPagos($datos['pagos'] ?? [], $totalVenta, $adelanto);
         }
 
         $this->validarStock($lineas, $sucursalId);
         $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
-        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $abono, $saldoCredito, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
+        return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $abono, $saldoCredito, $adelanto, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
             // dentro de la transaccion se vuelve a validar con bloqueo: dos cajas vendiendo
             // el mismo producto a la vez se serializan aqui y la segunda ve el stock real
             $this->validarStock($lineas, $sucursalId, bloquear: true);
@@ -181,6 +190,20 @@ class VentaService
                     'medio_pago_codigo' => $pago['medio_pago_codigo'],
                     'monto' => round((float) $pago['monto'], 2),
                     'referencia' => $pago['referencia'] ?? null,
+                ]);
+            }
+
+            // el adelanto del pedido completa el total de la venta pero SIN apertura: ese dinero ya entró a caja
+            // como ingreso el día que lo dejaron (CajaService y el historial solo suman los pagos del turno)
+            if ($adelanto > 0) {
+                Pago::create([
+                    'empresa_id' => $empresaId,
+                    'comprobante_id' => $comprobante->id,
+                    'apertura_id' => null,
+                    'usuario_id' => $usuario->id,
+                    'medio_pago_codigo' => MedioPago::ADELANTO,
+                    'monto' => $adelanto,
+                    'referencia' => $datos['adelanto']['referencia'] ?? null,
                 ]);
             }
 
@@ -472,6 +495,12 @@ class VentaService
             // los pagos dejan de ser ingresos validos (el arqueo del turno abierto se ajusta solo)
             $comprobante->pagos()->delete();
 
+            // si la venta entregaba un pedido, el pedido vuelve a "listo" con sus adelantos intactos (ese dinero
+            // sigue en la caja del día que entró): se vuelve a entregar o se anula devolviéndolo
+            Pedido::where('comprobante_id', $comprobante->id)
+                ->where('estado', 'entregado')
+                ->update(['estado' => 'listo', 'comprobante_id' => null, 'entregado_en' => null, 'actualizado_en' => now()]);
+
             // solo se revierte el abono dejado en la propia venta; si entre la anulación y su confirmación
             // (baja pendiente en SUNAT) se cobró algo más, ese dinero ya está en caja y no se puede borrar
             $cuenta = $comprobante->cuentaPorCobrar;
@@ -707,12 +736,21 @@ class VentaService
         }
     }
 
-    private function validarPagos(array $pagos, float $totalVenta): void
+    private function validarPagos(array $pagos, float $totalVenta, float $adelanto = 0): void
     {
         $totalPagos = round(collect($pagos)->sum('monto'), 2);
 
-        if (abs($totalPagos - $totalVenta) > 0.01) {
-            throw new ErrorDeNegocio("Los pagos (S/ {$totalPagos}) no coinciden con el total (S/ {$totalVenta}).");
+        if ($adelanto > $totalVenta + 0.01) {
+            throw new ErrorDeNegocio(sprintf(
+                'El adelanto del pedido (S/ %s) supera el total de la venta (S/ %s). Vuelve a cargar el pedido completo o anúlalo y devuelve la diferencia.',
+                number_format($adelanto, 2), number_format($totalVenta, 2),
+            ));
+        }
+
+        if (abs($totalPagos + $adelanto - $totalVenta) > 0.01) {
+            throw new ErrorDeNegocio($adelanto > 0
+                ? sprintf('Los pagos (S/ %s) más el adelanto (S/ %s) no coinciden con el total (S/ %s).', number_format($totalPagos, 2), number_format($adelanto, 2), number_format($totalVenta, 2))
+                : "Los pagos (S/ {$totalPagos}) no coinciden con el total (S/ {$totalVenta}).");
         }
     }
 

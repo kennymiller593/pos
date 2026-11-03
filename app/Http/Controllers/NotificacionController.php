@@ -7,6 +7,7 @@ use App\Models\Comprobante;
 use App\Models\ConversacionIa;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
+use App\Models\Pedido;
 use App\Models\Producto;
 use App\Services\SuscripcionService;
 use Illuminate\Http\JsonResponse;
@@ -174,6 +175,49 @@ class NotificacionController extends Controller
                         : ($dias === 0 ? 'Vence hoy.' : "Vence en {$dias} día".($dias === 1 ? '' : 's').'.'),
                     'cantidad' => 1,
                     'url' => '/suscripcion',
+                ];
+            }
+        }
+
+        // pedidos (encargos) que hay que alistar: atrasados, para hoy y para mañana
+        if ($request->user()->can('pedidos.ver')) {
+            $pedidos = Pedido::query()
+                ->where('empresa_id', $empresaId)
+                ->abiertos()
+                ->when($sucursalIds, fn ($q) => $q->whereIn('sucursal_id', $sucursalIds))
+                // "hoy" es el de Lima (como en la lista de pedidos), no el de la sesión de Postgres
+                ->selectRaw('COUNT(*) FILTER (WHERE fecha_entrega < ?) AS atrasados,'
+                    .' COUNT(*) FILTER (WHERE fecha_entrega = ?) AS hoy,'
+                    .' COUNT(*) FILTER (WHERE fecha_entrega = ?) AS manana', [now()->toDateString(), now()->toDateString(), now()->addDay()->toDateString()])
+                ->first();
+
+            $plural = fn (int $n) => $n === 1 ? '1 pedido' : "{$n} pedidos";
+
+            if (($pedidos->atrasados ?? 0) > 0) {
+                $items[] = [
+                    'clave' => 'pedidos_atrasados',
+                    'titulo' => 'Pedidos atrasados',
+                    'detalle' => $plural((int) $pedidos->atrasados).($pedidos->atrasados == 1 ? ' debió entregarse y sigue abierto.' : ' debieron entregarse y siguen abiertos.'),
+                    'cantidad' => (int) $pedidos->atrasados,
+                    'url' => '/pedidos?pestana=atrasados',
+                ];
+            }
+            if (($pedidos->hoy ?? 0) > 0) {
+                $items[] = [
+                    'clave' => 'pedidos_hoy',
+                    'titulo' => 'Pedidos para hoy',
+                    'detalle' => $plural((int) $pedidos->hoy).($pedidos->hoy == 1 ? ' se entrega hoy.' : ' se entregan hoy.'),
+                    'cantidad' => (int) $pedidos->hoy,
+                    'url' => '/pedidos?pestana=hoy',
+                ];
+            }
+            if (($pedidos->manana ?? 0) > 0) {
+                $items[] = [
+                    'clave' => 'pedidos_manana',
+                    'titulo' => 'Pedidos para mañana',
+                    'detalle' => $plural((int) $pedidos->manana).($pedidos->manana == 1 ? ' se entrega mañana: conviene alistarlo hoy.' : ' se entregan mañana: conviene alistarlos hoy.'),
+                    'cantidad' => (int) $pedidos->manana,
+                    'url' => '/pedidos?pestana=manana',
                 ];
             }
         }

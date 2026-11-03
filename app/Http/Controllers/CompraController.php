@@ -215,7 +215,7 @@ class CompraController extends Controller
             'caja' => ($apertura = $this->caja->aperturaDe($request->user()))
                 ? ['abierta' => true, 'efectivo' => $this->caja->resumen($apertura)['esperado'], 'nombre' => $apertura->caja->nombre, 'sucursal_id' => $apertura->caja->sucursal_id, 'sucursal' => $apertura->caja->sucursal?->nombre]
                 : ['abierta' => false, 'efectivo' => 0],
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             // sucursal que recibe la mercadería: la del selector; viendo "todas", se elige en el formulario
             'sucursalDestino' => $this->contextoSucursal($request)->nombreDe($this->sucursalDeTrabajo($request)),
             'sucursales' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
@@ -239,7 +239,7 @@ class CompraController extends Controller
             'fecha_vencimiento' => ['nullable', 'date', 'after_or_equal:fecha'],
             // al contado: si se pagó con dinero de la caja abierta, con qué medio
             'pagar_desde_caja' => ['sometimes', 'boolean'],
-            'medio_pago_codigo' => [Rule::requiredIf(fn () => ! $request->boolean('es_credito') && $request->boolean('pagar_desde_caja')), 'nullable', Rule::exists('medios_pago', 'codigo')],
+            'medio_pago_codigo' => [Rule::requiredIf(fn () => ! $request->boolean('es_credito') && $request->boolean('pagar_desde_caja')), 'nullable', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'referencia_pago' => ['nullable', 'string', 'max:100'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.presentacion_id' => ['required', 'uuid'],

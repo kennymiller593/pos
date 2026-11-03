@@ -7,6 +7,7 @@ use App\Models\Auditoria;
 use App\Models\CapaCosto;
 use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
+use App\Models\MedioPago;
 use App\Models\MovimientoCaja;
 use App\Models\SerieCorrelativo;
 use App\Models\Usuario;
@@ -205,7 +206,9 @@ class NotaCreditoService
     /** Medio con el que se cobro la venta (el de mayor importe si hubo varios); efectivo si fue al credito. */
     private function medioDeLaVenta(Comprobante $original): string
     {
+        // una devolución no se "paga" con el adelanto de un pedido: ese medio es interno
         return (string) ($original->pagos()
+            ->whereNotIn('medio_pago_codigo', MedioPago::INTERNOS)
             ->selectRaw('medio_pago_codigo, SUM(monto) as total')
             ->groupBy('medio_pago_codigo')
             ->orderByDesc('total')

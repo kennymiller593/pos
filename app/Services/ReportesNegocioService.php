@@ -562,7 +562,8 @@ class ReportesNegocioService
             ->join('cajas', 'cajas.id', '=', 'aperturas_caja.caja_id')
             ->whereIn('cajas.sucursal_id', $sucursalIds));
 
-        $ventas = $sumar(Pago::query()->when($sucursalIds, fn ($q) => $q
+        // el adelanto de un pedido ya entró como ingreso de caja el día que lo dejaron: contarlo aquí lo duplicaría
+        $ventas = $sumar(Pago::query()->whereNotIn('pagos.medio_pago_codigo', MedioPago::INTERNOS)->when($sucursalIds, fn ($q) => $q
             ->join('comprobantes', 'comprobantes.id', '=', 'pagos.comprobante_id')
             ->whereIn('comprobantes.sucursal_id', $sucursalIds)), 'pagos');
         $cobros = $sumar($porTurno(Cobro::query(), 'cobros'), 'cobros');

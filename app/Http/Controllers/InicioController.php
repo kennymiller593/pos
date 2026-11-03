@@ -7,6 +7,7 @@ use App\Models\Comprobante;
 use App\Models\ComprobanteDetalle;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
+use App\Models\MedioPago;
 use App\Models\Pago;
 use App\Models\Producto;
 use App\Models\Sucursal;
@@ -129,6 +130,8 @@ class InicioController extends Controller
         $mediosPago = Pago::query()
             ->join('medios_pago', 'medios_pago.codigo', '=', 'pagos.medio_pago_codigo')
             ->where('pagos.empresa_id', $empresaId)
+            // el adelanto de un pedido ya entró a caja el día que lo dejaron: no es un medio con el que se vendió
+            ->whereNotIn('pagos.medio_pago_codigo', MedioPago::INTERNOS)
             ->when($sucursalIds, fn ($q) => $q
                 ->join('comprobantes', 'comprobantes.id', '=', 'pagos.comprobante_id')
                 ->whereIn('comprobantes.sucursal_id', $sucursalIds))

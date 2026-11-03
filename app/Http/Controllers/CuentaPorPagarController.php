@@ -9,6 +9,7 @@ use App\Models\PagoProveedor;
 use App\Services\CajaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -68,7 +69,7 @@ class CuentaPorPagarController extends Controller
             'cuentas' => $cuentas,
             'filtros' => $filtros,
             'resumen' => $resumen,
-            'mediosPago' => MedioPago::orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
             'cajaAbierta' => $this->caja->aperturaDe($request->user()) !== null,
         ]);
     }
@@ -87,7 +88,7 @@ class CuentaPorPagarController extends Controller
 
         $datos = $request->validate([
             'monto' => ['required', 'numeric', 'gt:0', "max:{$saldo}"],
-            'medio_pago_codigo' => ['required', 'exists:medios_pago,codigo'],
+            'medio_pago_codigo' => ['required', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'monto.required' => 'Ingresa el monto del pago.',

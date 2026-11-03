@@ -5,6 +5,7 @@ import { StorageSerializers, useIntersectionObserver, useMediaQuery, useResizeOb
 import {
     Banknote,
     CheckCircle2,
+    ClipboardList,
     FileText,
     ChevronLeft,
     ChevronRight,
@@ -57,6 +58,8 @@ const props = defineProps({
     facturacionElectronica: { type: Boolean, default: false },
     // /pos?cotizacion={id}: cotización aceptada por el cliente, lista para cargar en el carrito
     cotizacion: { type: Object, default: null },
+    // /pos?pedido={id}: pedido abierto que se entrega (precios fijados, cliente y adelanto ya recibido)
+    pedido: { type: Object, default: null },
     // programa de puntos: { soles_por_punto, valor, minimo_canje }, o null si la empresa no lo usa
     puntos: { type: Object, default: null },
 })
@@ -156,6 +159,8 @@ const carritoGuardado = useStorage(`pos-carrito-${empresaId}`, [])
 const clienteGuardado = useStorage(`pos-cliente-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
 // cotización que se está vendiendo: { id, codigo, vigente } (al cobrar queda enlazada a la venta)
 const cotizacionEnVenta = useStorage(`pos-cotizacion-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
+// pedido que se está entregando: { id, codigo, adelanto, saldo, total } (el adelanto se descuenta de lo que se cobra)
+const pedidoEnVenta = useStorage(`pos-pedido-${empresaId}`, null, localStorage, { serializer: StorageSerializers.object })
 // clave única de cada carrito: si la venta se envía dos veces (doble clic, recarga, respuesta que no llegó),
 // el servidor devuelve la venta ya hecha en vez de repetirla. Cambia cada vez que el carrito queda vacío.
 const nuevaClave = () => crypto.randomUUID?.() ?? '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16))
@@ -472,8 +477,11 @@ watch(carrito, (items) => {
         descuento: i.descuento,
         conDescuento: i.conDescuento,
     }))
-    // carrito vacío: ya no se está vendiendo ninguna cotización
-    if (!items.length) cotizacionEnVenta.value = null
+    // carrito vacío: ya no se está vendiendo ninguna cotización ni entregando un pedido
+    if (!items.length) {
+        cotizacionEnVenta.value = null
+        pedidoEnVenta.value = null
+    }
 }, { deep: true })
 
 // ================= cliente =================
@@ -574,6 +582,54 @@ function soltarCotizacion() {
     avisoCotizacion.value = ''
     for (const item of carrito.value) {
         // quien no puede cambiar precios vuelve al de lista; quien sí, conserva el que ve
+        item.precioCotizado = null
+    }
+}
+
+// ================= entrega de un pedido =================
+// El carrito se reemplaza por lo pedido con los precios fijados al pedir (siempre, aunque el cajero no
+// pueda cambiar precios). Al cobrar solo entra el saldo: el adelanto ya está en la caja del día que lo dejaron.
+const avisoPedido = ref('')
+
+if (props.pedido && props.productos.length) {
+    const ped = props.pedido
+    const faltantes = []
+    carrito.value = []
+    cotizacionEnVenta.value = null
+
+    for (const item of ped.items) {
+        const producto = props.productos.find((p) => p.presentaciones.some((pres) => pres.id === item.presentacion_id))
+        if (!producto) {
+            faltantes.push(item.descripcion)
+            continue
+        }
+        const linea = {
+            producto,
+            presentacion: producto.presentaciones.find((pres) => pres.id === item.presentacion_id),
+            cantidad: item.cantidad,
+            precio: '',
+            precioCotizado: item.precio_unitario,
+            descuento: item.descuento > 0 ? item.descuento : '',
+            conDescuento: item.descuento > 0,
+        }
+        if (Math.abs(item.precio_unitario - precioLista(linea)) >= 0.005) linea.precio = String(item.precio_unitario)
+        carrito.value.push(linea)
+    }
+
+    clienteSeleccionado.value = ped.cliente
+    pedidoEnVenta.value = { id: ped.id, codigo: ped.codigo, adelanto: Number(ped.adelanto ?? 0), saldo: Number(ped.saldo ?? 0), total: Number(ped.total ?? 0) }
+    if (faltantes.length) {
+        avisoPedido.value = `No se cargó: ${faltantes.join(', ')} (ya no está activo en tu catálogo).`
+    }
+
+    // la dirección vuelve a /pos: recargar la página no debe pisar los cambios hechos al carrito
+    if (typeof window !== 'undefined') window.history.replaceState(window.history.state, '', '/pos')
+}
+
+function soltarPedido() {
+    pedidoEnVenta.value = null
+    avisoPedido.value = ''
+    for (const item of carrito.value) {
         item.precioCotizado = null
     }
 }
@@ -685,6 +741,12 @@ const mediosOrdenados = computed(() =>
     }),
 )
 
+// entrega de un pedido: el adelanto ya recibido se descuenta y hoy solo se cobra el saldo
+const adelantoAplicado = computed(() => (pedidoEnVenta.value ? Math.min(Number(pedidoEnVenta.value.adelanto ?? 0), total.value) : 0))
+const aCobrar = computed(() => Math.round((total.value - adelantoAplicado.value) * 100) / 100)
+// el adelanto cubre todo: se entrega sin pedir ningún pago
+const sinSaldo = computed(() => !!pedidoEnVenta.value && carrito.value.length > 0 && aCobrar.value <= 0.005)
+
 // pago mixto: varias líneas ("20 en efectivo y 15 por Yape"); si no, un solo medio por el total
 const modoMixto = ref(false)
 const medioUnico = computed(() => (!modoMixto.value && pagos.value.length === 1 ? pagos.value[0].medio_pago_codigo : null))
@@ -694,9 +756,9 @@ const referenciaObligatoria = (codigo) => !!medioDe(codigo)?.requiere_referencia
 
 function elegirMedio(codigo) {
     modoMixto.value = false
-    pagos.value = [{ medio_pago_codigo: codigo, monto: Number(total.value.toFixed(2)), referencia: '' }]
+    pagos.value = [{ medio_pago_codigo: codigo, monto: Number(aCobrar.value.toFixed(2)), referencia: '' }]
     if (codigo === 'efectivo') {
-        recibido.value = total.value.toFixed(2)
+        recibido.value = aCobrar.value.toFixed(2)
         if (window.matchMedia('(pointer: fine)').matches) {
             nextTick(() => {
                 inputRecibido.value?.focus()
@@ -716,18 +778,18 @@ function activarMixto() {
 function completarResto(indice) {
     if (pagos.value.length !== 2) return
     const escrito = Number(pagos.value[indice].monto || 0)
-    const resto = Math.round((total.value - escrito) * 100) / 100
+    const resto = Math.round((aCobrar.value - escrito) * 100) / 100
     pagos.value[1 - indice].monto = resto > 0 ? resto : ''
 }
 const totalPagado = computed(() => pagos.value.reduce((suma, p) => suma + Number(p.monto || 0), 0))
-const restante = computed(() => Math.round((total.value - totalPagado.value) * 100) / 100)
+const restante = computed(() => Math.round((aCobrar.value - totalPagado.value) * 100) / 100)
 
 // modo rapido: un solo pago en efectivo -> recibido + vuelto
 const esEfectivoSimple = computed(() => !modoMixto.value && pagos.value.length === 1 && pagos.value[0].medio_pago_codigo === 'efectivo')
 
 const vuelto = computed(() => {
     if (!esEfectivoSimple.value || recibido.value === '') return null
-    return Math.round((Number(recibido.value) - total.value) * 100) / 100
+    return Math.round((Number(recibido.value) - aCobrar.value) * 100) / 100
 })
 
 function agregarPago() {
@@ -812,26 +874,30 @@ const puedeCobrar = computed(() => {
     if (procesando.value || !carrito.value.length || hayDescuentosInvalidos.value) return false
     if (facturaSinRuc.value) return false
     if (condicion.value === 'credito') {
+        // un pedido con adelanto se entrega al contado (el servidor también lo rechaza)
+        if (adelantoAplicado.value > 0) return false
         return puedeFiar.value && abonoValido.value && saldoCredito.value <= creditoDisponible.value + 0.001
     }
-    if (esEfectivoSimple.value) return recibido.value !== '' && Number(recibido.value) >= total.value - 0.001
+    // el adelanto del pedido ya cubre el total: se entrega sin pagos
+    if (sinSaldo.value) return true
+    if (esEfectivoSimple.value) return recibido.value !== '' && Number(recibido.value) >= aCobrar.value - 0.001
     return pagos.value.length > 0 && pagos.value.every(lineaValida) && Math.abs(restante.value) < 0.005
 })
 
 function abrirCobro() {
     if (!carrito.value.length || hayFaltantes.value || hayDescuentosInvalidos.value) return
-    // lo normal es que paguen exacto: el recibido ya viene con el total y basta confirmar.
+    // lo normal es que paguen exacto: el recibido ya viene con lo que hay que cobrar y basta confirmar.
     // Queda seleccionado, asi que si pagan con mas se escribe encima sin borrar nada.
-    recibido.value = total.value.toFixed(2)
+    recibido.value = aCobrar.value.toFixed(2)
     condicion.value = 'contado'
     // cada cobro vuelve a Tienda: una venta online no deja marcada la siguiente
     canalVenta.value = 'tienda'
     modoMixto.value = false
-    pagos.value = [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: '' }]
+    pagos.value = sinSaldo.value ? [] : [{ medio_pago_codigo: 'efectivo', monto: Number(aCobrar.value.toFixed(2)), referencia: '' }]
     abono.value = ABONO_VACIO()
     modalCobro.value = true
     // en el celular no se enfoca: abriria el teclado y taparia el boton de confirmar
-    if (window.matchMedia('(pointer: fine)').matches) {
+    if (!sinSaldo.value && window.matchMedia('(pointer: fine)').matches) {
         nextTick(() => {
             inputRecibido.value?.focus()
             inputRecibido.value?.select()
@@ -1007,7 +1073,9 @@ function cobrar() {
         canal_venta: usaCanalVenta.value ? canalVenta.value : null,
         tipo_comprobante_codigo: tipoComprobante.value,
         cliente_id: clienteSeleccionado.value?.id ?? null,
-        cotizacion_id: cotizacionEnVenta.value?.id ?? null,
+        // entrega de un pedido: el servidor suma el adelanto por su cuenta; aquí solo van los pagos del saldo
+        pedido_id: pedidoEnVenta.value?.id ?? null,
+        cotizacion_id: pedidoEnVenta.value ? null : (cotizacionEnVenta.value?.id ?? null),
         puntos_canjeados: puntosCanjeados.value,
         es_credito: esCredito,
         // fiado con abono: lo que paga ahora se registra como cobro y solo el saldo queda de deuda
@@ -1025,10 +1093,10 @@ function cobrar() {
             // incluye la parte del canje de puntos que le toca a la linea
             descuento: descuentoTotalItem(i) > 0 ? Number(descuentoTotalItem(i).toFixed(2)) : 0,
         })),
-        pagos: esCredito
+        pagos: esCredito || sinSaldo.value
             ? []
             : esEfectivoSimple.value
-                ? [{ medio_pago_codigo: 'efectivo', monto: Number(total.value.toFixed(2)), referencia: null }]
+                ? [{ medio_pago_codigo: 'efectivo', monto: Number(aCobrar.value.toFixed(2)), referencia: null }]
                 : pagos.value.map((p) => ({
                     medio_pago_codigo: p.medio_pago_codigo,
                     monto: Number(Number(p.monto).toFixed(2)),
@@ -1043,6 +1111,9 @@ function cobrar() {
                 const emailCliente = venta?.cliente_email ?? clienteSeleccionado.value?.email ?? ''
                 carrito.value = []
                 clienteSeleccionado.value = null
+                cotizacionEnVenta.value = null
+                pedidoEnVenta.value = null
+                avisoPedido.value = ''
                 modalCobro.value = false
                 formCorreoVenta.clearErrors()
                 formCorreoVenta.email = emailCliente
@@ -1494,6 +1565,33 @@ const claseInput =
                     </button>
                 </div>
 
+                <!-- Entrega de un pedido -->
+                <div
+                    v-if="pedidoEnVenta && carrito.length"
+                    class="flex items-start gap-2.5 border-b border-stone-100 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-900 dark:border-neutral-800 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    data-pos-pedido
+                >
+                    <ClipboardList class="mt-0.5 size-4 shrink-0" />
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold">Entregando el pedido {{ pedidoEnVenta.codigo }}</p>
+                        <p>
+                            <template v-if="adelantoAplicado > 0">Adelanto <span class="font-semibold">{{ soles(adelantoAplicado) }}</span> · saldo <span class="font-semibold">{{ soles(aCobrar) }}</span>. </template>
+                            Se respetan los precios del pedido; al cobrar quedará como entregado.
+                        </p>
+                        <p v-if="avisoPedido" class="mt-0.5 font-medium text-amber-700 dark:text-amber-300">{{ avisoPedido }}</p>
+                    </div>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-lg p-1 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+                        title="Soltar: vender como una venta normal (el pedido sigue abierto)"
+                        aria-label="Soltar el pedido"
+                        data-pos-pedido-soltar
+                        @click="soltarPedido"
+                    >
+                        <X class="size-4" />
+                    </button>
+                </div>
+
                 <!-- Items -->
                 <div v-if="carrito.length" class="flex items-center justify-between border-b border-stone-100 px-4 py-2.5 dark:border-neutral-800">
                     <p class="text-xs font-semibold tracking-wider text-[#64748B] uppercase dark:text-neutral-400">
@@ -1676,6 +1774,11 @@ const claseInput =
                         <span class="text-2xl font-bold tracking-tight">{{ soles(total) }}</span>
                     </div>
                     <p class="mt-0.5 text-right text-xs text-neutral-400 dark:text-neutral-500">IGV incluido</p>
+                    <!-- pedido con adelanto: lo que de verdad entra hoy -->
+                    <div v-if="adelantoAplicado > 0" class="mt-1 flex items-baseline justify-between text-sm" data-pos-carrito-saldo>
+                        <span class="text-neutral-500 dark:text-neutral-400">Adelanto del pedido −{{ soles(adelantoAplicado) }} · a cobrar</span>
+                        <span class="font-semibold text-emerald-700 dark:text-emerald-400">{{ soles(aCobrar) }}</span>
+                    </div>
                     <button
                         class="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-base font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                         :disabled="!carrito.length || hayFaltantes || hayDescuentosInvalidos"
@@ -1802,6 +1905,13 @@ const claseInput =
                                         <template v-else>¡Venta registrada!</template>
                                     </h3>
                                     <p v-if="datosVenta" class="mt-0.5 text-2xl font-bold tracking-tight text-[#10B981] dark:text-emerald-400">{{ soles(datosVenta.total) }}</p>
+                                    <p v-if="datosVenta?.pedido" class="mt-1 text-sm text-[#64748B] dark:text-neutral-400" data-venta-pedido>
+                                        <span class="whitespace-nowrap">Pedido <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ datosVenta.pedido.codigo }}</span> entregado</span>
+                                        <template v-if="datosVenta.pedido.adelanto > 0">
+                                            · <span class="whitespace-nowrap">adelanto <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(datosVenta.pedido.adelanto) }}</span></span>
+                                            · <span class="whitespace-nowrap">cobrado hoy <span class="font-semibold text-emerald-700 dark:text-emerald-300">{{ soles(Math.max(0, datosVenta.total - datosVenta.pedido.adelanto)) }}</span></span>
+                                        </template>
+                                    </p>
                                     <p v-if="datosVenta?.abono > 0" class="mt-1 text-sm text-[#64748B] dark:text-neutral-400" data-venta-abono>
                                         <span class="whitespace-nowrap">A cuenta <span class="font-semibold text-[#0F172A] dark:text-neutral-100">{{ soles(datosVenta.abono) }}</span><template v-if="datosVenta.abono_medio"> ({{ datosVenta.abono_medio }})</template></span>
                                         · <span class="whitespace-nowrap">Saldo fiado <span class="font-semibold text-amber-700 dark:text-amber-300">{{ soles(datosVenta.saldo) }}</span></span>
@@ -1814,8 +1924,8 @@ const claseInput =
                                         <span v-if="datosVenta.puntos.ganados > 0" aria-hidden="true">·</span>
                                         <span class="font-semibold text-[#0F172A] dark:text-neutral-100">Tiene {{ datosVenta.puntos.saldo }} puntos</span>
                                     </p>
-                                    <!-- con abono la línea de arriba ya lo dice todo: no se repite el mensaje -->
-                                    <p v-else-if="!(datosVenta?.abono > 0)" class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
+                                    <!-- con abono o pedido la línea de arriba ya lo dice todo: no se repite el mensaje -->
+                                    <p v-else-if="!(datosVenta?.abono > 0) && !datosVenta?.pedido" class="mt-0.5 text-sm text-[#64748B] dark:text-neutral-400">{{ ventaExitosa.mensaje }}</p>
                                 </div>
                             </div>
                             <div v-if="datosVenta" class="space-y-1.5 text-sm md:justify-self-end md:text-right">
@@ -2113,13 +2223,35 @@ const claseInput =
                 <div class="fixed inset-0 bg-neutral-950/60" @click="modalCobro = false" />
                 <div class="scroll-fino relative max-h-[94vh] w-full max-w-md min-w-0 overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 supports-[height:100dvh]:max-h-[94dvh] sm:p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                     <div class="mb-4 flex items-center justify-between">
-                        <h3 class="text-lg font-semibold tracking-tight">Cobrar {{ soles(total) }}</h3>
+                        <h3 class="text-lg font-semibold tracking-tight">
+                            <template v-if="pedidoEnVenta">Entregar {{ pedidoEnVenta.codigo }}</template>
+                            <template v-else>Cobrar {{ soles(total) }}</template>
+                        </h3>
                         <button
                             class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                             @click="modalCobro = false"
                         >
                             <X class="size-5" />
                         </button>
+                    </div>
+
+                    <!-- Pedido: total, adelanto ya recibido y saldo que entra hoy -->
+                    <div v-if="pedidoEnVenta" class="mb-4 rounded-xl bg-emerald-50 p-4 text-sm dark:bg-emerald-950/40" data-pos-pedido-resumen>
+                        <div class="flex justify-between gap-3 text-neutral-600 dark:text-neutral-300">
+                            <span>Total</span>
+                            <span class="tabular-nums">{{ soles(total) }}</span>
+                        </div>
+                        <div v-if="adelantoAplicado > 0" class="mt-1 flex justify-between gap-3 text-neutral-600 dark:text-neutral-300" data-pos-adelanto>
+                            <span>Adelanto ya recibido</span>
+                            <span class="tabular-nums">− {{ soles(adelantoAplicado) }}</span>
+                        </div>
+                        <div class="mt-2 flex justify-between gap-3 border-t border-emerald-200 pt-2 text-base font-semibold dark:border-emerald-900/60" data-pos-saldo>
+                            <span>Saldo a cobrar</span>
+                            <span class="tabular-nums text-emerald-800 dark:text-emerald-300">{{ soles(aCobrar) }}</span>
+                        </div>
+                        <p v-if="adelantoAplicado > 0" class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                            El adelanto ya entró a caja el día que lo dejaron; hoy solo entra el saldo.
+                        </p>
                     </div>
 
                     <!-- Canal de venta (opción de la empresa) -->
@@ -2199,14 +2331,18 @@ const claseInput =
                             :class="condicion === 'credito'
                                 ? 'border-amber-500 bg-amber-500 text-white'
                                 : 'border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'"
-                            :disabled="!puedeFiar"
-                            :title="!clienteSeleccionado ? 'Elige un cliente en el carrito' : !puedeFiar ? 'El cliente no tiene línea de crédito' : undefined"
+                            :disabled="!puedeFiar || adelantoAplicado > 0"
+                            :title="adelantoAplicado > 0 ? 'Un pedido con adelanto se entrega al contado' : !clienteSeleccionado ? 'Elige un cliente en el carrito' : !puedeFiar ? 'El cliente no tiene línea de crédito' : undefined"
+                            data-condicion-credito
                             @click="condicion = 'credito'"
                         >
                             Crédito (fiado)
                         </button>
                     </div>
-                    <p v-if="!clienteSeleccionado" class="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                    <p v-if="adelantoAplicado > 0" class="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
+                        Un pedido con adelanto se entrega al contado.
+                    </p>
+                    <p v-else-if="!clienteSeleccionado" class="mt-1.5 text-xs text-neutral-400 dark:text-neutral-500">
                         Para fiar, primero elige un cliente en el carrito.
                     </p>
 
@@ -2325,8 +2461,17 @@ const claseInput =
                         </template>
                     </div>
 
+                    <!-- Pedido cubierto por el adelanto: no hay nada que cobrar -->
+                    <p
+                        v-if="condicion === 'contado' && sinSaldo"
+                        class="mt-4 rounded-xl bg-emerald-100 px-4 py-2.5 text-sm font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                        data-pos-sin-saldo
+                    >
+                        ✓ El adelanto cubre el total: no hay nada que cobrar hoy.
+                    </p>
+
                     <!-- Pagos (solo contado) -->
-                    <template v-if="condicion === 'contado'">
+                    <template v-if="condicion === 'contado' && !sinSaldo">
                         <p class="mt-4 mb-1.5 text-sm font-medium">Método de pago</p>
                         <div class="grid grid-cols-3 gap-2" data-medios-pago>
                             <button
@@ -2363,7 +2508,7 @@ const claseInput =
                                 :codigo="medioUnico"
                                 :nombre="medioDe(medioUnico)?.nombre ?? ''"
                                 :datos="cobrosQr[medioUnico] ?? null"
-                                :monto="total"
+                                :monto="aCobrar"
                             >
                                 <template #vacio>
                                     Confirma el pago en tu celular y registra la venta.
@@ -2463,7 +2608,7 @@ const claseInput =
                     </template>
 
                     <!-- Efectivo simple: recibido y vuelto -->
-                    <div v-if="condicion === 'contado' && esEfectivoSimple" class="mt-4">
+                    <div v-if="condicion === 'contado' && !sinSaldo && esEfectivoSimple" class="mt-4">
                         <label class="mb-1 block text-sm font-medium" for="recibido">Monto recibido</label>
                         <input
                             id="recibido"
@@ -2473,12 +2618,12 @@ const claseInput =
                             step="0.01"
                             min="0"
                             :class="claseInput"
-                            :placeholder="total.toFixed(2)"
+                            :placeholder="aCobrar.toFixed(2)"
                             @focus="$event.target.select()"
                         />
                         <div class="mt-2 flex flex-wrap gap-1.5">
                             <button
-                                v-for="monto in [total, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20, Math.ceil(total / 50) * 50, Math.ceil(total / 100) * 100].filter((v, idx, arr) => arr.indexOf(v) === idx)"
+                                v-for="monto in [aCobrar, Math.ceil(aCobrar / 10) * 10, Math.ceil(aCobrar / 20) * 20, Math.ceil(aCobrar / 50) * 50, Math.ceil(aCobrar / 100) * 100].filter((v, idx, arr) => arr.indexOf(v) === idx)"
                                 :key="monto"
                                 class="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
                                 @click="recibido = monto.toFixed(2)"
@@ -2502,6 +2647,7 @@ const claseInput =
                             class="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                             :class="condicion === 'credito' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'"
                             :disabled="!puedeCobrar"
+                            data-pos-confirmar
                             @click="cobrar"
                         >
                             {{ procesando
@@ -2510,9 +2656,13 @@ const claseInput =
                                     ? abono.activo && abonoValido
                                         ? `Fiar ${soles(saldoCredito)} · a cuenta ${soles(montoAbono)}`
                                         : `Fiar · ${soles(total)}`
-                                    : esBilletera
-                                        ? `Ya pagó · Confirmar ${soles(total)}`
-                                        : `Confirmar venta · ${soles(total)}` }}
+                                    : sinSaldo
+                                        ? 'Entregar · pagado con el adelanto'
+                                        : esBilletera
+                                            ? `Ya pagó · Confirmar ${soles(aCobrar)}`
+                                            : pedidoEnVenta
+                                                ? `Entregar y cobrar · ${soles(aCobrar)}`
+                                                : `Confirmar venta · ${soles(aCobrar)}` }}
                         </button>
                     </div>
                 </div>
