@@ -7,6 +7,7 @@ use App\Models\AgenteEmpresa;
 use App\Models\AgenteIa;
 use App\Models\Categoria;
 use App\Models\ConversacionIa;
+use App\Models\MensajeIa;
 use App\Models\ProveedorIa;
 use App\Services\IA\AsistenteIaService;
 use App\Support\Tienda;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
+use Laravel\Ai\Messages\UserMessage;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -183,6 +185,24 @@ DERIVAR"]);
         $app = (new AgenteDeRubro($this->agente, $this->empresa, null, 'app'))->instructions();
         $this->assertStringContainsString('indica que se revise la etiqueta', $app);
         $this->assertNotNull($config);
+    }
+
+    public function test_el_modelo_recibe_la_conversacion_en_orden_y_solo_los_ultimos_mensajes(): void
+    {
+        $this->publicar();
+        $conversacion = ConversacionIa::create(['empresa_id' => $this->empresa->id, 'agente_id' => $this->agente->id, 'canal' => 'tienda', 'visitante' => 'visitante-orden-01']);
+        // todos con la misma hora, como pasa con la pregunta y su respuesta guardadas en una transacción
+        for ($i = 1; $i <= 25; $i++) {
+            MensajeIa::create(['conversacion_id' => $conversacion->id, 'empresa_id' => $this->empresa->id, 'rol' => $i % 2 ? 'user' : 'assistant', 'contenido' => "mensaje {$i}"]);
+        }
+
+        $historial = app(AsistenteIaService::class)->historialDe($conversacion->fresh());
+
+        // los 20 últimos, del más antiguo al más reciente: el modelo lee la conversación en orden
+        $this->assertCount(20, $historial);
+        $this->assertSame('mensaje 6', $historial[0]->content);
+        $this->assertSame('mensaje 25', $historial[19]->content);
+        $this->assertInstanceOf(UserMessage::class, $historial[19]);
     }
 
     public function test_sin_precios_ni_whatsapp_las_tarjetas_no_los_muestran(): void

@@ -132,11 +132,7 @@ class AsistenteIaService
                 : "Se alcanzó el tope de {$limite} consultas de este mes para \"{$agente->nombre}\". Vuelve a intentarlo el próximo mes o pide a la plataforma ampliarlo.");
         }
 
-        $historial = $conversacion->mensajes()->latest('creado_en')->limit(self::HISTORIAL)->get()->reverse()->values()
-            ->map(fn (MensajeIa $m) => $m->rol === 'user' ? new UserMessage($m->contenido) : new AssistantMessage($m->rol === 'humano' ? '[Respondió una persona del negocio] '.$m->contenido : $m->contenido))
-            ->all();
-
-        $resultado = $this->consultar($agente, $empresa, $sucursal, $texto, $historial, $modo, $persona);
+        $resultado = $this->consultar($agente, $empresa, $sucursal, $texto, $this->historialDe($conversacion), $modo, $persona);
 
         return DB::transaction(function () use ($conversacion, $empresa, $texto, $resultado) {
             MensajeIa::create(['conversacion_id' => $conversacion->id, 'empresa_id' => $empresa->id, 'rol' => 'user', 'contenido' => $texto]);
@@ -149,6 +145,19 @@ class AsistenteIaService
 
             return $respuesta;
         });
+    }
+
+    /**
+     * Los últimos mensajes de la conversación, del más antiguo al más reciente, para que el modelo la lea en orden.
+     * Se ordena por id (UUID v7, creciente): la pregunta y su respuesta comparten la hora de la transacción.
+     *
+     * @return list<UserMessage|AssistantMessage>
+     */
+    public function historialDe(ConversacionIa $conversacion): array
+    {
+        return $conversacion->mensajes()->reorder()->orderByDesc('id')->limit(self::HISTORIAL)->get()->reverse()->values()
+            ->map(fn (MensajeIa $m) => $m->rol === 'user' ? new UserMessage($m->contenido) : new AssistantMessage($m->rol === 'humano' ? '[Respondió una persona del negocio] '.$m->contenido : $m->contenido))
+            ->all();
     }
 
     /**
