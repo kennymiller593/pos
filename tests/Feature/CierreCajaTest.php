@@ -95,7 +95,7 @@ class CierreCajaTest extends TestCase
         $this->assertDatabaseHas('auditoria', ['entidad_id' => $this->apertura->id, 'accion' => 'caja.cierre_con_diferencia']);
 
         // el historial trae el cuadre por medio y la diferencia total
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($p) => $p
             ->has('historial.data.0.medios', 3)
             ->where('historial.data.0.diferencia_total', fn ($v) => abs($v - (-5)) < 0.001));
     }

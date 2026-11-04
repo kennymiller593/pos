@@ -187,7 +187,7 @@ class MovimientosCajaTest extends TestCase
         [$apertura] = $this->turnoCompleto();
         $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null])->assertSessionHas('success');
 
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($p) => $p
             ->where('historial.data.0.id', $apertura->id)
             ->where('historial.data.0.entro', fn ($v) => abs($v - 450) < 0.001)
             ->where('historial.data.0.salio', fn ($v) => abs($v - 210) < 0.001)

@@ -9,6 +9,7 @@ use App\Models\Caja;
 use App\Models\MedioPago;
 use App\Models\MovimientoCaja;
 use App\Services\CajaService;
+use App\Services\MovimientosCajaService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +21,7 @@ use Inertia\Response;
 
 class CajaController extends Controller
 {
-    public function __construct(private readonly CajaService $caja) {}
+    public function __construct(private readonly CajaService $caja, private readonly MovimientosCajaService $movimientos) {}
 
     public function index(Request $request): Response
     {
@@ -35,7 +36,37 @@ class CajaController extends Controller
             ->get(['id', 'nombre', 'sucursal_id']);
 
         $apertura = $this->caja->aperturaDe($usuario);
+        $hoy = now()->toDateString();
 
+        return Inertia::render('Caja/Index', [
+            'cajas' => $cajas->map(fn ($caja) => [
+                'id' => $caja->id,
+                'nombre' => $caja->nombre,
+                'sucursal' => $caja->sucursal?->nombre,
+                'ocupada_por' => $caja->aperturaAbierta?->usuario?->nombre_completo,
+            ]),
+            'apertura' => $apertura ? [
+                'id' => $apertura->id,
+                'caja' => $apertura->caja->nombre
+                    .($apertura->caja->loadMissing('sucursal:id,nombre')->sucursal ? " · {$apertura->caja->sucursal->nombre}" : ''),
+                'abierta_en' => $apertura->abierta_en,
+                'monto_inicial' => (float) $apertura->monto_inicial,
+                'resumen' => $this->caja->resumen($apertura),
+                // sin el medio interno 'adelanto' (al entregar un pedido): ese dinero ya se contó el día que lo dejaron
+                'medios' => array_values(array_filter($this->caja->resumenPorMedio($apertura), fn ($m) => ! in_array($m['codigo'], MedioPago::INTERNOS, true))),
+                // todo lo que entró y salió en el turno, fila por fila y con su medio (misma lista que /caja/movimientos)
+                'movimientos' => $this->movimientos->listar($usuario, null, $apertura, $hoy, $hoy),
+            ] : null,
+            'denominaciones' => CajaService::DENOMINACIONES,
+            // para decir por dónde entró o salió el dinero de un ingreso/egreso (Yape, Plin, transferencia...)
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+        ]);
+    }
+
+    /** Historial de turnos cerrados: Entró · Salió · Saldo · Efectivo al cerrar · Estado, con la Suma del rango. */
+    public function historial(Request $request): Response
+    {
+        $usuario = $request->user();
         $veTodas = $usuario->can('caja.ver_todas');
 
         // rango de fechas del historial (por día de apertura del turno)
@@ -109,29 +140,11 @@ class CajaController extends Controller
                 'movimientos' => $this->movimientosDelTurno($turno, null),
             ]);
 
-        return Inertia::render('Caja/Index', [
+        return Inertia::render('Caja/Historial', [
             'historial' => $historial,
             'suma' => $suma,
             'filtros' => ['desde' => $desde, 'hasta' => $hasta],
-            'cajas' => $cajas->map(fn ($caja) => [
-                'id' => $caja->id,
-                'nombre' => $caja->nombre,
-                'sucursal' => $caja->sucursal?->nombre,
-                'ocupada_por' => $caja->aperturaAbierta?->usuario?->nombre_completo,
-            ]),
-            'apertura' => $apertura ? [
-                'id' => $apertura->id,
-                'caja' => $apertura->caja->nombre
-                    .($apertura->caja->loadMissing('sucursal:id,nombre')->sucursal ? " · {$apertura->caja->sucursal->nombre}" : ''),
-                'abierta_en' => $apertura->abierta_en,
-                'monto_inicial' => (float) $apertura->monto_inicial,
-                'resumen' => $this->caja->resumen($apertura),
-                'medios' => $this->caja->resumenPorMedio($apertura),
-                'movimientos' => $this->movimientosDelTurno($apertura),
-            ] : null,
-            'denominaciones' => CajaService::DENOMINACIONES,
-            // para decir por dónde entró o salió el dinero de un ingreso/egreso (Yape, Plin, transferencia...)
-            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
+            'cajaAbierta' => ($abierta = $this->caja->aperturaDe($usuario)) ? ['id' => $abierta->id, 'caja' => $abierta->caja?->nombre] : null,
         ]);
     }
 

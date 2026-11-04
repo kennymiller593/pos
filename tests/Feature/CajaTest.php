@@ -44,8 +44,8 @@ class CajaTest extends TestCase
         $this->assertEqualsWithDelta(115, (float) $apertura->monto_cierre, 0.001);
 
         // el turno cerrado aparece en el historial con su arqueo
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina
-            ->component('Caja/Index')
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($pagina) => $pagina
+            ->component('Caja/Historial')
             ->has('historial.data', 1)
             ->where('historial.data.0.monto_inicial', fn ($v) => abs($v - 100) < 0.001)
             ->where('historial.data.0.ingresos', fn ($v) => abs($v - 50) < 0.001)
@@ -69,7 +69,7 @@ class CajaTest extends TestCase
         $this->assertEqualsWithDelta(120, (float) $apertura->monto_cierre, 0.001);
         $this->assertSame('Todo en orden', $apertura->observaciones);
 
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($pagina) => $pagina
             ->where('historial.data.0.observaciones', 'Todo en orden')
             ->where('historial.data.0.diferencia', fn ($v) => abs($v) < 0.001)
         );
@@ -116,8 +116,8 @@ class CajaTest extends TestCase
         $cajero = $this->crearUsuario('cajero', 'cajero'.random_int(10000, 99999).'@test.local');
 
         // el cajero no ve el turno del admin; el admin si lo ve
-        $this->actingAs($cajero)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('historial.data', 0));
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('historial.data', 1));
+        $this->actingAs($cajero)->get('/caja/historial')->assertInertia(fn ($pagina) => $pagina->has('historial.data', 0));
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($pagina) => $pagina->has('historial.data', 1));
     }
 
     public function test_no_permite_doble_apertura_del_mismo_usuario(): void
@@ -206,8 +206,8 @@ class CajaTest extends TestCase
         MovimientoCaja::create(['empresa_id' => $this->empresa->id, 'apertura_id' => $turno->id, 'usuario_id' => $this->admin->id, 'tipo' => 'egreso', 'concepto' => 'pago de taxi', 'monto' => 4, 'medio_pago_codigo' => 'efectivo']);
         $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null])->assertSessionHas('success');
 
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
-            ->where('apertura', null)
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p->where('apertura', null));
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($p) => $p
             ->has('historial.data.0.movimientos', 2)
             ->where('historial.data.0.movimientos', fn ($movs) => collect($movs)->pluck('concepto')->sort()->values()->all() === ['pago de taxi', 'venta por unidad de plantines'])
         );
@@ -227,7 +227,7 @@ class CajaTest extends TestCase
         }
 
         // por turno: efectivo 100 + 50 - 10 = 140 esperado; total del turno = 140 + 20 (Yape) - 100 (inicial) = 60
-        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+        $this->actingAs($this->admin)->get('/caja/historial')->assertInertia(fn ($p) => $p
             ->has('historial.data', 10)
             ->where('historial.data.0.total_turno', fn ($v) => abs($v - 60) < 0.001)
             ->where('suma.turnos', 12)
@@ -240,7 +240,7 @@ class CajaTest extends TestCase
         );
 
         // filtrado del 1 al 5 de octubre: 5 turnos
-        $this->actingAs($this->admin)->get('/caja?desde=2026-10-01&hasta=2026-10-05')->assertInertia(fn ($p) => $p
+        $this->actingAs($this->admin)->get('/caja/historial?desde=2026-10-01&hasta=2026-10-05')->assertInertia(fn ($p) => $p
             ->has('historial.data', 5)
             ->where('suma.turnos', 5)
             ->where('suma.total_turno', fn ($v) => abs($v - 300) < 0.001)
@@ -248,7 +248,7 @@ class CajaTest extends TestCase
         );
 
         // un rango invertido se rechaza
-        $this->actingAs($this->admin)->get('/caja?desde=2026-10-05&hasta=2026-10-01')->assertSessionHasErrors('hasta');
+        $this->actingAs($this->admin)->get('/caja/historial?desde=2026-10-05&hasta=2026-10-01')->assertSessionHasErrors('hasta');
     }
 
     public function test_egreso_mayor_al_efectivo_disponible_se_registra_y_la_caja_queda_en_negativo(): void

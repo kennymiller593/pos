@@ -266,9 +266,10 @@ class CompraTest extends TestCase
 
         // y se ve en los movimientos del turno
         $this->actingAs($this->admin)->get('/caja')->assertInertia(fn (Assert $p) => $p
-            ->where('apertura.movimientos.0.origen', 'compra')
-            ->where('apertura.movimientos.0.tipo', 'egreso')
-            ->where('apertura.movimientos.0.monto', fn ($v) => (float) $v === 80.0));
+            // la compra pagada con caja sale en el bloque "salió" del turno, fila por fila
+            ->where('apertura.movimientos.salidas.0.tipo', 'compra')
+            ->where('apertura.movimientos.salidas.0.monto', fn ($v) => (float) $v === 80.0)
+            ->where('apertura.movimientos.resumen.salio', fn ($v) => (float) $v === 80.0));
 
         // sin marcarlo, la caja no se toca
         $compra(['pagar_desde_caja' => false])->assertSessionHas('success');

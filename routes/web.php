@@ -319,6 +319,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('can:caja.operar')->group(function () {
         Route::get('/caja', [CajaController::class, 'index'])->name('caja.index');
+        Route::get('/caja/historial', [CajaController::class, 'historial'])->name('caja.historial');
         Route::post('/caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
         Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
         Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
