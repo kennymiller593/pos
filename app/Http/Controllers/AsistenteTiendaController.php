@@ -134,10 +134,12 @@ class AsistenteTiendaController extends Controller
             return null;
         }
 
+        // la pregunta que respondió este mensaje: la última del cliente antes que él (los ids son ordenados en el
+        // tiempo; la hora no sirve porque la pregunta y la respuesta se guardan en la misma transacción)
         $pregunta = MensajeIa::where('conversacion_id', $m->conversacion_id)
             ->where('rol', 'user')
-            ->where('creado_en', '<=', $m->creado_en)
-            ->orderByDesc('creado_en')
+            ->where('id', '<', $m->id)
+            ->orderByDesc('id')
             ->value('contenido');
         $texto = 'Hola, consulté en la tienda en línea'.(filled($pregunta) ? ': '.Str::limit(trim(preg_replace('/\s+/', ' ', $pregunta)), 300, '…') : ' y quisiera más información.');
 
