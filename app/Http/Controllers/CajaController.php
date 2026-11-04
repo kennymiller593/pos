@@ -6,12 +6,14 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\AperturaCaja;
 use App\Models\Auditoria;
 use App\Models\Caja;
+use App\Models\MedioPago;
 use App\Models\MovimientoCaja;
 use App\Services\CajaService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -63,6 +65,12 @@ class CajaController extends Controller
             ->withSum(['pagos as ventas_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['cobros as cobros_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
             ->withSum(['pagosProveedor as pagos_proveedor_efectivo' => fn ($q) => $q->where('medio_pago_codigo', 'efectivo')], 'monto')
+            // entró / salió por todos los medios (sin el adelanto interno: ese dinero ya entró el día que lo dejaron)
+            ->withSum(['pagos as entro_ventas' => fn ($q) => $q->whereNotIn('medio_pago_codigo', MedioPago::INTERNOS)], 'monto')
+            ->withSum('cobros as entro_cobros', 'monto')
+            ->withSum(['movimientos as entro_ingresos' => fn ($q) => $q->where('tipo', 'ingreso')], 'monto')
+            ->withSum(['movimientos as salio_egresos' => fn ($q) => $q->where('tipo', 'egreso')], 'monto')
+            ->withSum('pagosProveedor as salio_proveedores', 'monto')
             ->latest('cerrada_en')
             ->paginate(10)
             ->withQueryString()
@@ -93,6 +101,10 @@ class CajaController extends Controller
                 'observaciones' => $turno->observaciones,
                 // lo que dejó el turno por todos los medios (efectivo, Yape, transferencia...), sin el monto inicial
                 'total_turno' => $this->totalTurno($turno),
+                // lo que entró y salió por todos los medios, y el saldo del turno (entró − salió), como la lista de movimientos
+                'entro' => $entro = round((float) ($turno->entro_ventas ?? 0) + (float) ($turno->entro_cobros ?? 0) + (float) ($turno->entro_ingresos ?? 0), 2),
+                'salio' => $salio = round((float) ($turno->salio_egresos ?? 0) + (float) ($turno->salio_proveedores ?? 0), 2),
+                'saldo' => round($entro - $salio, 2),
                 // cada ingreso y egreso del turno (ventas sueltas, taxi, compras pagadas con caja...) para revisarlo después de cerrado
                 'movimientos' => $this->movimientosDelTurno($turno, null),
             ]);
@@ -118,6 +130,8 @@ class CajaController extends Controller
                 'movimientos' => $this->movimientosDelTurno($apertura),
             ] : null,
             'denominaciones' => CajaService::DENOMINACIONES,
+            // para decir por dónde entró o salió el dinero de un ingreso/egreso (Yape, Plin, transferencia...)
+            'mediosPago' => MedioPago::elegibles()->orderBy('nombre')->get(['codigo', 'nombre', 'requiere_referencia']),
         ]);
     }
 
@@ -221,11 +235,17 @@ class CajaController extends Controller
             'tipo' => ['required', 'in:ingreso,egreso'],
             'concepto' => ['required', 'string', 'max:200'],
             'monto' => ['required', 'numeric', 'gt:0'],
+            // por dónde entró o salió el dinero; si no lo mandan (versiones viejas de la pantalla) es efectivo
+            'medio_pago_codigo' => ['nullable', 'string', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
+            'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'concepto.required' => 'Describe el motivo del movimiento.',
             'monto.required' => 'Ingresa el monto.',
             'monto.gt' => 'El monto debe ser mayor a 0.',
+            'medio_pago_codigo.exists' => 'Elige un medio de pago válido.',
         ]);
+        $datos['medio_pago_codigo'] = $datos['medio_pago_codigo'] ?? 'efectivo';
+        $datos['referencia'] = $datos['medio_pago_codigo'] === 'efectivo' ? null : ($datos['referencia'] ?? null);
 
         // un egreso mayor al efectivo disponible no se bloquea: el dinero salió del negocio igual (pago del local,
         // de un proveedor) y el cierre mostrará el negativo. La pantalla avisa antes de guardar.
@@ -246,10 +266,13 @@ class CajaController extends Controller
                 'caja' => $apertura->caja?->nombre,
                 'concepto' => $datos['concepto'],
                 'monto' => (float) $datos['monto'],
+                'medio' => $datos['medio_pago_codigo'],
             ]);
         }
 
-        return back()->with('success', $datos['tipo'] === 'ingreso' ? 'Ingreso registrado.' : 'Egreso registrado.');
+        $medio = $datos['medio_pago_codigo'] === 'efectivo' ? '' : ' por '.(MedioPago::whereKey($datos['medio_pago_codigo'])->value('nombre') ?? $datos['medio_pago_codigo']);
+
+        return back()->with('success', ($datos['tipo'] === 'ingreso' ? 'Ingreso' : 'Egreso')." de S/ ".number_format((float) $datos['monto'], 2)."{$medio} registrado.");
     }
 
     /** Lo que dejó un turno por todos los medios, sin el monto inicial (turnos antiguos sin cuadre por medio: solo efectivo). */
@@ -277,13 +300,19 @@ class CajaController extends Controller
                 (SELECT COALESCE(SUM(monto), 0) FROM movimientos_caja WHERE apertura_id = a.id AND tipo = 'egreso' AND medio_pago_codigo = 'efectivo')
                   + (SELECT COALESCE(SUM(monto), 0) FROM pagos_proveedor WHERE apertura_id = a.id AND medio_pago_codigo = 'efectivo') AS egresos,
                 COALESCE((SELECT SUM(esperado) FROM cierres_caja_medios WHERE apertura_id = a.id), a.monto_sistema) - a.monto_inicial AS total_turno,
+                (SELECT COALESCE(SUM(monto), 0) FROM pagos WHERE apertura_id = a.id AND medio_pago_codigo NOT IN ('adelanto'))
+                  + (SELECT COALESCE(SUM(monto), 0) FROM cobros WHERE apertura_id = a.id)
+                  + (SELECT COALESCE(SUM(monto), 0) FROM movimientos_caja WHERE apertura_id = a.id AND tipo = 'ingreso') AS entro,
+                (SELECT COALESCE(SUM(monto), 0) FROM movimientos_caja WHERE apertura_id = a.id AND tipo = 'egreso')
+                  + (SELECT COALESCE(SUM(monto), 0) FROM pagos_proveedor WHERE apertura_id = a.id) AS salio,
                 COALESCE((SELECT SUM(diferencia) FROM cierres_caja_medios WHERE apertura_id = a.id), a.monto_cierre - a.monto_sistema) AS diferencia");
 
         $t = DB::query()->fromSub($porTurno, 't')->selectRaw('COUNT(*) AS turnos,
             COALESCE(SUM(monto_inicial), 0) AS inicial, COALESCE(SUM(ventas_efectivo), 0) AS ventas_efectivo,
             COALESCE(SUM(ingresos), 0) AS ingresos, COALESCE(SUM(egresos), 0) AS egresos,
             COALESCE(SUM(monto_sistema), 0) AS esperado, COALESCE(SUM(monto_cierre), 0) AS contado,
-            COALESCE(SUM(diferencia), 0) AS diferencia, COALESCE(SUM(total_turno), 0) AS total_turno')->first();
+            COALESCE(SUM(diferencia), 0) AS diferencia, COALESCE(SUM(total_turno), 0) AS total_turno,
+            COALESCE(SUM(entro), 0) AS entro, COALESCE(SUM(salio), 0) AS salio, COALESCE(SUM(entro) - SUM(salio), 0) AS saldo')->first();
 
         return collect((array) $t)->map(fn ($v, $k) => $k === 'turnos' ? (int) $v : round((float) $v, 2))->all();
     }

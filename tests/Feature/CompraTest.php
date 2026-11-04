@@ -321,7 +321,7 @@ class CompraTest extends TestCase
             'pagar_desde_caja' => true, 'medio_pago_codigo' => 'efectivo',
             'items' => [['presentacion_id' => $unidad->id, 'cantidad' => 1, 'costo_unitario' => 10.00]],
         ])->assertSessionHas('error');
-        $this->assertSame(0, \App\Models\PagoProveedor::whereNotNull('compra_id')->count());
+        $this->assertSame(0, \App\Models\PagoProveedor::where('empresa_id', $this->empresa->id)->whereNotNull('compra_id')->count()); // solo esta empresa: la BD local puede tener compras reales
         $this->actingAs($this->admin)->get('/compras/crear')->assertInertia(fn (Assert $p) => $p->where('caja.sucursal_id', $otra->id)->where('caja.nombre', 'Caja Anexo'));
     }
 

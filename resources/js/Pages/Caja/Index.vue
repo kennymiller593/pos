@@ -6,7 +6,7 @@ import {
     ArrowUpCircle,
     Banknote,
     CheckCircle2,
-    ListChecks,
+    Eye,
     Printer,
     Clock,
     Lock,
@@ -23,6 +23,7 @@ import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     cajas: { type: Array, required: true },
+    mediosPago: { type: Array, default: () => [] },
     apertura: { type: Object, default: null },
     historial: { type: Object, required: true },
     suma: { type: Object, default: null },
@@ -78,7 +79,11 @@ const formMovimiento = useForm({
     tipo: 'ingreso',
     concepto: '',
     monto: '',
+    medio_pago_codigo: 'efectivo',
+    referencia: '',
 })
+// el medio elegido pide número de operación (Yape, Plin, transferencia...)
+const medioMovimiento = computed(() => props.mediosPago.find((m) => m.codigo === formMovimiento.medio_pago_codigo) ?? null)
 
 function guardarMovimiento() {
     formMovimiento.post('/caja/movimientos', {
@@ -133,22 +138,12 @@ function rangoRapido(tipo) {
     return filtrarHistorial({ desde: '', hasta: '' })
 }
 const hayRango = computed(() => !!(props.filtros?.desde || props.filtros?.hasta))
-const claseTotal = (n) => (Number(n) < 0 ? 'text-red-600 dark:text-red-400' : '')
 
 // ---- historial ----
-// detalle de un turno cerrado (medios de pago y movimientos) en un modal
-const turnoDetalle = ref(null)
-const totalMovs = (t, tipo) => (t?.movimientos ?? []).filter((m) => m.tipo === tipo).reduce((a, m) => a + Number(m.monto), 0)
-const claseDiferencia = (d) => {
-    const n = Number(d ?? 0)
-    if (Math.abs(n) < 0.005) return 'text-emerald-600 dark:text-emerald-400'
-    return n > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
-}
-const textoDiferencia = (d) => {
-    const n = Number(d ?? 0)
-    if (Math.abs(n) < 0.005) return soles(0)
-    return (n > 0 ? '+' : '−') + soles(Math.abs(n))
-}
+// saldo del turno (entró − salió por todos los medios); si el dato aún no viene, el total del turno
+const saldoTurno = (t) => t.saldo ?? t.total_turno ?? 0
+const sumaSaldo = computed(() => props.suma?.saldo ?? props.suma?.total_turno ?? 0)
+const claseSaldo = (n) => (Number(n) < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400')
 
 const claseInput =
     'h-10 w-full rounded-xl border border-stone-300 bg-white px-3 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:placeholder-neutral-500'
@@ -258,16 +253,24 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </span>
                     <span class="inline-flex items-center gap-1"><Clock class="size-4" /> desde las {{ hora(apertura.abierta_en) }}</span>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
+                    <Link
+                        :href="`/caja/movimientos?turno=${apertura.id}`"
+                        class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-medium hover:bg-stone-50 sm:flex-none dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        data-ver-movimientos
+                    >
+                        <Eye class="size-4" />
+                        Ver movimientos
+                    </Link>
                     <button
-                        class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                        class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 text-sm font-medium hover:bg-stone-50 sm:flex-none dark:border-neutral-700 dark:hover:bg-neutral-800"
                         @click="modalMovimiento = true"
                     >
                         <Plus class="size-4" />
                         Movimiento
                     </button>
                     <button
-                        class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                        class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700 sm:flex-none"
                         @click="modalCierre = true"
                     >
                         <Lock class="size-4" />
@@ -375,8 +378,15 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
             <!-- Movimientos -->
             <div class="mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-                <div class="border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
+                <div class="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
                     <h2 class="font-semibold tracking-tight">Movimientos del turno</h2>
+                    <Link
+                        :href="`/caja/movimientos?turno=${apertura.id}`"
+                        class="text-sm font-medium whitespace-nowrap text-emerald-700 hover:underline dark:text-emerald-400"
+                        data-ver-todo-turno
+                    >
+                        Ver todo con detalle →
+                    </Link>
                 </div>
                 <ul class="divide-y divide-stone-100 dark:divide-neutral-800">
                     <li v-if="!apertura.movimientos.length" class="px-5 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
@@ -445,85 +455,68 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </div>
                     </form>
                 </div>
-                <!-- en celular la fila Suma queda al fondo de la tabla deslizable: el total va también aquí arriba -->
+                <!-- en celular la fila Suma va arriba: lo que entró y el saldo del rango -->
                 <div v-if="suma && suma.turnos > 0" class="mt-3 grid grid-cols-2 gap-2 sm:hidden" data-suma-movil>
                     <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950">
-                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Total del rango · {{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}</p>
-                        <p class="text-base font-bold" :class="claseTotal(suma.total_turno)">{{ soles(suma.total_turno) }}</p>
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Saldo del rango · {{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}</p>
+                        <p class="text-base font-bold" :class="claseSaldo(sumaSaldo)">{{ soles(sumaSaldo) }}</p>
                     </div>
                     <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-950">
-                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Efectivo esperado</p>
-                        <p class="text-base font-bold" :class="claseTotal(suma.esperado)">{{ soles(suma.esperado) }}</p>
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">Entró</p>
+                        <p class="text-base font-bold text-emerald-600 dark:text-emerald-400">{{ suma.entro != null ? soles(suma.entro) : '—' }}</p>
                     </div>
                 </div>
             </div>
 
-            <div class="@container relative overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
-                        <tr>
-                            <th class="px-4 py-3 font-semibold tracking-wider">Turno</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Inicial</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Ventas efec.</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Ingresos</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Egresos</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Esperado</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Contado</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider">Diferencia</th>
-                            <th class="px-3 py-3 text-right font-semibold tracking-wider" title="Lo que entró menos lo que salió por todos los medios (efectivo, Yape, transferencia...), sin el monto inicial">Total turno</th>
-                            <th class="px-4 py-3"><span class="sr-only">Acciones</span></th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
-                        <tr v-if="!historial.data.length">
-                            <td colspan="10" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                                <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
-                                    {{ hayRango ? 'No hay turnos cerrados en ese rango de fechas.' : 'Aún no hay turnos cerrados.' }}
-                                </div>
-                            </td>
-                        </tr>
-                        <template v-for="t in historial.data" :key="t.id">
-                            <tr class="transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800/50">
-                                <!-- tocar el turno también abre el detalle: en celular el botón queda al final de la tabla -->
-                                <td class="cursor-pointer px-4 py-3" @click="turnoDetalle = t">
-                                    <p class="flex items-center gap-1 font-medium whitespace-nowrap">
-                                        {{ t.caja }} · {{ t.usuario ?? '—' }}
-                                        <span v-if="t.movimientos?.length" class="text-xs font-normal text-indigo-600 sm:hidden dark:text-emerald-400">· {{ t.movimientos.length }} mov.</span>
-                                    </p>
-                                    <p class="text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">
-                                        {{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}
-                                    </p>
-                                    <p v-if="t.observaciones" class="mt-0.5 max-w-xs truncate text-xs text-slate-600 italic dark:text-neutral-300" :title="t.observaciones">
-                                        {{ t.observaciones }}
-                                    </p>
+            <p v-if="!historial.data.length" class="px-4 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                {{ hayRango ? 'No hay turnos cerrados en ese rango de fechas.' : 'Aún no hay turnos cerrados.' }}
+            </p>
+
+            <template v-else>
+                <!-- PC: tabla -->
+                <div class="hidden overflow-x-auto sm:block">
+                    <table class="w-full text-left text-sm" data-tabla-historial>
+                        <thead class="border-b border-stone-200 text-xs text-neutral-400 uppercase dark:border-neutral-800 dark:text-neutral-500">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold tracking-wider">Turno</th>
+                                <th class="px-3 py-3 text-right font-semibold tracking-wider">Entró</th>
+                                <th class="px-3 py-3 text-right font-semibold tracking-wider">Salió</th>
+                                <th class="px-3 py-3 text-right font-semibold tracking-wider whitespace-nowrap" title="Lo que entró menos lo que salió por todos los medios, sin el monto inicial">Saldo del turno</th>
+                                <th class="px-3 py-3 text-right font-semibold tracking-wider whitespace-nowrap">Efectivo al cerrar</th>
+                                <th class="px-3 py-3 text-center font-semibold tracking-wider">Estado</th>
+                                <th class="px-4 py-3 text-right font-semibold tracking-wider">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
+                            <tr v-for="t in historial.data" :key="t.id" class="transition-colors hover:bg-slate-50 dark:hover:bg-neutral-800/50" :data-turno="t.id">
+                                <td class="px-4 py-3">
+                                    <p class="font-medium whitespace-nowrap">{{ t.caja }} · {{ t.usuario ?? '—' }}</p>
+                                    <p class="text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">{{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}</p>
+                                    <p v-if="t.observaciones" class="mt-0.5 max-w-xs truncate text-xs text-slate-600 italic dark:text-neutral-300" :title="t.observaciones">{{ t.observaciones }}</p>
                                 </td>
-                                <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.monto_inicial) }}</td>
-                                <td class="px-3 py-3 text-right text-neutral-600 dark:text-neutral-300">{{ soles(t.ventas_efectivo) }}</td>
-                                <td class="px-3 py-3 text-right text-emerald-600 dark:text-emerald-400">{{ t.ingresos > 0 ? soles(t.ingresos) : '—' }}</td>
-                                <td class="px-3 py-3 text-right text-red-600 dark:text-red-400">{{ t.egresos > 0 ? soles(t.egresos) : '—' }}</td>
-                                <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_sistema) }}</td>
-                                <td class="px-3 py-3 text-right font-medium">{{ soles(t.monto_cierre) }}</td>
-                                <td class="px-3 py-3 text-right">
-                                    <span
-                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
-                                        :class="estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).clase"
-                                    >
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums text-emerald-600 dark:text-emerald-400">{{ t.entro != null ? soles(t.entro) : '—' }}</td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums text-red-600 dark:text-red-400">{{ t.salio != null ? soles(t.salio) : '—' }}</td>
+                                <td class="px-3 py-3 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseSaldo(saldoTurno(t))">{{ soles(saldoTurno(t)) }}</td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                                    <p class="font-medium">{{ soles(t.monto_cierre) }}</p>
+                                    <p class="text-xs text-neutral-500 dark:text-neutral-400">abrió con {{ soles(t.monto_inicial) }}</p>
+                                </td>
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).clase">
                                         {{ estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).texto }}
                                     </span>
                                 </td>
-                                <td class="px-3 py-3 text-right whitespace-nowrap font-semibold" :class="claseTotal(t.total_turno)">{{ soles(t.total_turno) }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex justify-end gap-1">
-                                        <button
-                                            type="button"
-                                            class="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                                            aria-label="Ver detalle del turno"
-                                            title="Ver medios de pago y movimientos del turno"
+                                        <Link
+                                            :href="`/caja/movimientos?turno=${t.id}`"
+                                            class="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
+                                            aria-label="Ver movimientos del turno"
+                                            title="Ver lo que entró y salió en el turno"
                                             :data-ver-turno="t.id"
-                                            @click="turnoDetalle = t"
                                         >
-                                            <ListChecks class="size-4" />
-                                        </button>
+                                            <Eye class="size-4" />
+                                        </Link>
                                         <button
                                             type="button"
                                             class="rounded-lg p-1.5 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
@@ -536,28 +529,78 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     </div>
                                 </td>
                             </tr>
-                        </template>
-                    </tbody>
-                    <!-- Suma de todos los turnos del rango (no solo de esta página), como el sistema anterior -->
-                    <tfoot v-if="suma && suma.turnos > 0" class="border-t-2 border-stone-200 bg-stone-50 font-semibold dark:border-neutral-700 dark:bg-neutral-950" data-suma-historial>
-                        <tr>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                                Suma
-                                <span class="block text-xs font-normal text-neutral-500 dark:text-neutral-400">{{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}{{ hayRango ? '' : ' · todo el historial' }}</span>
-                            </td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.inicial) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.ventas_efectivo) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{{ soles(suma.ingresos) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap text-red-600 dark:text-red-400">{{ soles(suma.egresos) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap" :class="claseTotal(suma.esperado)">{{ soles(suma.esperado) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap">{{ soles(suma.contado) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap" :class="Math.abs(suma.diferencia) < 0.005 ? 'text-emerald-600 dark:text-emerald-400' : suma.diferencia > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'">{{ suma.diferencia > 0 ? '+' : '' }}{{ soles(suma.diferencia) }}</td>
-                            <td class="px-3 py-3 text-right whitespace-nowrap text-base" :class="claseTotal(suma.total_turno)">{{ soles(suma.total_turno) }}</td>
-                            <td class="px-4 py-3"></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
+                        </tbody>
+                        <!-- Suma de todos los turnos del rango (no solo de esta página), como el sistema anterior -->
+                        <tfoot v-if="suma && suma.turnos > 0" class="border-t-2 border-stone-200 bg-stone-50 font-semibold dark:border-neutral-700 dark:bg-neutral-950" data-suma-historial>
+                            <tr>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    Suma
+                                    <span class="block text-xs font-normal text-neutral-500 dark:text-neutral-400">{{ suma.turnos }} {{ suma.turnos === 1 ? 'turno' : 'turnos' }}{{ hayRango ? '' : ' · todo el historial' }}</span>
+                                </td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums text-emerald-600 dark:text-emerald-400">{{ suma.entro != null ? soles(suma.entro) : '—' }}</td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums text-red-600 dark:text-red-400">{{ suma.salio != null ? soles(suma.salio) : '—' }}</td>
+                                <td class="px-3 py-3 text-right text-base whitespace-nowrap tabular-nums" :class="claseSaldo(sumaSaldo)">{{ soles(sumaSaldo) }}</td>
+                                <td class="px-3 py-3 text-right whitespace-nowrap tabular-nums">{{ soles(suma.contado) }}</td>
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="estadoDiferencia(Number(suma.diferencia ?? 0)).clase">{{ estadoDiferencia(Number(suma.diferencia ?? 0)).texto }}</span>
+                                </td>
+                                <td class="px-4 py-3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- Celular: una tarjeta por turno -->
+                <ul class="divide-y divide-stone-100 sm:hidden dark:divide-neutral-800" data-historial-movil>
+                    <li v-for="t in historial.data" :key="t.id" class="px-4 py-3" :data-turno="t.id">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold break-words">{{ t.caja }} · {{ t.usuario ?? '—' }}</p>
+                                <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fechaHora(t.abierta_en) }} → {{ fechaHora(t.cerrada_en) }}</p>
+                            </div>
+                            <span class="inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap" :class="estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).clase">
+                                {{ estadoDiferencia(Number(t.diferencia_total ?? t.diferencia ?? 0)).texto }}
+                            </span>
+                        </div>
+                        <p v-if="t.observaciones" class="mt-1 text-xs break-words text-slate-600 italic dark:text-neutral-300">{{ t.observaciones }}</p>
+                        <dl class="mt-2 grid grid-cols-3 gap-2 text-xs">
+                            <div class="min-w-0 rounded-xl bg-stone-50 px-2 py-1.5 dark:bg-neutral-950">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Entró</dt>
+                                <dd class="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{{ t.entro != null ? soles(t.entro) : '—' }}</dd>
+                            </div>
+                            <div class="min-w-0 rounded-xl bg-stone-50 px-2 py-1.5 dark:bg-neutral-950">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Salió</dt>
+                                <dd class="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">{{ t.salio != null ? soles(t.salio) : '—' }}</dd>
+                            </div>
+                            <div class="min-w-0 rounded-xl bg-stone-50 px-2 py-1.5 dark:bg-neutral-950">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Saldo</dt>
+                                <dd class="text-sm font-bold tabular-nums" :class="claseSaldo(saldoTurno(t))">{{ soles(saldoTurno(t)) }}</dd>
+                            </div>
+                        </dl>
+                        <p class="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                            Efectivo al cerrar <b class="text-neutral-800 tabular-nums dark:text-neutral-200">{{ soles(t.monto_cierre) }}</b> · abrió con {{ soles(t.monto_inicial) }}
+                        </p>
+                        <div class="mt-2 flex gap-2">
+                            <Link
+                                :href="`/caja/movimientos?turno=${t.id}`"
+                                class="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                :data-ver-turno="t.id"
+                            >
+                                <Eye class="size-4" />
+                                Ver movimientos
+                            </Link>
+                            <button
+                                type="button"
+                                class="inline-flex size-9 items-center justify-center rounded-xl border border-stone-300 text-slate-500 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                                aria-label="Imprimir ticket de cierre"
+                                @click="imprimirTicket(`/caja/turnos/${t.id}/ticket`)"
+                            >
+                                <Printer class="size-4" />
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </template>
 
             <!-- Paginación -->
             <div
@@ -578,134 +621,6 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </template>
             </div>
         </div>
-
-        <!-- Modal: detalle de un turno cerrado -->
-        <Teleport to="body">
-            <div v-if="turnoDetalle" class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" data-modal-turno @keydown.esc="turnoDetalle = null">
-                <div class="fixed inset-0 bg-neutral-950/60" @click="turnoDetalle = null" />
-                <div class="relative flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-2xl border border-stone-200 bg-white text-neutral-900 shadow-xl sm:rounded-2xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
-                    <div class="flex items-start justify-between gap-3 border-b border-stone-200 px-5 py-4 dark:border-neutral-800">
-                        <div class="min-w-0">
-                            <h3 class="font-semibold tracking-tight">{{ turnoDetalle.caja }} · {{ turnoDetalle.usuario ?? '—' }}</h3>
-                            <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fechaHora(turnoDetalle.abierta_en) }} → {{ fechaHora(turnoDetalle.cerrada_en) }}</p>
-                        </div>
-                        <div class="flex shrink-0 gap-1">
-                            <button
-                                type="button"
-                                class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                                aria-label="Imprimir ticket de cierre"
-                                title="Imprimir ticket de cierre"
-                                @click="imprimirTicket(`/caja/turnos/${turnoDetalle.id}/ticket`)"
-                            >
-                                <Printer class="size-5" />
-                            </button>
-                            <button
-                                type="button"
-                                class="rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-                                aria-label="Cerrar"
-                                @click="turnoDetalle = null"
-                            >
-                                <X class="size-5" />
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="space-y-5 overflow-y-auto px-5 py-4">
-                        <!-- resumen del efectivo -->
-                        <dl class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
-                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Inicial</dt>
-                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.monto_inicial) }}</dd>
-                            </div>
-                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Ventas efectivo</dt>
-                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.ventas_efectivo) }}</dd>
-                            </div>
-                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Esperado</dt>
-                                <dd class="font-semibold tabular-nums" :class="claseTotal(turnoDetalle.monto_sistema)">{{ soles(turnoDetalle.monto_sistema) }}</dd>
-                            </div>
-                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Contado</dt>
-                                <dd class="font-semibold tabular-nums">{{ soles(turnoDetalle.monto_cierre) }}</dd>
-                            </div>
-                            <div class="rounded-xl bg-stone-50 px-3 py-2 dark:bg-neutral-800/60">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Diferencia</dt>
-                                <dd class="font-semibold tabular-nums" :class="claseDiferencia(turnoDetalle.diferencia_total ?? turnoDetalle.diferencia)">{{ estadoDiferencia(Number(turnoDetalle.diferencia_total ?? turnoDetalle.diferencia ?? 0)).texto }}</dd>
-                            </div>
-                            <div class="rounded-xl bg-indigo-50 px-3 py-2 dark:bg-emerald-500/10">
-                                <dt class="text-xs text-neutral-500 dark:text-neutral-400">Total turno</dt>
-                                <dd class="font-bold tabular-nums" :class="claseTotal(turnoDetalle.total_turno)">{{ soles(turnoDetalle.total_turno) }}</dd>
-                            </div>
-                        </dl>
-
-                        <p v-if="turnoDetalle.observaciones" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                            <span class="font-semibold">Obs.:</span> {{ turnoDetalle.observaciones }}
-                        </p>
-
-                        <!-- movimientos -->
-                        <div data-movimientos-turno>
-                            <div class="mb-1.5 flex items-baseline justify-between gap-3">
-                                <h4 class="text-sm font-semibold">Movimientos del turno <span class="font-normal text-neutral-500 dark:text-neutral-400">· {{ turnoDetalle.movimientos?.length ?? 0 }}</span></h4>
-                                <p v-if="turnoDetalle.movimientos?.length" class="text-xs whitespace-nowrap tabular-nums">
-                                    <span class="text-emerald-600 dark:text-emerald-400">+ {{ soles(totalMovs(turnoDetalle, 'ingreso')) }}</span>
-                                    <span class="text-neutral-400"> · </span>
-                                    <span class="text-red-600 dark:text-red-400">− {{ soles(totalMovs(turnoDetalle, 'egreso')) }}</span>
-                                </p>
-                            </div>
-                            <p v-if="!turnoDetalle.movimientos?.length" class="rounded-xl bg-stone-50 px-3 py-6 text-center text-sm text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">Sin ingresos ni egresos en este turno.</p>
-                            <ul v-else class="divide-y divide-stone-100 dark:divide-neutral-800">
-                                <li v-for="m in [...turnoDetalle.movimientos].reverse()" :key="m.id" class="flex items-start justify-between gap-3 py-2.5">
-                                    <div class="flex min-w-0 items-start gap-2.5">
-                                        <ArrowUpCircle v-if="m.tipo === 'ingreso'" class="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                        <ArrowDownCircle v-else class="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" />
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-medium break-words">
-                                                {{ m.concepto }}
-                                                <span v-if="m.origen && m.origen !== 'manual'" class="ml-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 align-middle text-[11px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{{ m.origen === 'compra' ? 'Compra' : 'Cuenta por pagar' }}</span>
-                                                <span v-if="m.medio_pago_codigo && m.medio_pago_codigo !== 'efectivo'" class="ml-1 inline-flex rounded-full bg-stone-100 px-2 py-0.5 align-middle text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{{ nombreMedioPago(m.medio_pago_codigo) }}</span>
-                                            </p>
-                                            <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ fechaHora(m.creado_en) }}<template v-if="m.usuario"> · {{ m.usuario.nombre_completo }}</template></p>
-                                        </div>
-                                    </div>
-                                    <p class="shrink-0 text-sm font-semibold whitespace-nowrap tabular-nums" :class="m.tipo === 'ingreso' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
-                                        {{ m.tipo === 'ingreso' ? '+' : '−' }} {{ soles(m.monto) }}
-                                    </p>
-                                </li>
-                            </ul>
-                        </div>
-
-                        <!-- cuadre por medio -->
-                        <div v-if="turnoDetalle.medios?.length">
-                            <h4 class="mb-1.5 text-sm font-semibold">Por medio de pago</h4>
-                            <table class="w-full text-sm">
-                                <thead class="text-xs text-slate-500 dark:text-neutral-500">
-                                    <tr>
-                                        <th class="py-1.5 pr-2 text-left font-medium">Medio</th>
-                                        <th class="px-2 py-1.5 text-right font-medium">Esperado</th>
-                                        <th class="px-2 py-1.5 text-right font-medium">Declarado</th>
-                                        <th class="py-1.5 pl-2 text-right font-medium">Dif.</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
-                                    <tr v-for="m in turnoDetalle.medios" :key="m.codigo">
-                                        <td class="py-1.5 pr-2 font-medium">{{ m.nombre }}</td>
-                                        <td class="px-2 py-1.5 text-right whitespace-nowrap tabular-nums">{{ soles(m.esperado) }}</td>
-                                        <td class="px-2 py-1.5 text-right whitespace-nowrap tabular-nums">
-                                            <template v-if="m.declarado !== null && m.declarado !== undefined">{{ soles(m.declarado) }}</template>
-                                            <span v-else class="text-xs text-slate-400 italic dark:text-neutral-500">no verificado</span>
-                                        </td>
-                                        <td class="py-1.5 pl-2 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseDiferencia(m.diferencia)">
-                                            {{ m.declarado === null || m.declarado === undefined ? '—' : textoDiferencia(m.diferencia) }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </Teleport>
 
         <!-- Modal: registrar movimiento -->
         <Teleport to="body">
@@ -764,12 +679,38 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <p v-if="formMovimiento.errors.concepto" :class="claseError">{{ formMovimiento.errors.concepto }}</p>
                         </div>
                         <div>
+                            <p :class="claseLabel">{{ formMovimiento.tipo === 'ingreso' ? '¿Por dónde entró el dinero?' : '¿Por dónde salió el dinero?' }} *</p>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    v-for="m in mediosPago"
+                                    :key="m.codigo"
+                                    type="button"
+                                    class="rounded-xl border px-3 py-1.5 text-sm font-medium transition-colors"
+                                    :class="formMovimiento.medio_pago_codigo === m.codigo
+                                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                                        : 'border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'"
+                                    :data-movimiento-medio="m.codigo"
+                                    @click="formMovimiento.medio_pago_codigo = m.codigo"
+                                >
+                                    {{ m.nombre }}
+                                </button>
+                            </div>
+                            <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                {{ formMovimiento.medio_pago_codigo === 'efectivo' ? 'Cuenta en el efectivo del cajón.' : `Cuenta en ${medioMovimiento?.nombre ?? 'ese medio'}, no en el efectivo del cajón.` }}
+                            </p>
+                            <p v-if="formMovimiento.errors.medio_pago_codigo" :class="claseError">{{ formMovimiento.errors.medio_pago_codigo }}</p>
+                        </div>
+                        <div v-if="formMovimiento.medio_pago_codigo !== 'efectivo'">
+                            <label :class="claseLabel" for="mov_referencia">N° de operación / referencia <span class="font-normal text-neutral-400">(opcional)</span></label>
+                            <input id="mov_referencia" v-model="formMovimiento.referencia" type="text" maxlength="100" :class="claseInput" placeholder="Ej. 123456" data-movimiento-referencia />
+                        </div>
+                        <div>
                             <label :class="claseLabel" for="monto">Monto (S/) *</label>
                             <input id="monto" v-model="formMovimiento.monto" type="number" step="0.01" min="0.01" :class="claseInput" placeholder="0.00" />
                             <p v-if="formMovimiento.errors.monto" :class="claseError">{{ formMovimiento.errors.monto }}</p>
                             <!-- un egreso mayor al efectivo no se bloquea (el dinero salió igual): se avisa que el cierre quedará en negativo -->
                             <p
-                                v-else-if="formMovimiento.tipo === 'egreso' && apertura && Number(formMovimiento.monto) > Number(apertura.resumen.esperado) + 0.005"
+                                v-else-if="formMovimiento.tipo === 'egreso' && formMovimiento.medio_pago_codigo === 'efectivo' && apertura && Number(formMovimiento.monto) > Number(apertura.resumen.esperado) + 0.005"
                                 class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400"
                                 data-aviso-negativo
                             >

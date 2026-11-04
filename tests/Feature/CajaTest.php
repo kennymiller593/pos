@@ -6,6 +6,7 @@ use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\MovimientoCaja;
 use App\Models\Sucursal;
+use App\Services\CajaService;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
 
@@ -169,6 +170,33 @@ class CajaTest extends TestCase
 
         // el admin (sin restriccion) ve las cajas de ambas sucursales
         $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($pagina) => $pagina->has('cajas', 2));
+    }
+
+    public function test_un_ingreso_o_egreso_puede_entrar_o_salir_por_yape_y_no_toca_el_efectivo(): void
+    {
+        $apertura = $this->abrirCaja(100);
+
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'ingreso', 'concepto' => 'Venta de plantines', 'monto' => 30, 'medio_pago_codigo' => 'yape', 'referencia' => '778899'])
+            ->assertSessionHas('success', 'Ingreso de S/ 30.00 por Yape registrado.');
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'Pago de taxi', 'monto' => 10])
+            ->assertSessionHas('success', 'Egreso de S/ 10.00 registrado.');
+        // el medio interno del adelanto no se acepta
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'ingreso', 'concepto' => 'x', 'monto' => 5, 'medio_pago_codigo' => 'adelanto'])
+            ->assertSessionHasErrors('medio_pago_codigo');
+
+        $yape = MovimientoCaja::where('apertura_id', $apertura->id)->where('tipo', 'ingreso')->firstOrFail();
+        $this->assertSame(['yape', '778899'], [$yape->medio_pago_codigo, $yape->referencia]);
+        $this->assertSame('efectivo', MovimientoCaja::where('apertura_id', $apertura->id)->where('tipo', 'egreso')->value('medio_pago_codigo'));
+
+        // el Yape no infla el efectivo del cajón: esperado en efectivo 100 - 10; en Yape 30
+        $resumen = app(CajaService::class)->resumen($apertura);
+        $this->assertEqualsWithDelta(90, $resumen['esperado'], 0.001);
+        $medios = collect(app(CajaService::class)->resumenPorMedio($apertura))->keyBy('codigo');
+        $this->assertEqualsWithDelta(30, $medios['yape']['esperado'], 0.001);
+
+        // la pantalla ofrece los medios (sin el interno)
+        $this->actingAs($this->admin)->get('/caja')->assertInertia(fn ($p) => $p
+            ->where('mediosPago', fn ($m) => collect($m)->pluck('codigo')->contains('yape') && ! collect($m)->pluck('codigo')->contains('adelanto')));
     }
 
     public function test_historial_muestra_los_ingresos_y_egresos_de_un_turno_ya_cerrado(): void

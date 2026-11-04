@@ -19,6 +19,7 @@ use App\Http\Controllers\Auth\RecuperacionPasswordController;
 use App\Http\Controllers\Auth\RegistroController;
 use App\Http\Controllers\Auth\VerificacionCorreoController;
 use App\Http\Controllers\CajaController;
+use App\Http\Controllers\CajaMovimientosController;
 use App\Http\Controllers\CatalogoController;
 use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\ChatsTiendaController;
@@ -322,6 +323,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
         Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
         Route::get('/caja/turnos/{apertura}/ticket', [CajaController::class, 'ticketCierre'])->name('caja.turnos.ticket');
+        // todo lo que entró y salió, fila por fila (por fechas o por turno), con el detalle de cada fila
+        Route::get('/caja/movimientos', [CajaMovimientosController::class, 'index'])->name('caja.movimientos');
+        Route::get('/caja/movimientos/detalle', [CajaMovimientosController::class, 'detalle'])->name('caja.movimientos.detalle');
     });
 
     // ---- cotizaciones (no van a SUNAT ni mueven stock; se venden desde el POS) ----
