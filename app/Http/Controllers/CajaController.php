@@ -288,6 +288,45 @@ class CajaController extends Controller
         return back()->with('success', ($datos['tipo'] === 'ingreso' ? 'Ingreso' : 'Egreso')." de S/ ".number_format((float) $datos['monto'], 2)."{$medio} registrado.");
     }
 
+    /**
+     * Elimina un ingreso o egreso registrado a mano, solo mientras su turno sigue abierto y es del propio usuario.
+     * Los que nacieron de otra operación (adelanto o devolución de un pedido, devolución por nota de crédito)
+     * se deshacen desde su pantalla. Desaparece de la caja, pero queda constancia en la auditoría.
+     */
+    public function eliminarMovimiento(Request $request, MovimientoCaja $movimiento): RedirectResponse
+    {
+        $usuario = $request->user();
+        abort_unless($movimiento->empresa_id === $usuario->empresa_id, 403);
+
+        $apertura = $this->caja->aperturaDe($usuario);
+        if (! $apertura || $movimiento->apertura_id !== $apertura->id) {
+            return back()->with('error', 'Solo puedes eliminar movimientos de tu caja abierta. Un turno cerrado ya no se modifica.');
+        }
+
+        if ($movimiento->tipo === 'egreso' && ! $usuario->can('caja.egresos')) {
+            return back()->with('error', 'Tu rol no puede eliminar egresos de caja.');
+        }
+
+        $vinculado = \App\Models\PedidoAdelanto::where('movimiento_caja_id', $movimiento->id)->exists()
+            || \App\Models\Pedido::where('devolucion_movimiento_id', $movimiento->id)->exists()
+            || str_starts_with($movimiento->concepto, 'Devolución por nota de crédito');
+        if ($vinculado) {
+            return back()->with('error', 'Este movimiento viene de un pedido o de una nota de crédito: se corrige desde esa pantalla.');
+        }
+
+        Auditoria::registrar($usuario, 'caja.movimiento_eliminado', 'movimiento_caja', $movimiento->id, [
+            'caja' => $apertura->caja?->nombre,
+            'tipo' => $movimiento->tipo,
+            'concepto' => $movimiento->concepto,
+            'monto' => (float) $movimiento->monto,
+            'medio' => $movimiento->medio_pago_codigo,
+            'registrado_en' => $movimiento->creado_en?->toDateTimeString(),
+        ]);
+        $movimiento->delete();
+
+        return back()->with('success', ($movimiento->tipo === 'ingreso' ? 'Ingreso' : 'Egreso').' de S/ '.number_format((float) $movimiento->monto, 2).' eliminado.');
+    }
+
     /** Lo que dejó un turno por todos los medios, sin el monto inicial (turnos antiguos sin cuadre por medio: solo efectivo). */
     private function totalTurno(AperturaCaja $turno): float
     {

@@ -361,6 +361,8 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     </div>
                 </div>
                 <ListaMovimientos
+                    plegable
+                    eliminable
                     :entradas="listaTurno.entradas"
                     :salidas="listaTurno.salidas"
                     :resumen="listaTurno.resumen"

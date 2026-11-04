@@ -3,8 +3,11 @@
 // "Entró − Salió = Saldo" y el modal de detalle (el "ojo"). La usan /caja (turno abierto)
 // y /caja/movimientos (por rango o por turno).
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ArrowDownCircle, ArrowUpCircle, Eye, FileText, Loader2, Printer, Scale, X } from '@lucide/vue'
+import { ArrowDownCircle, ArrowUpCircle, Banknote, ChevronDown, ClipboardList, Eye, FileText, HandCoins, Loader2, Printer, RotateCcw, Scale, Trash2, Truck, X } from '@lucide/vue'
+import { router } from '@inertiajs/vue3'
 import { useImpresion } from '@/composables/impresion'
+import { useConfirmar } from '@/composables/confirmar'
+import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
     entradas: { type: Array, default: () => [] },
@@ -18,7 +21,35 @@ const props = defineProps({
     mostrarCaja: { type: Boolean, default: false },
     // texto del rango de fechas para la tarjeta de saldo (opcional)
     textoRango: { type: String, default: '' },
+    // acordeón: Entró y Salió empiezan cerrados y se abren al tocar su cabecera
+    plegable: { type: Boolean, default: false },
+    // turno abierto: los ingresos/egresos registrados a mano se pueden eliminar
+    eliminable: { type: Boolean, default: false },
 })
+
+const { confirmar } = useConfirmar()
+const { puede } = usePermisos()
+// solo los manuales (no adelantos ni devoluciones, que nacen de otra operación); un egreso exige caja.egresos
+const sePuedeEliminar = (f) => props.eliminable && ['ingreso', 'egreso'].includes(f.tipo) && (f.tipo === 'ingreso' || puede('caja.egresos'))
+async function eliminar(f) {
+    const ok = await confirmar({
+        titulo: `Eliminar ${f.tipo === 'ingreso' ? 'ingreso' : 'egreso'} de ${soles(f.monto)}`,
+        mensaje: `"${f.detalle}" desaparecerá de la caja y el efectivo esperado se ajustará.`,
+        textoConfirmar: 'Eliminar',
+        peligro: true,
+    })
+    if (ok) router.delete(`/caja/movimientos/${f.detalle_id}`, { preserveScroll: true })
+}
+
+// ícono de cada fila según qué fue (venta, cobro, compra...)
+const ICONOS = { venta: FileText, cobro: HandCoins, ingreso: ArrowUpCircle, adelanto: ClipboardList, egreso: ArrowDownCircle, devolucion: RotateCcw, compra: Truck, pago_proveedor: Banknote }
+const iconoDe = (f) => ICONOS[f.tipo] ?? FileText
+const claseIcono = (clave) => (clave === 'entradas'
+    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400'
+    : 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400')
+
+const abiertos = ref({ entradas: !props.plegable, salidas: !props.plegable })
+const alternar = (clave) => { if (props.plegable) abiertos.value[clave] = !abiertos.value[clave] }
 
 const { imprimirTicket } = useImpresion()
 const formatoSoles = new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -138,21 +169,32 @@ const claseBotonSec =
             :data-bloque-entradas="b.clave === 'entradas' ? '' : undefined"
             :data-bloque-salidas="b.clave === 'salidas' ? '' : undefined"
         >
-            <div
-                class="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-5"
-                :class="b.clave === 'entradas'
-                    ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-500/20 dark:bg-emerald-500/10'
-                    : 'border-red-100 bg-red-50/70 dark:border-red-500/20 dark:bg-red-500/10'"
+            <component
+                :is="plegable ? 'button' : 'div'"
+                :type="plegable ? 'button' : undefined"
+                class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left sm:px-5"
+                :class="[
+                    b.clave === 'entradas'
+                        ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-500/20 dark:bg-emerald-500/10'
+                        : 'border-red-100 bg-red-50/70 dark:border-red-500/20 dark:bg-red-500/10',
+                    abiertos[b.clave] ? 'border-b' : '',
+                    plegable ? 'cursor-pointer' : '',
+                ]"
+                :aria-expanded="plegable ? abiertos[b.clave] : undefined"
+                :data-acordeon="plegable ? b.clave : undefined"
+                @click="alternar(b.clave)"
             >
                 <h2 class="inline-flex items-center gap-2 font-semibold tracking-tight" :class="claseMonto(b.clave)">
+                    <ChevronDown v-if="plegable" class="size-4 transition-transform" :class="{ '-rotate-90': !abiertos[b.clave] }" />
                     <ArrowUpCircle v-if="b.clave === 'entradas'" class="size-5" />
                     <ArrowDownCircle v-else class="size-5" />
                     {{ b.titulo }}
                     <span class="text-xs font-normal text-neutral-500 dark:text-neutral-400">· {{ b.filas.length }}</span>
                 </h2>
                 <p class="text-sm font-bold tabular-nums whitespace-nowrap" :class="claseMonto(b.clave)">{{ b.signo }} {{ soles(b.total) }}</p>
-            </div>
+            </component>
 
+            <template v-if="abiertos[b.clave]">
             <p v-if="!b.filas.length" class="px-5 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400" data-vacio>{{ b.vacio }}</p>
 
             <template v-else>
@@ -170,19 +212,35 @@ const claseBotonSec =
                         </thead>
                         <tbody class="divide-y divide-stone-100 dark:divide-neutral-800">
                             <tr v-for="f in b.filas" :key="f.clave" class="transition-colors hover:bg-stone-50 dark:hover:bg-neutral-800/50" :data-fila-movimiento="f.clave">
-                                <td class="w-full max-w-0 px-5 py-2.5">
-                                    <p class="font-semibold">{{ f.titulo }}</p>
-                                    <p class="truncate text-xs text-neutral-500 dark:text-neutral-400" :title="f.detalle">
-                                        {{ f.detalle }}<template v-if="f.usuario"> · {{ f.usuario }}</template><template v-if="mostrarCaja && f.turno?.caja"> · {{ f.turno.caja }}</template>
-                                    </p>
+                                <td class="w-full max-w-0 px-5 py-1.5">
+                                    <div class="flex min-w-0 items-center gap-3">
+                                        <span class="grid size-8 shrink-0 place-items-center rounded-full" :class="claseIcono(b.clave)"><component :is="iconoDe(f)" class="size-4" /></span>
+                                        <div class="min-w-0">
+                                            <p class="text-[13px] leading-tight font-semibold">{{ f.titulo }}</p>
+                                            <p class="truncate text-xs leading-tight text-neutral-500 dark:text-neutral-400" :title="f.detalle">
+                                                {{ f.detalle }}<template v-if="f.usuario"> · {{ f.usuario }}</template><template v-if="mostrarCaja && f.turno?.caja"> · {{ f.turno.caja }}</template>
+                                            </p>
+                                        </div>
+                                    </div>
                                 </td>
-                                <td class="px-3 py-2.5 whitespace-nowrap tabular-nums text-neutral-600 dark:text-neutral-300">{{ fechaCorta(f.fecha) }}</td>
-                                <td class="px-3 py-2.5">
+                                <td class="px-3 py-1.5 whitespace-nowrap tabular-nums text-neutral-600 dark:text-neutral-300">{{ fechaCorta(f.fecha) }}</td>
+                                <td class="px-3 py-1.5">
                                     <span :class="[claseChip, claseMedio(f.medio_codigo)]">{{ f.medio }}</span>
-                                    <p v-if="f.referencia" class="mt-0.5 text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">op. {{ f.referencia }}</p>
+                                    <p v-if="f.referencia" class="text-[11px] leading-tight whitespace-nowrap text-neutral-500 dark:text-neutral-400">op. {{ f.referencia }}</p>
                                 </td>
-                                <td class="px-3 py-2.5 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseMonto(b.clave)">{{ b.signo }} {{ soles(f.monto) }}</td>
-                                <td class="px-4 py-2.5 text-center">
+                                <td class="px-3 py-1.5 text-right font-semibold whitespace-nowrap tabular-nums" :class="claseMonto(b.clave)">{{ b.signo }} {{ soles(f.monto) }}</td>
+                                <td class="px-4 py-1.5 text-center whitespace-nowrap">
+                                    <button
+                                        v-if="sePuedeEliminar(f)"
+                                        type="button"
+                                        class="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:text-neutral-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                        title="Eliminar"
+                                        :aria-label="`Eliminar ${f.titulo}`"
+                                        :data-eliminar-movimiento="f.clave"
+                                        @click="eliminar(f)"
+                                    >
+                                        <Trash2 class="size-4" />
+                                    </button>
                                     <button
                                         type="button"
                                         class="rounded-lg p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-emerald-400"
@@ -208,17 +266,18 @@ const claseBotonSec =
 
                 <!-- Celular: tarjetas -->
                 <ul class="divide-y divide-stone-100 sm:hidden dark:divide-neutral-800">
-                    <li v-for="f in b.filas" :key="f.clave">
+                    <li v-for="f in b.filas" :key="f.clave" class="flex items-center">
                         <button
                             type="button"
-                            class="flex w-full min-w-0 items-start justify-between gap-3 px-4 py-3 text-left active:bg-stone-50 dark:active:bg-neutral-800/60"
+                            class="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-2 text-left active:bg-stone-50 dark:active:bg-neutral-800/60"
                             :data-ver-movimiento="f.clave"
                             @click="verDetalle(f)"
                         >
+                            <span class="grid size-8 shrink-0 place-items-center rounded-full" :class="claseIcono(b.clave)"><component :is="iconoDe(f)" class="size-4" /></span>
                             <div class="min-w-0 flex-1">
-                                <p class="text-sm font-semibold">{{ f.titulo }}</p>
-                                <p class="text-xs break-words text-neutral-500 dark:text-neutral-400">{{ f.detalle }}</p>
-                                <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                                <p class="text-[13px] leading-tight font-semibold">{{ f.titulo }}</p>
+                                <p class="truncate text-xs leading-tight text-neutral-500 dark:text-neutral-400">{{ f.detalle }}</p>
+                                <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
                                     <span class="tabular-nums">{{ fechaCorta(f.fecha) }}</span>
                                     <span :class="[claseChip, claseMedio(f.medio_codigo)]">{{ f.medio }}</span>
                                     <span v-if="f.referencia" class="break-all">op. {{ f.referencia }}</span>
@@ -229,12 +288,23 @@ const claseBotonSec =
                                 <Eye class="size-4 text-neutral-400" />
                             </div>
                         </button>
+                        <button
+                            v-if="sePuedeEliminar(f)"
+                            type="button"
+                            class="mr-2 shrink-0 rounded-lg p-2 text-slate-400 active:bg-red-50 active:text-red-600"
+                            :aria-label="`Eliminar ${f.titulo}`"
+                            :data-eliminar-movimiento="f.clave"
+                            @click="eliminar(f)"
+                        >
+                            <Trash2 class="size-4" />
+                        </button>
                     </li>
                     <li class="flex items-center justify-between gap-3 bg-stone-50 px-4 py-3 dark:bg-neutral-950">
                         <span class="text-sm font-bold">{{ b.suma }}</span>
                         <span class="text-base font-bold whitespace-nowrap tabular-nums" :class="claseMonto(b.clave)">{{ b.signo }} {{ soles(b.total) }}</span>
                     </li>
                 </ul>
+            </template>
             </template>
         </section>
 

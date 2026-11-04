@@ -199,6 +199,34 @@ class CajaTest extends TestCase
             ->where('mediosPago', fn ($m) => collect($m)->pluck('codigo')->contains('yape') && ! collect($m)->pluck('codigo')->contains('adelanto')));
     }
 
+    public function test_se_elimina_un_ingreso_o_egreso_solo_de_la_caja_abierta_y_queda_en_auditoria(): void
+    {
+        $apertura = $this->abrirCaja(100);
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'egreso', 'concepto' => 'Taxi por error', 'monto' => 50])->assertSessionHas('success');
+        $egreso = MovimientoCaja::where('apertura_id', $apertura->id)->firstOrFail();
+        $this->assertEqualsWithDelta(50, app(CajaService::class)->resumen($apertura)['esperado'], 0.001);
+
+        // un vendedor (sin caja.egresos) no puede eliminar el egreso de otro: ni siquiera es su caja
+        $vendedor = $this->crearUsuario('vendedor', 'vend'.random_int(10000, 99999).'@test.local');
+        $this->actingAs($vendedor)->delete("/caja/movimientos/{$egreso->id}")->assertSessionHas('error');
+
+        $this->actingAs($this->admin)->delete("/caja/movimientos/{$egreso->id}")->assertSessionHas('success', 'Egreso de S/ 50.00 eliminado.');
+        $this->assertNull(MovimientoCaja::find($egreso->id));
+        $this->assertEqualsWithDelta(100, app(CajaService::class)->resumen($apertura)['esperado'], 0.001);
+        $this->assertTrue(\App\Models\Auditoria::where('accion', 'caja.movimiento_eliminado')->where('entidad_id', $egreso->id)->exists());
+
+        // con el turno cerrado ya no se toca
+        $this->actingAs($this->admin)->post('/caja/movimientos', ['tipo' => 'ingreso', 'concepto' => 'Sencillo', 'monto' => 20])->assertSessionHas('success');
+        $ingreso = MovimientoCaja::where('apertura_id', $apertura->id)->firstOrFail();
+        $this->actingAs($this->admin)->post('/caja/cerrar', ['monto_cierre' => null])->assertSessionHas('success');
+        $this->actingAs($this->admin)->delete("/caja/movimientos/{$ingreso->id}")->assertSessionHas('error');
+        $this->assertNotNull(MovimientoCaja::find($ingreso->id));
+
+        // otra empresa: prohibido
+        $this->crearEscenarioBase();
+        $this->actingAs($this->admin)->delete("/caja/movimientos/{$ingreso->id}")->assertForbidden();
+    }
+
     public function test_historial_muestra_los_ingresos_y_egresos_de_un_turno_ya_cerrado(): void
     {
         $turno = $this->abrirCaja(0);

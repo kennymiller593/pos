@@ -322,6 +322,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/caja/historial', [CajaController::class, 'historial'])->name('caja.historial');
         Route::post('/caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
         Route::post('/caja/movimientos', [CajaController::class, 'movimiento'])->name('caja.movimiento');
+        Route::delete('/caja/movimientos/{movimiento}', [CajaController::class, 'eliminarMovimiento'])->whereUuid('movimiento')->name('caja.movimiento.eliminar');
         Route::post('/caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
         Route::get('/caja/turnos/{apertura}/ticket', [CajaController::class, 'ticketCierre'])->name('caja.turnos.ticket');
         // todo lo que entró y salió, fila por fila (por fechas o por turno), con el detalle de cada fila
