@@ -7,6 +7,7 @@ use App\Services\IA\AsistenteIaService;
 use App\Services\ImpersonacionService;
 use App\Services\SuscripcionService;
 use App\Support\ContextoSucursal;
+use App\Support\Tienda;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -85,6 +86,9 @@ class HandleInertiaRequests extends Middleware
                             'tienda_habilitada' => (bool) $usuario->empresa->tienda_habilitada,
                             // adicional de pago: decide si el menu muestra "Asistente"
                             'ia_habilitada' => app(AsistenteIaService::class)->tieneAgentes($usuario->empresa),
+                            // el asistente atiende en la tienda en línea: la cabecera muestra el acceso a sus chats
+                            'chatbot_tienda' => $usuario->empresa->tienda_habilitada
+                                && app(AsistenteIaService::class)->agenteDeTienda($usuario->empresa, Tienda::config($usuario->empresa)) !== null,
                             // con más de una sucursal activa se muestran el selector y las columnas "Sucursal"
                             'multisucursal' => $contexto->multisucursal,
                             // módulo opcional: decide si el menú muestra "Mezclas"

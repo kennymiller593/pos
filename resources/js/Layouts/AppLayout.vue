@@ -263,6 +263,8 @@ const ICONOS_NOTIFICACION = {
 }
 
 const notificaciones = ref({ items: [], total: 0 })
+// clientes de la tienda esperando respuesta (sale del mismo aviso de la campanita)
+const chatsSinLeer = computed(() => notificaciones.value.items.find((i) => i.clave === 'chats_tienda')?.cantidad ?? 0)
 const notiAbierto = ref(false)
 const notiRef = ref(null)
 onClickOutside(notiRef, () => (notiAbierto.value = false))
@@ -736,6 +738,16 @@ watch(
                         <Sun v-if="esOscuro" class="size-5" />
                         <Moon v-else class="size-5" />
                     </button>
+                    <!-- chats de la tienda: solo si el asistente atiende en la tienda en línea -->
+                    <Link v-if="!esPlataforma && empresa?.chatbot_tienda && puede('pos.vender')" href="/asistente/tienda"
+                        class="relative grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                        title="Chats de la tienda" aria-label="Chats de la tienda" data-chats-tienda>
+                        <MessageCircle class="size-5" />
+                        <span v-if="chatsSinLeer > 0"
+                            class="absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                            {{ chatsSinLeer > 99 ? '99+' : chatsSinLeer }}
+                        </span>
+                    </Link>
                     <div v-if="!esPlataforma" ref="notiRef" class="relative">
                         <button
                             class="relative grid size-10 place-items-center rounded-xl border border-[#E2E8F0] bg-white text-[#64748B] transition-colors hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"

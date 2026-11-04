@@ -205,6 +205,15 @@ DERIVAR"]);
         $this->assertInstanceOf(UserMessage::class, $historial[19]);
     }
 
+    public function test_la_cabecera_muestra_los_chats_solo_si_el_asistente_atiende_la_tienda(): void
+    {
+        $this->publicar(['chatbot_activo' => false]);
+        $this->actingAs($this->admin)->get('/dashboard')->assertInertia(fn ($p) => $p->where('auth.user.empresa.chatbot_tienda', false));
+
+        $this->publicar();
+        $this->actingAs($this->admin->fresh())->get('/dashboard')->assertInertia(fn ($p) => $p->where('auth.user.empresa.chatbot_tienda', true));
+    }
+
     public function test_sin_precios_ni_whatsapp_las_tarjetas_no_los_muestran(): void
     {
         $this->publicar(['mostrar_precios' => false, 'whatsapp' => null, 'telefono' => '01 234 5678']);
