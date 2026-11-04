@@ -11,6 +11,7 @@ use App\Services\IA\AsistenteIaService;
 use App\Support\Tienda;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * El chatbot de la tienda en línea: un cliente anónimo conversa con el agente de la empresa.
@@ -120,8 +121,27 @@ class AsistenteTiendaController extends Controller
             'rol' => $m->rol,
             'contenido' => $m->contenido,
             'productos' => $this->tarjetas($empresa, $config, $m->productos ?? []),
+            // el asistente no tenía el dato: botón al WhatsApp del negocio con la pregunta del cliente ya escrita
+            'whatsapp' => $m->derivar ? $this->enlaceWhatsapp($m, $config) : null,
             'creado_en' => $m->creado_en?->toDateTimeString(),
         ];
+    }
+
+    private function enlaceWhatsapp(MensajeIa $m, array $config): ?string
+    {
+        $numero = Tienda::numeroWhatsapp($config['whatsapp'] ?? null);
+        if (! $numero) {
+            return null;
+        }
+
+        $pregunta = MensajeIa::where('conversacion_id', $m->conversacion_id)
+            ->where('rol', 'user')
+            ->where('creado_en', '<=', $m->creado_en)
+            ->orderByDesc('creado_en')
+            ->value('contenido');
+        $texto = 'Hola, consulté en la tienda en línea'.(filled($pregunta) ? ': '.Str::limit(trim(preg_replace('/\s+/', ' ', $pregunta)), 300, '…') : ' y quisiera más información.');
+
+        return "https://wa.me/{$numero}?text=".rawurlencode($texto);
     }
 
     /** Las tarjetas de los productos recomendados, con los mismos datos que usa la tienda. */

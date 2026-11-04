@@ -467,7 +467,11 @@ if (bot && datos.asistente) {
         if (m.rol === 'user') return `<div class="flex justify-end"><div class="max-w-[85%] rounded-2xl rounded-br-md bg-(--bot) px-3.5 py-2 text-sm whitespace-pre-wrap text-(--sobre-bot)">${texto(m.contenido)}</div></div>`
         if (m.rol === 'humano') return `<div class="flex justify-start"><div class="max-w-[92%]"><p class="mb-0.5 pl-1 text-[11px] font-semibold text-slate-500">${texto(datos.nombre)} · una persona te responde</p><div class="rounded-2xl rounded-bl-md border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap text-slate-800">${texto(m.contenido)}</div></div></div>`
         const productos = Array.isArray(m.productos) && m.productos.length ? `<div class="mt-2 space-y-2">${m.productos.map(tarjeta).join('')}</div>` : ''
-        return `<div class="flex justify-start"><div class="max-w-[92%]"><div class="space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800">${markdown(m.contenido)}</div>${productos}</div></div>`
+        // el asistente no tenía el dato: lo atiende una persona del negocio por WhatsApp, con la pregunta ya escrita
+        const asesor = m.whatsapp && /^https:\/\/wa\.me\//.test(m.whatsapp)
+            ? `<a href="${texto(m.whatsapp)}" target="_blank" rel="noopener" class="mt-2 inline-flex h-10 items-center gap-2 rounded-xl bg-[#25D366] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#1eb957]" data-asistente-whatsapp>${icono('<path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9z"/><path d="M9 10a.5.5 0 0 0 1 0V9a.5.5 0 0 0-1 0zm0 0a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1"/>', 'size-4')} Escríbenos por WhatsApp</a>`
+            : ''
+        return `<div class="flex justify-start"><div class="max-w-[92%]"><div class="space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800">${markdown(m.contenido)}</div>${asesor}${productos}</div></div>`
     }
 
     const saludo = () => `<div class="flex justify-start"><div class="max-w-[92%] space-y-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3.5 py-2 text-sm leading-relaxed text-slate-800"><p>${texto(conf.saludo)}</p></div></div>`
@@ -495,7 +499,7 @@ if (bot && datos.asistente) {
             const nuevos = (respuesta.mensajes ?? []).filter((m) => !estado.mensajes.some((x) => x.id && x.id === m.id))
             const cambioModo = respuesta.modo !== estado.modo
             estado.modo = respuesta.modo === 'humano' ? 'humano' : 'bot'
-            if (nuevos.length) estado.mensajes.push(...nuevos.map((m) => ({ id: m.id, rol: m.rol, contenido: m.contenido, productos: m.productos ?? [], creado_en: m.creado_en })))
+            if (nuevos.length) estado.mensajes.push(...nuevos.map((m) => ({ id: m.id, rol: m.rol, contenido: m.contenido, productos: m.productos ?? [], whatsapp: m.whatsapp ?? null, creado_en: m.creado_en })))
             if (nuevos.some((m) => m.rol === 'humano')) {
                 sonar()
                 if (panelBot.classList.contains('hidden')) { sinLeer += nuevos.filter((m) => m.rol === 'humano').length; marcarGlobo() }
@@ -558,7 +562,7 @@ if (bot && datos.asistente) {
             }
             estado.conversacion = respuesta.conversacion_id ?? estado.conversacion
             estado.modo = respuesta.modo === 'humano' ? 'humano' : 'bot'
-            if (respuesta.mensaje) estado.mensajes.push({ id: respuesta.mensaje.id, rol: 'assistant', contenido: respuesta.mensaje.contenido ?? '', productos: respuesta.mensaje.productos ?? [], creado_en: respuesta.mensaje.creado_en })
+            if (respuesta.mensaje) estado.mensajes.push({ id: respuesta.mensaje.id, rol: 'assistant', contenido: respuesta.mensaje.contenido ?? '', productos: respuesta.mensaje.productos ?? [], whatsapp: respuesta.mensaje.whatsapp ?? null, creado_en: respuesta.mensaje.creado_en })
             guardarBot()
             pintar()
             vigilar()

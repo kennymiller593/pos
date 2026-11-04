@@ -31,6 +31,9 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
     /** Línea final con los códigos recomendados; la app la convierte en tarjetas y no la muestra. */
     public const MARCA_PRODUCTOS = 'PRODUCTOS:';
 
+    /** Línea final con que el asistente de la tienda pide mostrar el botón de WhatsApp del negocio. */
+    public const MARCA_DERIVAR = 'DERIVAR';
+
     /**
      * @param  array{nombre?: ?string, mostrar_precios?: bool, mostrar_stock?: bool, whatsapp?: bool}  $persona  solo en modo tienda
      */
@@ -53,7 +56,7 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
         1. Solo recomiendas productos que existan en el catálogo de este negocio. Antes de nombrar un producto que aún no apareció en la conversación, búscalo con la herramienta buscar_productos; nunca inventes productos, precios, presentaciones ni disponibilidad. Busca poco y bien: una búsqueda con la palabra más distintiva suele bastar (la marca, la variedad, el número de modelo o el principio activo: "dekalb 7508", "mancozeb", "fungicida rancha"); no pongas palabras genéricas como "semilla", "producto" o "quiero". Si no encuentra, reintenta con menos palabras o solo con el número o la marca antes de decir que no existe; como mucho tres búsquedas. Si ya tienes productos de una búsqueda anterior en esta conversación, úsalos sin volver a buscar.
         2. Al recomendar, usa el nombre tal cual figura en el catálogo.
         3. Si el catálogo no tiene lo que se busca, dilo con claridad y ofrece la alternativa más cercana que sí exista.
-        4. Dosis, modo de uso, advertencias y contraindicaciones: solo lo que diga la etiqueta o la descripción del producto. Si no está en el catálogo, indica que se revise la etiqueta o la ficha técnica del fabricante; no inventes dosis.
+        4. Dosis, modo de uso, advertencias y contraindicaciones: solo lo que diga la etiqueta o la descripción del producto. Si no está en el catálogo, no inventes dosis: {$this->sinElDato()}
         5. No das diagnósticos ni recetas. Ante síntomas, enfermedades o dudas de salud (de personas, animales o cultivos) recomienda consultar al profesional que corresponde (médico, químico farmacéutico, veterinario, ingeniero agrónomo) y limítate a orientar sobre los productos.
         6. No respondes temas ajenos al negocio; si te lo piden, declina amablemente y vuelve al tema.
         7. Responde en español, de forma clara y breve, con Markdown sencillo: negritas para los nombres de producto, listas cortas; sin tablas. Fecha de hoy: {$this->fecha()}.
@@ -75,6 +78,13 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
             $pedido = ($this->persona['whatsapp'] ?? false)
                 ? 'Los pedidos se hacen por WhatsApp con el botón "Comprar" de cada producto; invita a usarlo.'
                 : 'Para pedir, invita a usar los datos de contacto de la tienda.';
+            $derivar = self::MARCA_DERIVAR;
+            $cuandoNoSabe = ($this->persona['whatsapp'] ?? false)
+                ? <<<TXT
+                - CUANDO NO TENGAS EL DATO (una dosis o modo de uso que no está en el catálogo, un precio que la tienda no muestra, envíos, plazos, formas de pago, un reclamo o algo técnico que no puedas responder con el catálogo): no lo mandes a "revisar la etiqueta" ni le des vueltas. Dilo en una frase y ofrécele que un asesor de la tienda le responde por WhatsApp, por ejemplo: "Esa dosis te la confirma nuestro asesor por WhatsApp, te dejo el botón aquí abajo." Y agrega al final una línea que diga exactamente "{$derivar}" (va antes de la línea "{$marca}" si también recomiendas productos). No escribas el número: el botón ya lo lleva con su pregunta.
+                - Deriva una sola vez por conversación. Si ya lo derivaste antes, no vuelvas a ofrecer WhatsApp ni pongas "{$derivar}": responde lo que sí sepas.
+                TXT
+                : '- Cuando no tengas el dato (una dosis fuera del catálogo, envíos, formas de pago, algo técnico), dilo en una frase y dale el teléfono o el correo de los DATOS DEL NEGOCIO para que lo atienda una persona. Una sola vez por conversación.';
 
             return <<<TXT
             Te llamas "{$nombre}" y eres el asistente virtual de la tienda en línea de {$negocio} ({$rubro}). Hablas con un cliente que está mirando el catálogo por internet, no con un trabajador: trátalo con cordialidad y cercanía y ayúdale a encontrar lo que busca.
@@ -87,6 +97,7 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
             - {$stock}
             - {$pedido}
             - No prometas envíos, plazos ni formas de pago que no estén en el catálogo; para eso remite al contacto de la tienda.
+            {$cuandoNoSabe}
 
             INSTRUCCIONES DEL AGENTE:
             {$this->agente->instrucciones}
@@ -122,7 +133,8 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
         - Si te agradecen, se despiden o dicen "no", "ok" o "listo": contesta con una sola frase amable y nada más. Sin productos, sin la línea PRODUCTOS y sin volver a presentarte.
         - Si la pregunta es sobre un producto ya recomendado ("¿cuál es mejor?", "¿sirve para…?"), responde eso en concreto; no vuelvas a listar todo ni cambies de productos sin motivo.
         - Si falta un dato para recomendar bien (cultivo, animal, medida, para qué lo quiere), pregunta eso primero en una frase, sin buscar todavía.
-        - La advertencia de seguridad (equipo de protección, periodo de carencia, etiqueta) va una sola vez por conversación, en una frase corta, la primera vez que recomiendes un plaguicida o medicamento. No la repitas después.
+        - La advertencia de seguridad (equipo de protección, periodo de carencia, etiqueta) va una sola vez por conversación, en una frase corta, la primera vez que recomiendes un plaguicida o medicamento. Si ya aparece en un mensaje tuyo anterior de esta conversación, no la vuelvas a escribir, aunque sea otro producto.
+        - Si preguntaste un dato (el cultivo, el animal, la medida) y el cliente te lo da, responde con ese dato en concreto; no repitas lo que ya dijiste antes.
         - Emojis: como mucho uno, y solo si viene al caso.
         TXT;
     }
@@ -186,6 +198,14 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
     private function fecha(): string
     {
         return now()->locale('es')->translatedFormat('d \d\e F \d\e Y');
+    }
+
+    /** Qué hacer con una dosis o modo de uso que no está en el catálogo: en la tienda lo atiende una persona; en la app, el trabajador revisa la ficha. */
+    private function sinElDato(): string
+    {
+        return $this->modo === 'tienda'
+            ? 'sigue la regla "CUANDO NO TENGAS EL DATO" de más abajo.'
+            : 'indica que se revise la etiqueta o la ficha técnica del fabricante.';
     }
 
     /** Lo que el agente sabe de la empresa: datos fiscales, locales, contacto y políticas de la tienda. */

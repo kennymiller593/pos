@@ -193,7 +193,7 @@ class AsistenteIaService
             $this->proveedores->registrarExito($proveedor);
 
             // respondió pero sin texto (se quedó sin tokens o solo razonó): se prueba con el siguiente modelo
-            if (trim(self::separarProductos($respuesta->text)[0]) === '') {
+            if (trim(self::separarProductos(self::separarDerivar($respuesta->text)[0])[0]) === '') {
                 $intentos[] = ['proveedor' => $proveedor->codigo, 'modelo' => $eslabon['modelo'], 'error' => 'respuesta vacía', 'ms' => (int) ((hrtime(true) - $inicio) / 1_000_000)];
                 $vacia = [$respuesta, $proveedor, $eslabon['modelo']];
 
@@ -222,7 +222,8 @@ class AsistenteIaService
         $entrada = (int) $respuesta->usage->inputTokens;
         $salida = (int) $respuesta->usage->outputTokens;
 
-        [$texto, $productos] = self::separarProductos($respuesta->text);
+        [$texto, $derivar] = self::separarDerivar($respuesta->text);
+        [$texto, $productos] = self::separarProductos($texto);
         if ($texto === '') {
             $texto = 'No pude preparar una respuesta. ¿Puedes reformular la consulta?';
         }
@@ -230,6 +231,7 @@ class AsistenteIaService
         return [
             'contenido' => $texto,
             'productos' => $productos,
+            'derivar' => $derivar,
             'proveedor_codigo' => $proveedor->codigo,
             'modelo' => $modelo,
             'tokens_entrada' => $entrada,
@@ -239,6 +241,20 @@ class AsistenteIaService
             'herramientas' => $respuesta->toolCalls->map(fn ($t) => ['nombre' => $t->name, 'argumentos' => $t->arguments])->values()->all(),
             'intentos' => $intentos,
         ];
+    }
+
+    /**
+     * Saca la línea "DERIVAR" (el asistente pide el botón de WhatsApp del negocio) y devuelve [texto sin ella, si la había].
+     * Puede venir sola al final o justo antes de la línea de productos.
+     *
+     * @return array{0: string, 1: bool}
+     */
+    public static function separarDerivar(string $texto): array
+    {
+        $marca = preg_quote(AgenteDeRubro::MARCA_DERIVAR, '/');
+        $limpio = preg_replace('/(?:^|\n)[\s*_`]*'.$marca.'[\s*_`.:]*(?=\n|$)/iu', '', trim($texto), -1, $veces);
+
+        return [trim((string) $limpio), $veces > 0];
     }
 
     /**

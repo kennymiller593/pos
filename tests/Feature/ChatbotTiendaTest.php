@@ -132,6 +132,59 @@ class ChatbotTiendaTest extends TestCase
         URL::setRequest(Request::create(config('app.url')));
     }
 
+    public function test_cuando_no_sabe_deriva_al_whatsapp_del_negocio_con_la_pregunta_escrita(): void
+    {
+        $this->publicar();
+        AgenteDeRubro::fake(["La dosis exacta te la confirma nuestro asesor por WhatsApp, te dejo el botón aquí abajo.
+DERIVAR
+PRODUCTOS: P0006"]);
+
+        $r = $this->chat(['texto' => '¿Cuántas cucharas por 20 litros en papa?'])->assertOk();
+        // la marca no se ve y la tarjeta sigue saliendo
+        $this->assertSame('La dosis exacta te la confirma nuestro asesor por WhatsApp, te dejo el botón aquí abajo.', $r->json('mensaje.contenido'));
+        $this->assertCount(1, $r->json('mensaje.productos'));
+        $enlace = $r->json('mensaje.whatsapp');
+        $this->assertStringStartsWith('https://wa.me/51987654321?text=', $enlace);
+        $this->assertSame('Hola, consulté en la tienda en línea: ¿Cuántas cucharas por 20 litros en papa?', rawurldecode(substr($enlace, strpos($enlace, '=') + 1)));
+
+        $conversacion = ConversacionIa::findOrFail($r->json('conversacion_id'));
+        $this->assertTrue($conversacion->mensajes->last()->derivar);
+
+        // al volver a cargar la conversación el botón sigue en ese mensaje, y una respuesta normal no lo trae
+        AgenteDeRubro::fake(['Gracias a ti.']);
+        $this->chat(['texto' => 'gracias', 'conversacion_id' => $conversacion->id])->assertOk()->assertJsonPath('mensaje.whatsapp', null);
+        $mensajes = $this->getJson("http://agro.tienda.test/asistente/mensajes?visitante=visitante-prueba-01&conversacion_id={$conversacion->id}")->assertOk()->json('mensajes');
+        URL::setRequest(Request::create(config('app.url')));
+        $this->assertSame($enlace, $mensajes[0]['whatsapp']);
+        $this->assertNull($mensajes[1]['whatsapp']);
+    }
+
+    public function test_sin_whatsapp_configurado_no_hay_boton_y_las_reglas_piden_el_contacto(): void
+    {
+        $this->publicar(['whatsapp' => null]);
+        AgenteDeRubro::fake(["No tengo ese dato.
+DERIVAR"]);
+
+        $r = $this->chat(['texto' => '¿Hacen envíos a Tingo María?'])->assertOk();
+        $this->assertSame('No tengo ese dato.', $r->json('mensaje.contenido'));
+        $this->assertNull($r->json('mensaje.whatsapp'));
+
+        // las reglas de la tienda ya no mandan a "revisar la etiqueta": derivan a una persona (una sola vez)
+        $config = Tienda::config($this->empresa->fresh());
+        $conWhatsapp = (new AgenteDeRubro($this->agente, $this->empresa, null, 'tienda', ['whatsapp' => true]))->instructions();
+        $this->assertStringContainsString('CUANDO NO TENGAS EL DATO', $conWhatsapp);
+        $this->assertStringContainsString('"DERIVAR"', $conWhatsapp);
+        $this->assertStringContainsString('Deriva una sola vez por conversación', $conWhatsapp);
+        $this->assertStringNotContainsString('indica que se revise la etiqueta', $conWhatsapp);
+        $sinWhatsapp = (new AgenteDeRubro($this->agente, $this->empresa, null, 'tienda', ['whatsapp' => false]))->instructions();
+        $this->assertStringContainsString('teléfono o el correo', $sinWhatsapp);
+        $this->assertStringNotContainsString('"DERIVAR"', $sinWhatsapp);
+        // en la app (el trabajador en el mostrador) sigue la ficha técnica
+        $app = (new AgenteDeRubro($this->agente, $this->empresa, null, 'app'))->instructions();
+        $this->assertStringContainsString('indica que se revise la etiqueta', $app);
+        $this->assertNotNull($config);
+    }
+
     public function test_sin_precios_ni_whatsapp_las_tarjetas_no_los_muestran(): void
     {
         $this->publicar(['mostrar_precios' => false, 'whatsapp' => null, 'telefono' => '01 234 5678']);
