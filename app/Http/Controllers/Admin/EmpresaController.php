@@ -34,7 +34,8 @@ class EmpresaController extends Controller
             ->withCount([
                 'usuarios as usuarios_activos' => fn ($q) => $q->where('activo', true)->where('es_superadmin', false),
                 'sucursales as sucursales_activas' => fn ($q) => $q->where('activo', true),
-                'comprobantes as comprobantes_mes' => fn ($q) => $q->where('fecha_emision', '>=', now()->startOfMonth()->toDateString()),
+                // los anulados no cuentan como uso
+                'comprobantes as comprobantes_mes' => fn ($q) => $q->where('fecha_emision', '>=', now()->startOfMonth()->toDateString())->where('estado', '!=', 'anulado'),
                 // productos registrados (sin los eliminados)
                 'productos',
             ])
@@ -124,9 +125,10 @@ class EmpresaController extends Controller
                 'sucursales' => (int) $empresa->sucursales_activas,
                 'productos' => (int) $empresa->productos_count,
                 'clientes' => (int) $empresa->clientes_count,
-                'comprobantes_mes' => Comprobante::where('empresa_id', $empresa->id)
+                // los anulados no cuentan como uso
+                'comprobantes_mes' => Comprobante::where('empresa_id', $empresa->id)->where('estado', '!=', 'anulado')
                     ->where('fecha_emision', '>=', now()->startOfMonth()->toDateString())->count(),
-                'comprobantes_total' => Comprobante::where('empresa_id', $empresa->id)->count(),
+                'comprobantes_total' => Comprobante::where('empresa_id', $empresa->id)->where('estado', '!=', 'anulado')->count(),
                 'ultima_venta' => Comprobante::where('empresa_id', $empresa->id)->max('creado_en'),
             ],
             'suscripcion' => $this->suscripciones->resumen($empresa),

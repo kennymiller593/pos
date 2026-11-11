@@ -6,9 +6,11 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\Producto;
 use App\Models\Sucursal;
 use App\Models\Transferencia;
+use App\Services\BusquedaProductos;
 use App\Services\TransferenciaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -16,25 +18,53 @@ class TransferenciaController extends Controller
 {
     public function __construct(private readonly TransferenciaService $transferencias) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request, BusquedaProductos $busqueda): Response
     {
-        return Inertia::render('Transferencias/Index', [
-            'transferencias' => Transferencia::query()
-                ->where('empresa_id', $request->user()->empresa_id)
+        $empresaId = $request->user()->empresa_id;
+
+        // buscar: un producto (sin tildes, por palabras, código o código de barras) o un lote
+        $buscar = Str::limit(trim((string) $request->query('buscar')), 60, '');
+        $productosBuscados = [];
+        $patron = '%'.addcslashes(mb_strtolower($buscar), '%_\\').'%';
+        if ($buscar !== '' && ($palabras = BusquedaProductos::palabras($buscar)) !== []) {
+            $productosBuscados = $busqueda->aplicar(Producto::withTrashed()->where('productos.empresa_id', $empresaId), $palabras)
+                ->limit(500)->toBase()->pluck('productos.id')->all();
+        }
+
+        $transferencias = Transferencia::query()
+            ->where('empresa_id', $empresaId)
                 // la sucursal elegida en el selector: salen las que entran o salen de ella
-                ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->where(fn ($w) => $w
-                    ->whereIn('sucursal_origen_id', $ids)
-                    ->orWhereIn('sucursal_destino_id', $ids)))
-                ->with([
-                    'sucursalOrigen:id,nombre',
-                    'sucursalDestino:id,nombre',
-                    'usuario:id,nombre_completo',
-                    'detalles.producto:id,nombre',
-                    'detalles.lote:id,numero_lote,fecha_vencimiento',
-                ])
-                ->latest('creado_en')
-                ->paginate(10)
-                ->withQueryString(),
+            ->when($this->sucursalesConsulta($request), fn ($q, $ids) => $q->where(fn ($w) => $w
+                ->whereIn('sucursal_origen_id', $ids)
+                ->orWhereIn('sucursal_destino_id', $ids)))
+            ->when($buscar !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('detalles', fn ($d) => $d->whereIn('producto_id', $productosBuscados))
+                ->orWhereHas('detalles.lote', fn ($l) => $l->whereRaw('lower(numero_lote) LIKE ?', [$patron]))))
+            ->with([
+                'sucursalOrigen:id,nombre',
+                'sucursalDestino:id,nombre',
+                'usuario:id,nombre_completo',
+                'detalles.producto:id,nombre',
+                'detalles.lote:id,numero_lote,fecha_vencimiento',
+            ])
+            ->latest('creado_en')
+            ->paginate(10)
+            ->withQueryString();
+
+        // los productos que coinciden con lo buscado se muestran en la fila sin abrir la transferencia
+        if ($buscar !== '') {
+            $loteBuscado = mb_strtolower($buscar);
+            foreach ($transferencias as $transferencia) {
+                foreach ($transferencia->detalles as $detalle) {
+                    $detalle->setAttribute('coincide', in_array($detalle->producto_id, $productosBuscados, true)
+                        || ($detalle->lote && str_contains(mb_strtolower($detalle->lote->numero_lote), $loteBuscado)));
+                }
+            }
+        }
+
+        return Inertia::render('Transferencias/Index', [
+            'transferencias' => $transferencias,
+            'filtros' => $buscar !== '' ? ['buscar' => $buscar] : (object) [],
         ]);
     }
 

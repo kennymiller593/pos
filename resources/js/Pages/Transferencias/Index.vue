@@ -1,14 +1,30 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
-import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Navigation, Plus } from '@lucide/vue'
+import { ArrowLeftRight, ArrowRight, Ban, CheckCircle2, ChevronDown, Navigation, Plus, Search, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
 import { usePermisos } from '@/composables/permisos'
 import { useSucursales } from '@/composables/sucursales'
 
-defineProps({
+const props = defineProps({
     transferencias: { type: Object, required: true },
+    filtros: { type: Object, default: () => ({}) },
+})
+
+// ---- buscador por producto o lote ----
+const buscar = ref(props.filtros.buscar ?? '')
+const hayFiltros = computed(() => !!buscar.value.trim())
+// productos de la transferencia que coinciden con lo buscado (los marca el servidor)
+const coincidencias = (t) => t.detalles.filter((d) => d.coincide)
+function aplicarFiltros() {
+    router.get('/transferencias', { buscar: buscar.value.trim() || undefined }, { preserveState: true, preserveScroll: true, replace: true })
+}
+// al escribir se espera a que termine para no consultar con cada letra
+let pausa = null
+watch(buscar, () => {
+    clearTimeout(pausa)
+    pausa = setTimeout(aplicarFiltros, 350)
 })
 
 const { puede } = usePermisos()
@@ -59,10 +75,32 @@ async function anular(t) {
 
 <template>
     <AppLayout titulo="Transferencias">
-        <div v-if="puede('transferencias.gestionar')" class="mb-4 flex justify-end">
+        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div class="relative sm:max-w-md sm:flex-1" data-filtro-buscar>
+                <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#94A3B8]" />
+                <input
+                    v-model="buscar"
+                    type="search"
+                    maxlength="60"
+                    placeholder="Buscar producto o lote"
+                    aria-label="Buscar producto o lote"
+                    class="h-10 w-full rounded-xl border border-[#E2E8F0] bg-white pr-3 pl-9 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900"
+                />
+            </div>
+            <button
+                v-if="hayFiltros"
+                type="button"
+                class="hidden h-10 items-center justify-center gap-1.5 sm:inline-flex rounded-xl px-3 text-sm font-medium text-[#64748B] hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                data-filtros-limpiar
+                @click="buscar = ''"
+            >
+                <X class="size-4" />
+                Limpiar
+            </button>
             <Link
+                v-if="puede('transferencias.gestionar')"
                 href="/transferencias/crear"
-                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 sm:ml-auto"
             >
                 <Plus class="size-4" />
                 Nueva transferencia
@@ -88,7 +126,11 @@ async function anular(t) {
                             <td colspan="7" class="px-4 py-12 text-center text-neutral-500 dark:text-neutral-400">
                                 <div class="sticky left-4 max-w-[calc(100cqw-2rem)]">
                                     <ArrowLeftRight class="mx-auto mb-2 size-8 text-neutral-300 dark:text-neutral-600" />
-                                    Aún no hay transferencias entre sucursales.
+                                    <template v-if="hayFiltros">
+                                        No hay transferencias con «{{ buscar.trim() }}».
+                                        <button type="button" class="ml-1 font-medium text-emerald-600 hover:underline dark:text-emerald-400" @click="buscar = ''">Ver todas</button>
+                                    </template>
+                                    <template v-else>Aún no hay transferencias entre sucursales.</template>
                                 </div>
                             </td>
                         </tr>
@@ -110,6 +152,17 @@ async function anular(t) {
                                         <ArrowRight class="size-3.5 text-neutral-400" />
                                         {{ t.sucursal_destino?.nombre }}
                                     </span>
+                                    <!-- lo buscado dentro de esta transferencia -->
+                                    <ul v-if="coincidencias(t).length" class="mt-1.5 space-y-1" data-coincidencias>
+                                        <li
+                                            v-for="d in coincidencias(t)"
+                                            :key="d.id"
+                                            class="w-fit max-w-80 rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-900 dark:bg-emerald-500/10 dark:text-emerald-200"
+                                        >
+                                            <span class="font-semibold">{{ d.producto?.nombre ?? '—' }}</span>
+                                            · {{ cantidad(d.cantidad) }} unid.{{ d.lote ? ` · lote ${d.lote.numero_lote}` : '' }}
+                                        </li>
+                                    </ul>
                                 </td>
                                 <td class="px-3 py-3 text-center text-neutral-600 dark:text-neutral-300">{{ t.detalles.length }}</td>
                                 <td class="px-3 py-3 text-center">

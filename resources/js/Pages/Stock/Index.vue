@@ -100,11 +100,14 @@ async function verKardex(producto) {
 function estadoLote(lote) {
     if (!lote.fecha_vencimiento) return { texto: 'Sin vencimiento', clase: 'bg-stone-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400' }
     const hoy = new Date(new Date().toDateString())
-    const vence = new Date(`${lote.fecha_vencimiento}T00:00:00`)
+    const vence = new Date(`${String(lote.fecha_vencimiento).slice(0, 10)}T00:00:00`)
     const dias = Math.round((vence - hoy) / 86400000)
-    if (dias < 0) return { texto: 'Vencido', clase: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400' }
-    if (dias <= 30) return { texto: `Vence en ${dias} día${dias === 1 ? '' : 's'}`, clase: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' }
-    return { texto: `Vence ${vence.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })}`, clase: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' }
+    // la fecha exacta va siempre, también en los vencidos y por vencer
+    const fecha = vence.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
+    if (dias < 0) return { texto: `Vencido · ${fecha}`, clase: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400' }
+    if (dias === 0) return { texto: `Vence hoy · ${fecha}`, clase: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' }
+    if (dias <= 30) return { texto: `Vence en ${dias} día${dias === 1 ? '' : 's'} · ${fecha}`, clase: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' }
+    return { texto: `Vence ${fecha}`, clase: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' }
 }
 
 function fechaHora(iso) {

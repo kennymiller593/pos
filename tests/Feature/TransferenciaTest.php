@@ -241,4 +241,39 @@ class TransferenciaTest extends TestCase
         $this->actingAs($cajero)->post("/transferencias/{$transferencia->id}/anular")->assertForbidden();
         $this->assertSame('en_transito', $transferencia->fresh()->estado);
     }
+
+    public function test_el_listado_busca_por_producto_o_lote_y_marca_lo_que_coincide(): void
+    {
+        $foliar = $this->crearProducto(atributos: ['nombre' => 'Foliar Nutri Más 20-20-20', 'controla_lote' => true]);
+        $floxil = $this->crearProducto(atributos: ['nombre' => 'Floxil CU 250']);
+        $this->darStockConLote($foliar, 'LT-77', venceEnDias: 90, cantidad: 10, costo: 5);
+        $this->darStock($floxil, 10, 80);
+
+        $enviar = fn (array $items) => $this->actingAs($this->admin)->post('/transferencias', [
+            'sucursal_destino_id' => $this->destino->id,
+            'observacion' => null,
+            'items' => $items,
+        ])->assertSessionHas('success');
+        $enviar([['producto_id' => $foliar->id, 'cantidad' => 2], ['producto_id' => $floxil->id, 'cantidad' => 1]]);
+        $enviar([['producto_id' => $floxil->id, 'cantidad' => 3]]);
+
+        // sin tilde y por palabras: solo la transferencia que lleva Foliar, y en ella solo esa línea coincide
+        $this->actingAs($this->admin)->get('/transferencias?buscar=foliar mas')
+            ->assertInertia(fn ($page) => $page
+                ->where('filtros.buscar', 'foliar mas')
+                ->has('transferencias.data', 1)
+                ->where('transferencias.data.0.detalles', fn ($detalles) => collect($detalles)->where('coincide', true)->pluck('producto_id')->all() === [$foliar->id]));
+
+        // por número de lote
+        $this->actingAs($this->admin)->get('/transferencias?buscar=lt-77')
+            ->assertInertia(fn ($page) => $page->has('transferencias.data', 1));
+
+        // Floxil va en las dos; sin buscar salen todas
+        $this->actingAs($this->admin)->get('/transferencias?buscar=floxil')
+            ->assertInertia(fn ($page) => $page->has('transferencias.data', 2));
+        $this->actingAs($this->admin)->get('/transferencias?buscar=no-existe-xyz')
+            ->assertInertia(fn ($page) => $page->has('transferencias.data', 0));
+        $this->actingAs($this->admin)->get('/transferencias')
+            ->assertInertia(fn ($page) => $page->has('transferencias.data', 2));
+    }
 }

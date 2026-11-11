@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Comprobante;
 use App\Models\Empresa;
 use App\Models\Plan;
 use App\Models\Rol;
@@ -342,5 +343,24 @@ class SuperadminTest extends TestCase
         ]);
 
         $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertOk();
+    }
+
+    public function test_el_uso_de_comprobantes_no_cuenta_los_anulados(): void
+    {
+        $producto = $this->crearProducto(precio: 2.00);
+        $this->darStock($producto, 20, 1.20);
+        $this->abrirCaja();
+        $this->venderContado($producto->presentaciones->first(), 1)->assertSessionHasNoErrors();
+        $this->venderContado($producto->presentaciones->first(), 1)->assertSessionHasNoErrors();
+        $anulado = Comprobante::where('empresa_id', $this->empresa->id)->firstOrFail();
+        $this->actingAs($this->admin)->post("/comprobantes/{$anulado->id}/anular", ['motivo' => 'Error'])->assertSessionHas('success');
+
+        $this->artisan('superadmin:asignar', ['email' => $this->admin->email])->assertSuccessful();
+        $lista = $this->actingAs($this->admin->fresh())->get('/admin/empresas')->assertOk();
+        $fila = collect($lista->viewData('page')['props']['empresas']['data'])->firstWhere('id', $this->empresa->id);
+        $this->assertSame(1, $fila['comprobantes_mes']);
+
+        $this->actingAs($this->admin->fresh())->get("/admin/empresas/{$this->empresa->id}")->assertOk()
+            ->assertInertia(fn ($p) => $p->where('empresa.comprobantes_mes', 1)->where('empresa.comprobantes_total', 1));
     }
 }
