@@ -27,6 +27,7 @@ class ComprobantePdfService
         $comprobante->loadMissing([
             'empresa',
             'detalles:id,comprobante_id,descripcion,unidad_codigo,cantidad,precio_unitario,descuento,total',
+            'detalles.series',
             'pagos.medioPago:codigo,nombre',
             'sucursal:id,nombre,direccion',
             'comprobanteRef:id,serie,correlativo,tipo_comprobante_codigo',

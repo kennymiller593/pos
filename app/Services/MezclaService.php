@@ -38,6 +38,10 @@ class MezclaService
             throw new ErrorDeNegocio("\"{$producto->nombre}\" no controla stock: no se puede obtener de una mezcla.");
         }
 
+        if ($producto->controla_serie) {
+            throw new ErrorDeNegocio("\"{$producto->nombre}\" controla serie / IMEI: no se puede obtener de una mezcla.");
+        }
+
         $presentacion = $this->presentacionDe($producto, $datos['presentacion_id'] ?? null);
         $cantidad = round((float) $datos['cantidad'], 3);
         $cantidadBase = round($cantidad * (float) $presentacion->factor_conversion, 3);
@@ -66,6 +70,9 @@ class MezclaService
             }
             if (! $insumo->controla_stock) {
                 throw new ErrorDeNegocio("\"{$insumo->nombre}\" no controla stock: no puede ser insumo.");
+            }
+            if ($insumo->controla_serie) {
+                throw new ErrorDeNegocio("\"{$insumo->nombre}\" controla serie / IMEI: no puede ser insumo de una mezcla.");
             }
             $pres = $this->presentacionDe($insumo, $linea['presentacion_id']);
             $base = round($linea['cantidad'] * (float) $pres->factor_conversion, 3);

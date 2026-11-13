@@ -26,6 +26,7 @@ class NotaCreditoService
         private readonly InventarioService $inventario,
         private readonly CajaService $caja,
         private readonly PuntosService $puntos,
+        private readonly SerieService $series,
     ) {}
 
     /**
@@ -33,7 +34,7 @@ class NotaCreditoService
      * Repone el stock de lo devuelto, reduce la deuda si la venta fue al crédito
      * y registra la salida de caja por lo que se devuelve en efectivo.
      *
-     * $datos ya validados: motivo (01|06|07), items[{detalle_id, cantidad}] solo para 07.
+     * $datos ya validados: motivo (01|06|07), items[{detalle_id, cantidad, series?[ids de las unidades que vuelven]}] solo para 07.
      *
      * @throws ErrorDeNegocio
      */
@@ -54,9 +55,13 @@ class NotaCreditoService
         $motivo = $datos['motivo'];
         $original->load(['detalles.producto', 'detalles.presentacion', 'cuentaPorCobrar']);
 
+        // equipos con serie / IMEI: una unidad de esta venta que ya reingresó por otro documento no puede volver otra vez
+        $this->series->verificarSinReingresos($original->detalles->pluck('id')->all());
+
         $lineas = $motivo === '07'
             ? $this->lineasParciales($original, $datos['items'] ?? [])
             : $this->lineasTotales($original);
+
 
         $totales = $this->totalizar($lineas);
         $montoNota = $totales['total'];
@@ -154,8 +159,23 @@ class NotaCreditoService
                 'origen' => 'online',
             ]);
 
+            $detallesNota = [];
             foreach ($lineas as $linea) {
-                $this->registrarDetalleYReponerStock($nota, $linea, $usuario);
+                $detallesNota[$linea['detalle']->id] = $this->registrarDetalleYReponerStock($nota, $linea, $usuario);
+            }
+
+            // las unidades con serie / IMEI vuelven a estar disponibles: todas en una nota total; en la devolución
+            // por ítem, solo las elegidas (las demás siguen vendidas)
+            if ($motivo !== '07') {
+                $this->series->devolver(array_keys($detallesNota), 'devolucion', $nota->sucursal_id, $nota->id, $usuario, $detallesNota);
+            } else {
+                $elegidas = collect($lineas)->flatMap(fn ($l) => $l['series'] ?? [])->all();
+                if ($elegidas !== []) {
+                    $devueltas = $this->series->devolver(array_keys($detallesNota), 'devolucion', $nota->sucursal_id, $nota->id, $usuario, $detallesNota, $elegidas);
+                    if ($devueltas !== count($elegidas)) {
+                        throw new ErrorDeNegocio('Una de las unidades elegidas ya fue devuelta o ya no figura en esta venta. Vuelve a abrir la nota de crédito y elige de nuevo.');
+                    }
+                }
             }
 
             if ($reduccionDeuda > 0) {
@@ -231,8 +251,13 @@ class NotaCreditoService
         }
 
         $acreditadas = $this->cantidadesYaAcreditadas($original);
+        // líneas que se vendieron eligiendo serie / IMEI y las unidades que siguen vendidas en cada una
+        $ids = $original->detalles->pluck('id')->all();
+        $conSerie = $this->series->detallesVendidosConSerie($ids);
+        $vendidas = $this->series->vendidasPorDetalle($ids);
+        $yaElegidas = [];
 
-        return collect($items)->map(function (array $item) use ($original, $acreditadas) {
+        return collect($items)->map(function (array $item) use ($original, $acreditadas, $conSerie, $vendidas, &$yaElegidas) {
             $detalle = $original->detalles->firstWhere('id', $item['detalle_id']);
 
             if (! $detalle) {
@@ -251,7 +276,26 @@ class NotaCreditoService
                 throw new ErrorDeNegocio("\"{$detalle->descripcion}\" no permite cantidades fraccionadas.");
             }
 
-            return $this->lineaDesdeDetalle($detalle, $cantidad);
+            $linea = $this->lineaDesdeDetalle($detalle, $cantidad);
+
+            // equipo con serie / IMEI: hay que decir QUÉ unidad vuelve, y debe seguir vendida en esta misma línea
+            if (in_array($detalle->id, $conSerie, true)) {
+                $elegidas = array_values(array_unique(array_map('strtolower', array_filter((array) ($item['series'] ?? []), 'is_string'))));
+                $deLaLinea = ($vendidas->get($detalle->id) ?? collect())->pluck('id')->all();
+
+                if (fmod($cantidad, 1) != 0 || count($elegidas) !== (int) $cantidad) {
+                    throw new ErrorDeNegocio(sprintf('"%s" se vendió con serie / IMEI: elige %s (elegiste %d).', $detalle->descripcion, (int) $cantidad === 1 ? 'la unidad que vuelve' : 'las '.(int) $cantidad.' unidades que vuelven', count($elegidas)));
+                }
+                foreach ($elegidas as $serieId) {
+                    if (! in_array($serieId, $deLaLinea, true) || isset($yaElegidas[$serieId])) {
+                        throw new ErrorDeNegocio("Una de las unidades elegidas no es de \"{$detalle->descripcion}\" en esta venta o ya fue devuelta.");
+                    }
+                    $yaElegidas[$serieId] = true;
+                }
+                $linea['series'] = $elegidas;
+            }
+
+            return $linea;
         })->all();
     }
 
@@ -304,13 +348,14 @@ class NotaCreditoService
         return array_map(fn ($v) => round($v, 2), $totales);
     }
 
-    private function registrarDetalleYReponerStock(Comprobante $nota, array $linea, Usuario $usuario): void
+    /** Devuelve el id de la línea creada en la nota. */
+    private function registrarDetalleYReponerStock(Comprobante $nota, array $linea, Usuario $usuario): string
     {
         /** @var ComprobanteDetalle $detalle */
         $detalle = $linea['detalle'];
         $cantidad = $linea['cantidad'];
 
-        $nota->detalles()->create([
+        $detalleNota = $nota->detalles()->create([
             'empresa_id' => $nota->empresa_id,
             'producto_id' => $detalle->producto_id,
             'presentacion_id' => $detalle->presentacion_id,
@@ -330,7 +375,7 @@ class NotaCreditoService
         $producto = $detalle->producto;
 
         if (! $producto || ! $producto->controla_stock) {
-            return;
+            return $detalleNota->id;
         }
 
         $factor = (float) ($detalle->presentacion?->factor_conversion ?? 1);
@@ -361,6 +406,8 @@ class NotaCreditoService
             $nota->id,
             $usuario->id,
         );
+
+        return $detalleNota->id;
     }
 
     /**

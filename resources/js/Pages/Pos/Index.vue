@@ -42,6 +42,8 @@ import { useConfirmar } from '@/composables/confirmar'
 import { puedeEscanear } from '@/composables/escaner'
 import { usePermisos } from '@/composables/permisos'
 import PanelBilletera from '@/Components/Pos/PanelBilletera.vue'
+import ElegirSeries from '@/Components/Pos/ElegirSeries.vue'
+import SeriesDeLinea from '@/Components/Pos/SeriesDeLinea.vue'
 import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import { useImpresion } from '@/composables/impresion'
 import { useSonido } from '@/composables/sonido'
@@ -146,12 +148,26 @@ function alPresionarEnter() {
         buscar.value = ''
         return
     }
+    // no es un código de barras de producto: puede ser la serie / IMEI de un equipo (se consulta al servidor)
+    if (vendePorSerie.value && texto.length >= 4) {
+        agregarPorSerie(texto).then((r) => {
+            if (r.ok || r.elegir) {
+                if (buscar.value.trim() === texto) buscar.value = ''
+                if (r.ok) pitido('ok')
+                return
+            }
+            // que se vea por qué no entró: vendida, de baja, en otra sucursal o no existe
+            avisarSinStock(r.mensaje || `No hay ningún producto ni equipo con "${texto}".`, 4500)
+            pitido('error')
+        })
+        return
+    }
     // un código de barras que no es de ningún producto (quien usa la pistola lectora no mira la pantalla): que se oiga
     if (/^\d{6,}$/.test(texto)) pitido('error')
 }
 
 // ================= carrito =================
-const carrito = ref([]) // { producto, presentacion, cantidad, precio, precioCotizado, descuento, conDescuento }
+const carrito = ref([]) // { producto, presentacion, cantidad, precio, precioCotizado, descuento, conDescuento, series? }
 
 // persistencia: el carrito y el cliente sobreviven recargas y navegacion
 const empresaId = page.props.auth?.user?.empresa?.id ?? 'sin-empresa'
@@ -176,14 +192,25 @@ function alternarSonido() {
     pitido('ok')
 }
 
-function avisarSinStock(mensaje) {
+function avisarSinStock(mensaje, duracion = 2500) {
     avisoSinStock.value = mensaje
     clearTimeout(avisoTimer)
-    avisoTimer = setTimeout(() => (avisoSinStock.value = null), 2500)
+    avisoTimer = setTimeout(() => (avisoSinStock.value = null), duracion)
 }
 
 // conSonido = false cuando quien llama ya hace su propio pitido (el escáner con la cámara)
 function agregar(producto, presentacion = null, conSonido = true) {
+    // con serie / IMEI no se suma "uno más": se elige qué unidad sale
+    if (producto.controla_serie) {
+        if (producto.controla_stock && Number(producto.stock) <= 0) {
+            avisarSinStock(`"${producto.nombre}" no tiene stock.`)
+            if (conSonido) pitido('error')
+            return false
+        }
+        abrirSeries(producto, presentacion)
+        return true
+    }
+
     presentacion = presentacion ?? presentacionDefault(producto)
 
     // cuánto se agrega con un clic: 1 presentación; si el producto se vende por fracción y queda menos
@@ -217,6 +244,114 @@ function agregar(producto, presentacion = null, conSonido = true) {
     }
     if (conSonido) pitido('ok')
     return true
+}
+
+// ================= series / IMEI (productos que controlan serie) =================
+// La línea lleva `series` ([{ id, numero_serie, serie_alterna }]) y su cantidad es cuántas unidades se eligieron.
+const conSerie = (item) => !!item.producto.controla_serie
+const vendePorSerie = computed(() => (props.productos ?? []).some((p) => p.controla_serie))
+const faltaSerie = (item) => conSerie(item) && (!(item.series?.length > 0) || item.series.length !== Number(item.cantidad))
+const hayFaltaSeries = computed(() => carrito.value.some(faltaSerie))
+
+// modal para elegir las unidades de una línea: { producto, presentacion }
+const seriesDe = ref(null)
+const lineaDeSeries = computed(() => (seriesDe.value ? carrito.value.find((i) => i.presentacion.id === seriesDe.value.presentacion.id) : null))
+// unidades del mismo producto ya puestas en otra línea (otra presentación): no se ofrecen dos veces
+const seriesEnOtrasLineas = computed(() => (seriesDe.value
+    ? carrito.value
+        .filter((i) => i.producto.id === seriesDe.value.producto.id && i.presentacion.id !== seriesDe.value.presentacion.id)
+        .flatMap((i) => (i.series ?? []).map((s) => s.id))
+    : []))
+
+function abrirSeries(producto, presentacion = null) {
+    presentacion = presentacion
+        ?? carrito.value.find((i) => i.producto.id === producto.id)?.presentacion
+        ?? presentacionDefault(producto)
+    seriesDe.value = { producto, presentacion }
+}
+
+// deja la línea con esas unidades (la crea si no existe; sin unidades, la quita)
+function ponerSeries(producto, presentacion, series) {
+    const indice = carrito.value.findIndex((i) => i.presentacion.id === presentacion.id)
+    if (!series.length) {
+        if (indice >= 0) quitar(indice)
+        return
+    }
+    if (indice >= 0) {
+        carrito.value[indice].series = series
+        carrito.value[indice].cantidad = series.length
+    } else {
+        carrito.value.push({ producto, presentacion, cantidad: series.length, precio: '', precioCotizado: null, descuento: '', conDescuento: false, series })
+    }
+}
+
+function confirmarSeries(series) {
+    const { producto, presentacion } = seriesDe.value
+    seriesDe.value = null
+    ponerSeries(producto, presentacion, series)
+    if (series.length) pitido('ok')
+}
+
+// serie / IMEI escaneada o escrita: busca la unidad en la sucursal de la caja y la pone en el carrito
+async function agregarPorSerie(numero) {
+    try {
+        const r = await fetch(`/pos/series?numero=${encodeURIComponent(numero)}`, { headers: { Accept: 'application/json' } })
+        const datos = r.ok ? await r.json() : {}
+        const encontradas = datos.encontradas ?? []
+        if (!encontradas.length) return { ok: false, mensaje: datos.aviso || `No hay ningún producto ni equipo con "${numero}".` }
+
+        // la misma serie en dos productos distintos: el cajero elige cuál es, no se elige sola
+        if (encontradas.length > 1) {
+            seriesAmbiguas.value = encontradas
+            return { ok: false, elegir: true, mensaje: 'Esa serie está en más de un producto: elige cuál entregas.' }
+        }
+
+        return ponerUnidad(encontradas[0])
+    } catch {
+        return { ok: false, mensaje: 'No se pudo consultar la serie. Revisa tu conexión.' }
+    }
+}
+
+// pone en el carrito una unidad hallada por su serie ({ id, producto_id, numero_serie, serie_alterna })
+function ponerUnidad(unidad) {
+    const producto = props.productos.find((p) => p.id === unidad.producto_id)
+    if (!producto) return { ok: false, mensaje: `La serie ${unidad.numero_serie} es de un producto que no está activo.` }
+    if (carrito.value.some((i) => i.series?.some((s) => s.id === unidad.id))) {
+        return { ok: false, mensaje: `La serie ${unidad.numero_serie} ya está en el carrito.` }
+    }
+
+    const linea = carrito.value.find((i) => i.producto.id === producto.id)
+    if ((linea?.series?.length ?? 0) >= 50) return { ok: false, mensaje: 'Máximo 50 equipos con serie por línea: haz otra venta para los demás.' }
+    const presentacion = linea?.presentacion ?? presentacionDefault(producto)
+    ponerSeries(producto, presentacion, [...(linea?.series ?? []), { id: unidad.id, numero_serie: unidad.numero_serie, serie_alterna: unidad.serie_alterna }])
+    ultimoEscaneado.value = presentacion.id
+
+    return { ok: true, mensaje: `${producto.nombre} agregado`, detalle: unidad.numero_serie }
+}
+
+// la serie escaneada existe en más de un producto: opciones para elegir ([{ id, producto_id, producto, numero_serie }])
+const seriesAmbiguas = ref(null)
+function elegirAmbigua(unidad) {
+    seriesAmbiguas.value = null
+    const r = ponerUnidad(unidad)
+    if (r.ok) pitido('ok')
+    else {
+        avisarSinStock(r.mensaje, 4500)
+        pitido('error')
+    }
+}
+
+// el servidor rechazó la venta porque otra caja vendió antes una unidad del carrito: se quita esa unidad de su
+// línea (queda marcada "falta elegir") y se cierra el cobro para elegir otra
+function quitarSerieVendida(numero) {
+    let quitada = false
+    for (const item of carrito.value) {
+        if (!item.series?.some((s) => s.numero_serie === numero)) continue
+        item.series = item.series.filter((s) => s.numero_serie !== numero)
+        item.cantidad = Math.max(1, item.series.length)
+        quitada = true
+    }
+    return quitada
 }
 
 // ================= escáner con la cámara (celulares y tablets) =================
@@ -280,9 +415,17 @@ function irAlCarrito() {
 
 function leerCodigoCamara(codigo) {
     const encontrado = buscarPorCodigo(codigo)
-    if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+    if (!encontrado) {
+        // puede ser la serie / IMEI de un equipo: se consulta al servidor y el aviso sale al responder
+        if (vendePorSerie.value) {
+            return agregarPorSerie(codigo).then((r) => (r.ok || r.mensaje ? r : { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }))
+        }
+        return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+    }
 
     const { producto, presentacion } = encontrado
+    // con serie / IMEI se escanea la unidad, no el código de barras del modelo
+    if (producto.controla_serie) return { ok: false, mensaje: `"${producto.nombre}" se vende por serie: escanea el IMEI o la serie del equipo.` }
     if (!agregar(producto, presentacion, false)) return { ok: false, mensaje: avisoSinStock.value }
 
     const item = carrito.value.find((i) => i.presentacion.id === presentacion.id)
@@ -301,7 +444,12 @@ function cambiarPresentacion(item, presentacionId) {
     if (!nueva) return
     const existente = carrito.value.find((i) => i !== item && i.presentacion.id === nueva.id)
     if (existente) {
-        existente.cantidad = Number(existente.cantidad) + Number(item.cantidad)
+        if (conSerie(item)) {
+            existente.series = [...(existente.series ?? []), ...(item.series ?? [])]
+            existente.cantidad = existente.series.length || Number(existente.cantidad) + Number(item.cantidad)
+        } else {
+            existente.cantidad = Number(existente.cantidad) + Number(item.cantidad)
+        }
         quitar(carrito.value.indexOf(item))
     } else {
         item.presentacion = nueva
@@ -460,6 +608,8 @@ if (props.productos.length && carritoGuardado.value.length) {
                     precioCotizado: guardado.precioCotizado ?? null,
                     descuento: guardado.descuento ?? '',
                     conDescuento: !!guardado.conDescuento,
+                    // unidades elegidas (si ya se vendieron en otra caja, el servidor lo dice al cobrar)
+                    ...(producto.controla_serie ? { series: Array.isArray(guardado.series) ? guardado.series : [] } : {}),
                 })
                 break
             }
@@ -476,6 +626,7 @@ watch(carrito, (items) => {
         precioCotizado: i.precioCotizado ?? null,
         descuento: i.descuento,
         conDescuento: i.conDescuento,
+        series: i.series,
     }))
     // carrito vacío: ya no se está vendiendo ninguna cotización ni entregando un pedido
     if (!items.length) {
@@ -559,6 +710,8 @@ if (props.cotizacion && props.productos.length) {
             precioCotizado: null,
             descuento: item.descuento > 0 ? item.descuento : '',
             conDescuento: item.descuento > 0,
+            // con serie / IMEI: las unidades se eligen ahora, al vender
+            ...(producto.controla_serie ? { series: [] } : {}),
         }
         if (cot.vigente) {
             linea.precioCotizado = item.precio_unitario
@@ -611,6 +764,8 @@ if (props.pedido && props.productos.length) {
             precioCotizado: item.precio_unitario,
             descuento: item.descuento > 0 ? item.descuento : '',
             conDescuento: item.descuento > 0,
+            // con serie / IMEI: las unidades se eligen ahora, al vender
+            ...(producto.controla_serie ? { series: [] } : {}),
         }
         if (Math.abs(item.precio_unitario - precioLista(linea)) >= 0.005) linea.precio = String(item.precio_unitario)
         carrito.value.push(linea)
@@ -871,7 +1026,7 @@ const facturaSinRuc = computed(() =>
 )
 
 const puedeCobrar = computed(() => {
-    if (procesando.value || !carrito.value.length || hayDescuentosInvalidos.value) return false
+    if (procesando.value || !carrito.value.length || hayDescuentosInvalidos.value || hayFaltaSeries.value) return false
     if (facturaSinRuc.value) return false
     if (condicion.value === 'credito') {
         // un pedido con adelanto se entrega al contado (el servidor también lo rechaza)
@@ -886,6 +1041,12 @@ const puedeCobrar = computed(() => {
 
 function abrirCobro() {
     if (!carrito.value.length || hayFaltantes.value || hayDescuentosInvalidos.value) return
+    // falta elegir la serie / IMEI de alguna línea: se abre ese selector en vez del cobro
+    const sinSerie = carrito.value.find(faltaSerie)
+    if (sinSerie) {
+        abrirSeries(sinSerie.producto, sinSerie.presentacion)
+        return
+    }
     // lo normal es que paguen exacto: el recibido ya viene con lo que hay que cobrar y basta confirmar.
     // Queda seleccionado, asi que si pagan con mas se escribe encima sin borrar nada.
     recibido.value = aCobrar.value.toFixed(2)
@@ -1092,6 +1253,8 @@ function cobrar() {
             precio_unitario: precioManual(i),
             // incluye la parte del canje de puntos que le toca a la linea
             descuento: descuentoTotalItem(i) > 0 ? Number(descuentoTotalItem(i).toFixed(2)) : 0,
+            // solo en productos que controlan serie / IMEI: el id de cada unidad que se entrega
+            ...(conSerie(i) ? { series: (i.series ?? []).map((s) => s.id) } : {}),
         })),
         pagos: esCredito || sinSaldo.value
             ? []
@@ -1124,6 +1287,14 @@ function cobrar() {
                     ticket: page.props.flash.ticket ?? null,
                     venta,
                 }
+                return
+            }
+            // doble venta: otra caja se llevó una de las unidades. Se cierra el cobro y se pide elegir otra
+            const serieVendida = page.props.flash?.error?.match(/La serie (\S+) ya no está disponible/)?.[1]
+            if (serieVendida && quitarSerieVendida(serieVendida)) {
+                // el aviso del servidor ya dice qué serie fue: aquí solo se cierra el cobro y suena
+                modalCobro.value = false
+                pitido('error')
             }
         },
         onFinish: () => (procesando.value = false),
@@ -1248,7 +1419,8 @@ const claseInput =
                                 <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">
                                     {{ soles(precioUnitario(item)) }} c/u<template v-if="item.producto.presentaciones.length > 1"> · {{ item.presentacion.nombre }}</template>
                                 </p>
-                                <div class="mt-1 flex items-center gap-1">
+                                <SeriesDeLinea v-if="conSerie(item)" class="mt-1" :series="item.series ?? []" :cantidad="Number(item.cantidad)" @elegir="abrirSeries(item.producto, item.presentacion)" />
+                                <div v-else class="mt-1 flex items-center gap-1">
                                     <button
                                         type="button"
                                         class="grid size-8 place-items-center rounded-lg border border-stone-200 dark:border-neutral-700"
@@ -1692,8 +1864,10 @@ const claseInput =
                                 </span>
 
                                 <div class="ml-auto flex items-center gap-1">
+                                    <!-- con serie / IMEI la cantidad es cuántas unidades se eligieron: se cambia eligiendo -->
                                     <button
-                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        :disabled="conSerie(item)"
                                         @click="item.cantidad = Math.max(0.001, Number(item.cantidad) - 1)"
                                     >
                                         <Minus class="size-3.5" />
@@ -1703,10 +1877,13 @@ const claseInput =
                                         type="number"
                                         :step="item.producto.permite_fraccion ? '0.001' : '1'"
                                         min="0"
-                                        class="h-7 w-16 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                                        :disabled="conSerie(item)"
+                                        :title="conSerie(item) ? 'Se vende por serie / IMEI: la cantidad son las unidades elegidas' : undefined"
+                                        class="h-7 w-16 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none disabled:bg-stone-50 disabled:text-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:disabled:bg-neutral-900"
                                     />
                                     <button
-                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        class="grid size-7 place-items-center rounded-lg border border-stone-200 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                                        :disabled="conSerie(item)"
                                         @click="item.cantidad = Number(item.cantidad) + 1"
                                     >
                                         <Plus class="size-3.5" />
@@ -1740,6 +1917,8 @@ const claseInput =
                                     No puede igualar o superar {{ soles(brutoItem(item)) }}
                                 </span>
                             </div>
+                            <!-- unidades elegidas (productos que controlan serie / IMEI) -->
+                            <SeriesDeLinea v-if="conSerie(item)" class="mt-2" :series="item.series ?? []" :cantidad="Number(item.cantidad)" @elegir="abrirSeries(item.producto, item.presentacion)" />
                             <p v-if="faltaStock(item)" class="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
                                 Stock insuficiente ({{ item.producto.stock }} disponibles en unidades base)
                             </p>
@@ -1877,6 +2056,44 @@ const claseInput =
                 </button>
             </div>
         </Transition>
+
+        <!-- ============ Elegir unidades con serie / IMEI ============ -->
+        <ElegirSeries
+            v-if="seriesDe"
+            :key="seriesDe.presentacion.id"
+            :producto="seriesDe.producto"
+            :elegidas="lineaDeSeries?.series ?? []"
+            :excluidas="seriesEnOtrasLineas"
+            :pedidas="lineaDeSeries && !(lineaDeSeries.series?.length > 0) ? Number(lineaDeSeries.cantidad) : 0"
+            :maximo="50"
+            @confirmar="confirmarSeries"
+            @cerrar="seriesDe = null"
+        />
+
+        <!-- ============ La serie escaneada está en más de un producto: elegir cuál ============ -->
+        <Teleport to="body">
+            <div v-if="seriesAmbiguas" class="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4" data-serie-ambigua>
+                <div class="fixed inset-0 bg-neutral-950/60" @click="seriesAmbiguas = null" />
+                <div class="relative w-full rounded-t-2xl border border-stone-200 bg-white p-4 text-neutral-900 shadow-xl sm:max-w-sm sm:rounded-2xl sm:p-5 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
+                    <h3 class="text-base font-semibold tracking-tight">Esa serie está en más de un producto</h3>
+                    <p class="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Elige el equipo que entregas.</p>
+                    <div class="mt-3 space-y-1.5">
+                        <button
+                            v-for="u in seriesAmbiguas"
+                            :key="u.id"
+                            type="button"
+                            class="flex min-h-12 w-full flex-col items-start rounded-xl border border-stone-200 px-3 py-2 text-left hover:border-emerald-400 hover:bg-emerald-50 dark:border-neutral-700 dark:hover:bg-emerald-950/30"
+                            :data-serie-ambigua-opcion="u.producto_id"
+                            @click="elegirAmbigua(u)"
+                        >
+                            <span class="text-sm font-medium">{{ u.producto ?? 'Producto' }}</span>
+                            <span class="font-mono text-xs text-neutral-500 dark:text-neutral-400">{{ u.numero_serie }}</span>
+                        </button>
+                    </div>
+                    <button type="button" class="mt-3 h-10 w-full rounded-xl border border-stone-300 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="seriesAmbiguas = null">Cancelar</button>
+                </div>
+            </div>
+        </Teleport>
 
         <!-- ============ Modal venta exitosa ============ -->
         <Teleport to="body">

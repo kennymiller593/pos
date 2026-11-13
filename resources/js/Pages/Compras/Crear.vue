@@ -6,6 +6,7 @@ import { watchDebounced } from '@vueuse/core'
 import { Boxes, Building2, ChevronRight, HandCoins, Info, LoaderCircle, MapPin, Minus, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
+import CapturaSeries from '@/Components/Series/CapturaSeries.vue'
 import { puedeEscanear } from '@/composables/escaner'
 
 const props = defineProps({
@@ -182,6 +183,8 @@ function agregarProducto(producto, presentacion = null) {
             costo_unitario: def.ultimo_costo ?? '',
             numero_lote: '',
             fecha_vencimiento: '',
+            // productos que controlan serie / IMEI: una por unidad [{ numero, alterna }]
+            series: [],
         }
         filas.value.push(fila)
     }
@@ -208,6 +211,15 @@ function usarLote(fila, lote) {
     fila.numero_lote = lote.numero
     fila.fecha_vencimiento = lote.vence ?? ''
 }
+// productos que controlan serie / IMEI: tantas series como unidades entran (cantidad × factor de la presentación)
+const seriesEsperadas = (fila) => (fila.producto.controla_serie && fila.producto.controla_stock
+    ? Math.max(0, Math.round(Number(fila.cantidad || 0) * Number(presentacionDe(fila)?.factor_conversion ?? 1)))
+    : 0)
+const faltanSeries = (fila) => fila.producto.controla_serie && fila.producto.controla_stock && fila.series.length !== seriesEsperadas(fila)
+
+// error de validación del servidor sobre las series de una fila (items.N.series.M o items.N.series_alternas.M)
+const errorSeries = (indice) => Object.entries(form.errors).find(([campo]) => campo.startsWith(`items.${indice}.series`))?.[1] ?? ''
+
 const fechaCorta = (iso) => (iso ? iso.split('-').reverse().join('/') : 'sin vencimiento')
 
 function presentacionDe(fila) {
@@ -234,7 +246,8 @@ const puedeGuardar = computed(() =>
         Number(f.cantidad) > 0 &&
         f.costo_unitario !== '' &&
         Number(f.costo_unitario) >= 0 &&
-        (!f.producto.controla_lote || f.numero_lote.trim() !== ''),
+        (!f.producto.controla_lote || f.numero_lote.trim() !== '') &&
+        !faltanSeries(f),
     ),
 )
 
@@ -245,6 +258,8 @@ const motivoNoGuardar = computed(() => {
     if (sinCosto) return `Falta el costo unitario de ${sinCosto} ${sinCosto === 1 ? 'producto' : 'productos'}.`
     if (filas.value.some((f) => !(Number(f.cantidad) > 0))) return 'Hay productos con cantidad 0.'
     if (filas.value.some((f) => f.producto.controla_lote && f.numero_lote.trim() === '')) return 'Falta el número de lote en algunos productos.'
+    const sinSeries = filas.value.find(faltanSeries)
+    if (sinSeries) return `Registra las series / IMEI de "${sinSeries.producto.nombre}": van ${sinSeries.series.length} de ${seriesEsperadas(sinSeries)}.`
     return ''
 })
 
@@ -255,6 +270,10 @@ function guardar() {
         costo_unitario: Number(f.costo_unitario),
         numero_lote: f.numero_lote.trim() || null,
         fecha_vencimiento: f.fecha_vencimiento || null,
+        // solo en productos que controlan serie: la serie de cada unidad y, en paralelo, su segundo IMEI
+        ...(seriesEsperadas(f) > 0
+            ? { series: f.series.map((s) => s.numero), series_alternas: f.series.map((s) => s.alterna || null) }
+            : {}),
     }))
 
     form.transform((data) => ({
@@ -332,7 +351,7 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <!-- Proveedor -->
-                            <div>
+                            <div class="min-w-0">
                                 <label :class="claseLabel">Proveedor <span class="font-normal text-[#94A3B8]">(opcional al contado)</span></label>
                                 <div v-if="proveedorSeleccionado" class="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/20">
                                     <div class="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">
@@ -594,6 +613,9 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                     </div>
                                 </div>
 
+                                <!-- Series / IMEI (productos que controlan serie): una por unidad -->
+                                <CapturaSeries v-if="seriesEsperadas(fila) > 0 || fila.series.length" v-model="fila.series" :esperadas="seriesEsperadas(fila)" :producto="fila.producto.nombre" :error="errorSeries(i)" class="mt-2" />
+
                                 <div class="mt-3 flex items-center justify-between border-t border-[#F1F5F9] pt-3 text-sm dark:border-neutral-800">
                                     <span class="text-[#64748B] dark:text-neutral-400">Subtotal</span>
                                     <span class="text-base font-bold tabular-nums">{{ soles(subtotal(fila)) }}</span>
@@ -721,6 +743,13 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                                         </button>
                                                     </template>
                                                 </div>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Series / IMEI (productos que controlan serie): una por unidad -->
+                                        <tr v-if="seriesEsperadas(fila) > 0 || fila.series.length" class="!border-t-0">
+                                            <td colspan="5" class="px-5 pt-0 pb-3 sm:px-6">
+                                                <CapturaSeries v-model="fila.series" :esperadas="seriesEsperadas(fila)" :producto="fila.producto.nombre" :error="errorSeries(i)" class="ml-14" />
                                             </td>
                                         </tr>
                                     </template>

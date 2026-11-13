@@ -39,6 +39,7 @@ import {
     PanelLeftOpen,
     ReceiptText,
     Ruler,
+    ScanBarcode,
     ScrollText,
     ShieldCheck,
     Settings,
@@ -117,6 +118,7 @@ const menuBase = [
             { label: 'Transferencias', href: '/transferencias', icon: ArrowLeftRight, permiso: 'transferencias.ver' },
             // módulo opcional: se enciende en Configuración → Empresa
             { label: 'Mezclas', href: '/mezclas', icon: FlaskConical, permiso: 'mezclas.ver', si: () => !!empresa.value?.mezclas_activo },
+            { label: 'Series / IMEI', href: '/series', icon: ScanBarcode, permiso: 'series.ver', si: () => !!empresa.value?.series_activo },
         ],
     },
     {

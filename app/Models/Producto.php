@@ -101,6 +101,8 @@ class Producto extends Model
         'tipo_afectacion_codigo',
         'permite_fraccion',
         'controla_lote',
+        // cada unidad lleva su número de serie o IMEI (módulo opcional: producto_series)
+        'controla_serie',
         'controla_stock',
         'stock_minimo',
         'atributos',
@@ -120,6 +122,7 @@ class Producto extends Model
         return [
             'permite_fraccion' => 'boolean',
             'controla_lote' => 'boolean',
+            'controla_serie' => 'boolean',
             'controla_stock' => 'boolean',
             'stock_minimo' => 'decimal:3',
             'atributos' => 'array',
@@ -173,6 +176,12 @@ class Producto extends Model
     public function lotes(): HasMany
     {
         return $this->hasMany(Lote::class, 'producto_id');
+    }
+
+    /** Unidades con serie / IMEI (solo si el producto controla serie). */
+    public function series(): HasMany
+    {
+        return $this->hasMany(ProductoSerie::class, 'producto_id');
     }
 
     public function capasCosto(): HasMany

@@ -7,6 +7,7 @@ use App\Models\Caja;
 use App\Models\CapaCosto;
 use App\Models\Comprobante;
 use App\Models\CuentaPorCobrar;
+use App\Models\ProductoSerie;
 use App\Models\Stock;
 use App\Models\Sucursal;
 use App\Models\Transferencia;
@@ -134,5 +135,37 @@ class ConcurrenciaTest extends TestCase
         // ya saldada: un tercer cobro no pasa
         $this->actingAs($this->admin)->post("/cuentas-por-cobrar/{$cuenta->id}/cobrar", ['monto' => 1, 'medio_pago_codigo' => 'efectivo'])
             ->assertSessionHas('error');
+    }
+
+    public function test_dos_ventas_con_la_misma_serie_solo_pasa_una(): void
+    {
+        $equipo = $this->crearProducto(precio: 100.00, atributos: ['controla_serie' => true]);
+        $this->darStock($equipo, 2, 60.00);
+        [$a, $b] = array_map(fn (string $numero) => ProductoSerie::create([
+            'empresa_id' => $this->empresa->id, 'producto_id' => $equipo->id, 'sucursal_id' => $this->sucursal->id, 'numero_serie' => $numero,
+        ]), ['IMEI-A', 'IMEI-B']);
+        $this->abrirCaja();
+
+        $vender = fn (ProductoSerie $serie) => $this->actingAs($this->admin)->post('/pos/ventas', [
+            'tipo_comprobante_codigo' => '00', 'cliente_id' => null, 'es_credito' => false,
+            'items' => [['presentacion_id' => $equipo->presentaciones->first()->id, 'cantidad' => 1, 'series' => [$serie->id]]],
+            'pagos' => [['medio_pago_codigo' => 'efectivo', 'monto' => 100, 'referencia' => null]],
+        ]);
+
+        // dos cajas con la misma unidad en el carrito: la primera la vende, la segunda ya la encuentra vendida
+        $vender($a)->assertSessionHas('success');
+        $vender($a)->assertSessionHas('error', fn ($m) => str_contains($m, 'IMEI-A') && str_contains($m, 'ya no está disponible'));
+
+        $this->assertSame(1, Comprobante::where('empresa_id', $this->empresa->id)->count());
+        $this->assertSame(1.0, $this->stockDe($equipo));
+
+        // simula la carrera: la otra caja ya tomó la unidad B pero el stock todavía dice 1. La relectura con
+        // bloqueo dentro de la transacción la ve vendida y la venta se aborta sin mover nada
+        $b->update(['estado' => 'vendida']);
+        $vender($b)->assertSessionHas('error', fn ($m) => str_contains($m, 'IMEI-B'));
+
+        $this->assertSame(1, Comprobante::where('empresa_id', $this->empresa->id)->count());
+        $this->assertSame(1.0, $this->stockDe($equipo));
+        $this->assertSame(1.0, (float) CapaCosto::where('producto_id', $equipo->id)->sum('cantidad_restante'));
     }
 }

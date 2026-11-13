@@ -15,6 +15,7 @@ use App\Models\Usuario;
 use App\Services\ComprobantePdfService;
 use App\Services\NotaCreditoService;
 use App\Services\SunatService;
+use App\Services\SerieService;
 use App\Services\VentaService;
 use App\Support\ExportadorExcel;
 use Barryvdh\Snappy\Facades\SnappyPdf;
@@ -55,6 +56,15 @@ class ComprobanteController extends Controller
             ])
             ->paginate(15)
             ->withQueryString();
+
+        // equipos con serie / IMEI que siguen vendidos en cada línea: la nota de crédito por ítem elige cuál vuelve
+        $vendidas = app(SerieService::class)->vendidasPorDetalle($comprobantes->getCollection()->flatMap(fn ($c) => $c->detalles->pluck('id'))->all());
+        foreach ($comprobantes as $comprobante) {
+            foreach ($comprobante->detalles as $detalle) {
+                $detalle->setAttribute('series_vendidas', ($vendidas->get($detalle->id) ?? collect())
+                    ->map(fn ($s) => ['id' => $s->id, 'numero_serie' => $s->numero_serie, 'serie_alterna' => $s->serie_alterna])->values());
+            }
+        }
 
         return Inertia::render('Comprobantes/Index', [
             'comprobantes' => $comprobantes,
@@ -213,6 +223,7 @@ class ComprobanteController extends Controller
 
         $comprobante->load([
             'detalles:id,comprobante_id,descripcion,cantidad,precio_unitario,total',
+            'detalles.series',
             'pagos.medioPago:codigo,nombre',
             'usuario:id,nombre_completo',
             'sucursal:id,nombre,direccion',
@@ -252,6 +263,7 @@ class ComprobanteController extends Controller
         $alto = (int) ceil(
             ($ancho === 58 ? 45 : 52)
             + $comprobante->detalles->count() * ($ancho === 58 ? 6.5 : 5)
+            + $this->altoExtraPorSeries($comprobante, $ancho)
             + $comprobante->pagos->count() * 3.5
             + ($comprobante->cliente_nombre ? 7 : 0)
             + 3.5 // linea de condicion (contado / credito)
@@ -286,6 +298,44 @@ class ComprobanteController extends Controller
             ->setOption('margin-right', '4')
             ->setOption('encoding', 'utf-8')
             ->inline("ticket-{$numero}.pdf");
+    }
+
+    /**
+     * Alto extra (mm) del ticket por las líneas que llevan series / IMEI: la descripción con "S/N: ..." ocupa
+     * su propio renglón bajo la línea (a todo el ancho) y, sin sumar su alto, wkhtmltopdf saca una segunda página
+     * (la térmica corta el ticket a la mitad). Una línea sin series no suma nada: su alto es el de siempre.
+     */
+    private function altoExtraPorSeries(Comprobante $comprobante, int $ancho): float
+    {
+        // caracteres por renglón del texto de series (88 % del ancho útil, letra de ancho fijo) y alto de cada renglón
+        [$porRenglon, $altoRenglon] = $ancho === 58 ? [26, 3.6] : [36, 4.0];
+        $extra = 0.0;
+
+        foreach ($comprobante->detalles as $detalle) {
+            $piezas = $detalle->piezasSeries();
+            if ($piezas === []) {
+                continue;
+            }
+
+            // cada serie va entera en un renglón (solo se parte la que no cabe en el ancho): se simula ese acomodo
+            $renglones = 1;
+            $usado = 5; // "S/N: "
+            foreach ($piezas as $pieza) {
+                $largo = mb_strlen($pieza) + 1;
+                if ($largo > $porRenglon) {
+                    $renglones += ($usado > 0 ? 1 : 0) + (int) ceil($largo / $porRenglon) - 1;
+                    $usado = $largo % $porRenglon;
+                } elseif ($usado + $largo > $porRenglon) {
+                    $renglones++;
+                    $usado = $largo;
+                } else {
+                    $usado += $largo;
+                }
+            }
+            $extra += $renglones * $altoRenglon + 1;
+        }
+
+        return $extra;
     }
 
     /**
@@ -519,12 +569,17 @@ class ComprobanteController extends Controller
         $datos = $request->validate([
             'motivo' => ['required', Rule::in(array_keys(NotaCreditoService::MOTIVOS))],
             'items' => [$esParcial ? 'required' : 'nullable', 'array'],
-            'items.*.detalle_id' => ['required', 'uuid'],
+            // cada línea una sola vez: repetida acreditaría de más
+            'items.*.detalle_id' => ['required', 'uuid', 'distinct'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
+            // equipos con serie / IMEI: el id de cada unidad que vuelve
+            'items.*.series' => ['nullable', 'array', 'max:500'],
+            'items.*.series.*' => ['required', 'uuid'],
             'medio_pago_codigo' => ['nullable', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'referencia' => ['nullable', 'string', 'max:100'],
         ], [
             'items.required' => 'Elige los productos a devolver.',
+            'items.*.detalle_id.distinct' => 'Un mismo producto del comprobante está dos veces en la nota: déjalo una sola vez.',
             'medio_pago_codigo.exists' => 'Elige un medio de devolución válido.',
         ]);
 

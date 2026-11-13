@@ -20,6 +20,7 @@ use App\Services\BusquedaProductos;
 use App\Services\CajaService;
 use App\Services\CompraService;
 use App\Services\InventarioService;
+use App\Services\SerieService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class CompraController extends Controller
         private readonly CompraService $comprasService,
         private readonly BusquedaProductos $busqueda,
         private readonly CajaService $caja,
+        private readonly SerieService $series,
     ) {}
 
     public function index(Request $request): Response
@@ -149,7 +151,7 @@ class CompraController extends Controller
             ->where('activo', true)
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'permite_fraccion', 'imagen_url'])
+            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'controla_serie', 'permite_fraccion', 'imagen_url'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
 
@@ -194,6 +196,8 @@ class CompraController extends Controller
                 'codigo_interno' => $p->codigo_interno,
                 'controla_stock' => $p->controla_stock,
                 'controla_lote' => $p->controla_lote,
+                // cada unidad se registra con su serie / IMEI al comprar
+                'controla_serie' => (bool) $p->controla_serie,
                 'permite_fraccion' => $p->permite_fraccion,
                 'imagen_url' => $p->imagen_url,
                 'lotes_recientes' => $lotesRecientes[$p->id] ?? [],
@@ -247,6 +251,11 @@ class CompraController extends Controller
             'items.*.costo_unitario' => ['required', 'numeric', 'min:0'],
             'items.*.numero_lote' => ['nullable', 'string', 'max:50'],
             'items.*.fecha_vencimiento' => ['nullable', 'date'],
+            // productos que controlan serie: una por unidad y, en paralelo, su segundo IMEI opcional
+            'items.*.series' => ['nullable', 'array', 'max:1000'],
+            'items.*.series.*' => ['required', 'string', 'max:'.SerieService::MAX_LARGO, SerieService::regla()],
+            'items.*.series_alternas' => ['nullable', 'array', 'max:1000'],
+            'items.*.series_alternas.*' => ['nullable', 'string', 'max:'.SerieService::MAX_LARGO, SerieService::regla(opcional: true)],
         ], [
             'proveedor_id.required' => 'La compra a crédito necesita un proveedor para registrar la deuda.',
             'fecha.required' => 'Indica la fecha de la compra.',
@@ -255,6 +264,9 @@ class CompraController extends Controller
             'items.required' => 'Agrega al menos un producto.',
             'items.*.cantidad.gt' => 'La cantidad debe ser mayor a 0.',
             'items.*.costo_unitario.min' => 'El costo no puede ser negativo.',
+            'items.*.series.*.required' => 'Hay una serie vacía.',
+            'items.*.series.*.max' => 'Cada serie no debe pasar de '.SerieService::MAX_LARGO.' caracteres.',
+            'items.*.series_alternas.*.max' => 'Cada serie no debe pasar de '.SerieService::MAX_LARGO.' caracteres.',
         ]);
 
         // la sucursal que recibe: la elegida en el formulario (viendo "todas") o la del selector
@@ -294,7 +306,7 @@ class CompraController extends Controller
         $presentaciones = ProductoPresentacion::query()
             ->where('empresa_id', $empresaId)
             ->whereIn('id', collect($datos['items'])->pluck('presentacion_id'))
-            ->with('producto:id,empresa_id,nombre,controla_stock,controla_lote,permite_fraccion')
+            ->with('producto:id,empresa_id,nombre,controla_stock,controla_lote,controla_serie,permite_fraccion')
             ->get()
             ->keyBy('id');
 
@@ -324,6 +336,17 @@ class CompraController extends Controller
             $totalLinea = round($cantidad * $costo, 2);
             $total += $totalLinea;
 
+            // controla serie / IMEI: una serie por cada unidad que entra
+            $series = [];
+            if ($producto->controla_serie && $producto->controla_stock) {
+                $series = SerieService::unir($item['series'] ?? [], $item['series_alternas'] ?? []);
+                $unidades = round($cantidad * $factor, 3);
+
+                if (fmod($unidades, 1) != 0 || count($series) !== (int) $unidades) {
+                    return back()->with('error', sprintf('"%s" controla serie / IMEI: registra %d %s (hay %d).', $producto->nombre, (int) ceil($unidades), (int) ceil($unidades) === 1 ? 'serie' : 'series, una por unidad', count($series)));
+                }
+            }
+
             $lineas[] = [
                 'presentacion' => $presentacion,
                 'producto' => $producto,
@@ -334,6 +357,7 @@ class CompraController extends Controller
                 'costo_base' => $factor > 0 ? round($costo / $factor, 6) : $costo,
                 'numero_lote' => $item['numero_lote'] ?? null,
                 'fecha_vencimiento' => $item['fecha_vencimiento'] ?? null,
+                'series' => $series,
             ];
         }
 
@@ -422,6 +446,10 @@ class CompraController extends Controller
                         $usuario->id,
                         $loteId,
                     );
+
+                    if ($linea['series'] !== []) {
+                        $this->series->ingresar($linea['producto'], $sucursalId, $linea['series'], $linea['costo_base'], 'compra', $compra->id, $detalle->id, $usuario);
+                    }
                 }
             });
         } catch (ErrorDeNegocio $e) {

@@ -207,7 +207,7 @@ async function anular(t) {
                                 <td colspan="7" class="bg-stone-50 px-6 py-4 dark:bg-neutral-950/50">
                                     <p class="mb-2 text-xs font-semibold tracking-wider text-neutral-400 uppercase">Productos</p>
                                     <div class="space-y-1.5">
-                                        <div v-for="d in t.detalles" :key="d.id" class="flex items-center justify-between gap-3 text-sm">
+                                        <div v-for="d in t.detalles" :key="d.id" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
                                             <span class="flex min-w-0 items-center gap-2">
                                                 <span class="truncate">{{ d.producto?.nombre ?? '—' }}</span>
                                                 <span
@@ -219,6 +219,10 @@ async function anular(t) {
                                                 </span>
                                             </span>
                                             <span class="font-medium">{{ cantidad(d.cantidad) }} unid.</span>
+                                            <!-- series / IMEI que viajan en esta transferencia -->
+                                            <span v-if="d.series?.length" class="flex w-full flex-wrap gap-1" data-transferencia-series>
+                                                <span v-for="n in d.series" :key="n" class="rounded-md bg-stone-200 px-1.5 py-0.5 font-mono text-[11px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200" :data-transferencia-serie="n">{{ n }}</span>
+                                            </span>
                                         </div>
                                     </div>
                                     <p v-if="t.observacion" class="mt-3 text-sm text-neutral-500 dark:text-neutral-400">

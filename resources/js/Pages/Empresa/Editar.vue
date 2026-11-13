@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
-import { Building2, ChevronRight, FileKey, FlaskConical, ImageIcon, QrCode, Shirt, Store, Trash2, Upload } from '@lucide/vue'
+import { Building2, ChevronRight, FileKey, FlaskConical, ImageIcon, QrCode, ScanBarcode, Shirt, Store, Trash2, Upload } from '@lucide/vue'
 import { claseInterruptor } from '@/Components/Tienda/clases'
 import AppLayout from '@/Layouts/AppLayout.vue'
 
@@ -22,6 +22,7 @@ const form = useForm({
     pie_cotizacion: props.empresa.pie_cotizacion ?? '',
     mezclas_activo: !!props.empresa.mezclas_activo,
     variantes_activo: !!props.empresa.variantes_activo,
+    series_activo: !!props.empresa.series_activo,
     canal_venta_activo: !!props.empresa.canal_venta_activo,
 })
 
@@ -257,6 +258,20 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <span class="block text-xs text-neutral-500 dark:text-neutral-400">Actívalo si vendes un mismo modelo en varias tallas, colores o capacidades (ropa, calzado, celulares). Creas el modelo una vez y el sistema arma un producto por cada combinación, cada uno con su precio, código de barras y stock.</span>
                                 </span>
                                 <input v-model="form.variantes_activo" type="checkbox" class="peer sr-only" data-variantes-activo />
+                                <span :class="[claseInterruptor, 'mt-2']" />
+                            </label>
+                        </div>
+                        <!-- módulo opcional: series / IMEI por unidad -->
+                        <div>
+                            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50 dark:border-neutral-800 dark:has-[:checked]:border-emerald-600 dark:has-[:checked]:bg-emerald-950/20">
+                                <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                    <ScanBarcode class="size-5" />
+                                </span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm font-semibold">Series / IMEI</span>
+                                    <span class="block text-xs text-neutral-500 dark:text-neutral-400">Actívalo si vendes equipos que se identifican uno por uno (celulares, laptops, electrodomésticos). Registras el IMEI o la serie de cada unidad al comprar, lo eliges al vender, sale en el comprobante y puedes buscar a quién se vendió cada equipo. Si lo apagas se ocultan el menú y la opción en productos, pero los productos que ya controlan serie la siguen pidiendo al comprar y al vender.</span>
+                                </span>
+                                <input v-model="form.series_activo" type="checkbox" class="peer sr-only" data-series-activo />
                                 <span :class="[claseInterruptor, 'mt-2']" />
                             </label>
                         </div>

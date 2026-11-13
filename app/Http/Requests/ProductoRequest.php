@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\ProductoSerie;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ProductoRequest extends FormRequest
@@ -28,6 +30,8 @@ class ProductoRequest extends FormRequest
             'tipo_afectacion_codigo' => ['required', Rule::exists('tipos_afectacion_igv', 'codigo')],
             'permite_fraccion' => ['required', 'boolean'],
             'controla_lote' => ['required', 'boolean'],
+            // cada unidad con su serie / IMEI (módulo opcional; sin el módulo activo el campo se ignora)
+            'controla_serie' => ['nullable', 'boolean'],
             'controla_stock' => ['required', 'boolean'],
             'stock_minimo' => ['nullable', 'numeric', 'min:0'],
             'activo' => ['required', 'boolean'],
@@ -80,9 +84,25 @@ class ProductoRequest extends FormRequest
         ];
     }
 
+    /**
+     * Si el producto queda controlando serie / IMEI: lo que diga el formulario cuando la empresa tiene el módulo
+     * activo; sin el módulo el campo se ignora y el producto conserva lo que tenía.
+     */
+    public function controlaSerie(): bool
+    {
+        // tampoco se toca si el formulario no manda el campo (una pantalla abierta desde antes del módulo)
+        if (! $this->user()->empresa->series_activo || ! $this->has('controla_serie')) {
+            return (bool) $this->route('producto')?->controla_serie;
+        }
+
+        return $this->boolean('controla_serie');
+    }
+
     public function after(): array
     {
         return [function ($validator) {
+            $this->validarSerie($validator);
+
             if ($this->route('producto')) {
                 return;
             }
@@ -98,6 +118,11 @@ class ProductoRequest extends FormRequest
                     $validator->errors()->add("presentaciones.{$i}.stock_inicial", 'Este producto controla lote: carga el stock con un ajuste de stock indicando el lote.');
                 }
 
+                // con serie hace falta el numero de cada unidad: eso lo pide el ajuste de stock
+                if ($this->controlaSerie()) {
+                    $validator->errors()->add("presentaciones.{$i}.stock_inicial", 'Este producto controla serie / IMEI: carga el stock con un ajuste de stock indicando las series.');
+                }
+
                 // sin costo quedaria una capa a costo 0 que infla el margen
                 if (! isset($p['precio_compra']) || $p['precio_compra'] === '') {
                     $validator->errors()->add("presentaciones.{$i}.precio_compra", 'Indica el precio de compra del stock inicial.');
@@ -109,5 +134,59 @@ class ProductoRequest extends FormRequest
                 }
             }
         }];
+    }
+
+    /**
+     * Controla serie / IMEI: cada unidad es una pieza entera con su número, así que no admite fracciones, lotes ni
+     * presentaciones que agrupen varias unidades. Si se activa con stock, esas unidades quedan por regularizar
+     * (Stock → Registrar sus series); se desactiva solo si ya no quedan unidades con serie en el negocio.
+     */
+    private function validarSerie($validator): void
+    {
+        $producto = $this->route('producto');
+        $antes = (bool) $producto?->controla_serie;
+        $ahora = $this->controlaSerie();
+
+        if ($ahora) {
+            if ($this->boolean('permite_fraccion')) {
+                $validator->errors()->add('controla_serie', 'Un producto con serie / IMEI se vende por unidades enteras: desmarca "Permite fracción".');
+            }
+            if ($this->boolean('controla_lote')) {
+                $validator->errors()->add('controla_serie', 'Un producto no puede controlar lote y serie / IMEI a la vez: elige uno.');
+            }
+            if (! $this->boolean('controla_stock')) {
+                $validator->errors()->add('controla_serie', 'Para controlar serie / IMEI el producto debe controlar stock.');
+            }
+            foreach ((array) $this->input('presentaciones') as $i => $p) {
+                if (abs((float) ($p['factor_conversion'] ?? 1) - 1) > 0.0000001) {
+                    $validator->errors()->add("presentaciones.{$i}.factor_conversion", 'Con serie / IMEI cada presentación es una unidad: el factor debe ser 1.');
+                }
+            }
+        }
+
+        if (! $producto || $antes === $ahora) {
+            return;
+        }
+
+        if ($ahora) {
+            // con stock sí se puede activar: esas unidades quedan "sin serie" y se regularizan desde Stock.
+            // Lo que no puede haber es mercadería en camino, que llegaría sin número
+            $enCamino = DB::table('transferencia_detalles as d')
+                ->join('transferencias as t', 't.id', '=', 'd.transferencia_id')
+                ->where('d.producto_id', $producto->id)
+                ->whereIn('t.estado', ['pendiente', 'en_transito'])
+                ->exists();
+
+            if ($enCamino) {
+                $validator->errors()->add('controla_serie', 'Este producto tiene una transferencia en camino. Recíbela o anúlala antes de activar serie / IMEI.');
+            }
+
+            return;
+        }
+
+        $vivas = ProductoSerie::where('producto_id', $producto->id)->whereIn('estado', ['disponible', 'en_transito'])->count();
+        if ($vivas > 0) {
+            $validator->errors()->add('controla_serie', "Este producto tiene {$vivas} unidad(es) con serie en stock. Véndelas o dalas de baja antes de quitar el control de serie / IMEI.");
+        }
     }
 }

@@ -35,6 +35,7 @@ const form = useForm({
     tipo_afectacion_codigo: '',
     permite_fraccion: false,
     controla_lote: false,
+    controla_serie: false,
     controla_stock: true,
     stock_minimo: '',
     activo: true,
@@ -48,7 +49,10 @@ const form = useForm({
 // si controla stock y quien crea puede ajustar stock; con lote se carga por ajuste (ahí se pide el lote)
 const { viendoTodas, accesibles } = useSucursales()
 const muestraStockInicial = computed(() => !props.producto && form.controla_stock && puede('stock.ajustar'))
-const stockInicialAplica = computed(() => muestraStockInicial.value && !form.controla_lote)
+const stockInicialAplica = computed(() => muestraStockInicial.value && !form.controla_lote && !form.controla_serie)
+
+// serie / IMEI por unidad: módulo opcional de la empresa (Configuración → Empresa)
+const seriesActivo = computed(() => !!page.props.auth?.user?.empresa?.series_activo)
 
 const factorDe = (pres) => Number(pres.factor_conversion) || 1
 const tieneStockInicial = (pres) => Number(pres.stock_inicial) > 0
@@ -168,6 +172,7 @@ function cargar() {
     form.tipo_afectacion_codigo = p?.tipo_afectacion_codigo ?? (esRus.value ? '20' : props.catalogos.tiposAfectacion[0]?.codigo ?? '')
     form.permite_fraccion = p?.permite_fraccion ?? false
     form.controla_lote = p?.controla_lote ?? false
+    form.controla_serie = p?.controla_serie ?? false
     form.controla_stock = p?.controla_stock ?? true
     form.stock_minimo = p?.stock_minimo ?? ''
     form.activo = p?.activo ?? true
@@ -195,6 +200,8 @@ function cargar() {
 }
 
 watch(() => props.abierto, (abierto) => abierto && cargar())
+// serie / IMEI y lote no van juntos: al marcar serie el lote se apaga (su casilla se oculta)
+watch(() => form.controla_serie, (conSerie) => { if (conSerie) form.controla_lote = false })
 
 function agregarPresentacion() {
     form.presentaciones.push(presentacionNueva(form.presentaciones.length === 0))
@@ -434,9 +441,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <input v-model="form.controla_stock" type="checkbox" class="size-4 rounded accent-emerald-600" />
                                     Controla stock
                                 </label>
-                                <label class="flex items-center gap-2 text-sm">
+                                <!-- con serie / IMEI no hay lote: cada unidad ya va identificada -->
+                                <label v-if="!(seriesActivo && form.controla_serie)" class="flex items-center gap-2 text-sm">
                                     <input v-model="form.controla_lote" type="checkbox" class="size-4 rounded accent-emerald-600" />
                                     Controla lote
+                                </label>
+                                <label v-if="seriesActivo" class="flex items-center gap-2 text-sm">
+                                    <input v-model="form.controla_serie" type="checkbox" class="size-4 rounded accent-emerald-600" data-controla-serie />
+                                    Controla serie / IMEI
                                 </label>
                                 <label class="flex items-center gap-2 text-sm">
                                     <input v-model="form.permite_fraccion" type="checkbox" class="size-4 rounded accent-emerald-600" />
@@ -455,10 +467,13 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <div>
                                     <h3 class="text-sm font-semibold tracking-tight">¿Cómo se vende? · Presentaciones y precios</h3>
                                     <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                                        La primera es la unidad suelta. Si también vendes por caja, paquete o saco, agrégala como otra presentación.
+                                        <template v-if="seriesActivo && form.controla_serie">Cada equipo se vende por unidad, con su serie / IMEI.</template>
+                                        <template v-else>La primera es la unidad suelta. Si también vendes por caja, paquete o saco, agrégala como otra presentación.</template>
                                     </p>
                                 </div>
+                                <!-- con serie / IMEI cada presentación es una unidad: no hay cajas ni packs -->
                                 <button
+                                    v-if="!(seriesActivo && form.controla_serie)"
                                     type="button"
                                     class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
                                     @click="agregarPresentacion"
@@ -473,6 +488,10 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <p v-if="muestraStockInicial && form.controla_lote" class="mb-1 text-xs text-neutral-500 dark:text-neutral-400" data-nota-lote>
                                 Como controla lote, el stock inicial se carga después con un <strong>ajuste de stock</strong>, donde indicas el lote y su vencimiento.
                             </p>
+                            <p v-if="seriesActivo && form.controla_serie" class="mb-1 text-xs text-neutral-500 dark:text-neutral-400" data-nota-serie>
+                                Como controla serie / IMEI, cada unidad entra con su número: el stock se carga con una <strong>compra</strong> o un <strong>ajuste de stock</strong>. Se vende por unidades enteras, sin lote ni cajas.<template v-if="producto && !producto.controla_serie"> Si ya tiene stock, esas unidades quedan «sin serie» y las registras después en <strong>Stock → Registrar sus series</strong>.</template>
+                            </p>
+                            <p v-if="form.errors.controla_serie" :class="claseError" data-error-controla-serie>{{ form.errors.controla_serie }}</p>
                             <p v-if="form.errors.presentaciones" :class="claseError">{{ form.errors.presentaciones }}</p>
 
                             <div

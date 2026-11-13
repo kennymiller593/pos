@@ -22,6 +22,10 @@
         .cant { width: 12%; }
         .precio { width: 20%; text-align: right; }
         .importe { width: 22%; text-align: right; }
+        /* series / IMEI de la línea: renglón propio a todo el ancho; una serie larga se parte y no empuja los precios */
+        table.items td.series { padding-top: 0; }
+        /* cada serie va entera (no se corta un IMEI a la mitad); solo se parte la que no cabe en el ancho del papel */
+        table.items td.series span { display: inline-block; max-width: 100%; word-break: break-all; vertical-align: top; }
         .totales { margin-top: 4px; }
         .total-final { font-size: 12px; font-weight: 700; }
         .anulado {
@@ -110,6 +114,12 @@
                 <td class="precio">{{ number_format($detalle->precio_unitario, 2) }}</td>
                 <td class="importe">{{ number_format($detalle->total, 2) }}</td>
             </tr>
+            @if ($detalle->textoSeries() !== '')
+                <tr>
+                    <td></td>
+                    <td colspan="3" class="series">S/N: @foreach ($detalle->piezasSeries() as $pieza)<span>{{ $pieza }}</span> @endforeach</td>
+                </tr>
+            @endif
             @if ((float) $detalle->descuento > 0)
                 <tr>
                     <td></td>

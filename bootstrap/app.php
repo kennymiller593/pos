@@ -8,6 +8,7 @@ use App\Http\Middleware\ImpersonacionVigente;
 use App\Http\Middleware\MezclasActivas;
 use App\Http\Middleware\SesionCoherente;
 use App\Http\Middleware\SoloDominioPrincipal;
+use App\Http\Middleware\SeriesActivas;
 use App\Http\Middleware\SoloPlataforma;
 use App\Http\Middleware\SuscripcionVigente;
 use App\Http\Middleware\UsuarioActivo;
@@ -53,6 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'flash.conservar' => ConservarFlash::class,
             'mezclas.activas' => MezclasActivas::class,
             'variantes.activas' => VariantesActivas::class,
+            'series.activas' => SeriesActivas::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

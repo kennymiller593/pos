@@ -55,6 +55,7 @@ use App\Http\Controllers\TiendaController;
 use App\Http\Controllers\TiendaDominioController;
 use App\Http\Controllers\MezclaController;
 use App\Http\Controllers\ProductoGrupoController;
+use App\Http\Controllers\SerieController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Middleware\CabecerasTienda;
@@ -323,6 +324,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/pos/clientes', [PosController::class, 'clientes'])->name('pos.clientes');
         Route::post('/pos/clientes', [PosController::class, 'crearCliente'])->middleware('can:clientes.gestionar')->name('pos.clientes.crear');
         Route::post('/pos/ventas', [PosController::class, 'vender'])->name('pos.vender');
+        // unidades con serie / IMEI: las disponibles de un producto en la sucursal de la caja, o la unidad de un número escaneado
+        Route::get('/pos/series', [PosController::class, 'series'])->name('pos.series');
     });
     // últimas compras (stock.costos) y ventas (comprobantes.ver) de un producto; la ruta del POS se mantiene por compatibilidad
     Route::get('/pos/productos/{producto}/historial', HistorialProductoController::class)->middleware('can:stock.costos')->name('pos.historial');
@@ -441,6 +444,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/stock', [StockController::class, 'index'])->middleware('can:stock.ver')->name('stock.index');
     Route::get('/stock/{producto}/kardex', [StockController::class, 'kardex'])->middleware('can:stock.ver')->name('stock.kardex');
     Route::post('/stock/{producto}/ajustar', [StockController::class, 'ajustar'])->middleware('can:stock.ajustar')->name('stock.ajustar');
+    // series / IMEI: registrar el número de unidades que ya están en stock sin serie (no mueve stock)
+    Route::post('/stock/{producto}/regularizar-series', [StockController::class, 'regularizarSeries'])->middleware('can:stock.ajustar')->name('stock.regularizar-series');
+
+    // series / IMEI (módulo opcional: Configuración → Empresa): dónde está cada unidad y a quién se vendió
+    Route::middleware(['series.activas', 'can:series.ver'])->group(function () {
+        Route::get('/series', [SerieController::class, 'index'])->name('series.index');
+        Route::get('/series/buscar', [SerieController::class, 'buscar'])->name('series.buscar');
+    });
 
     Route::get('/transferencias', [TransferenciaController::class, 'index'])->middleware('can:transferencias.ver')->name('transferencias.index');
     Route::middleware('can:transferencias.gestionar')->group(function () {

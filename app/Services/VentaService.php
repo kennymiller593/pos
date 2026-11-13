@@ -40,13 +40,14 @@ class VentaService
         private readonly SunatService $sunat,
         private readonly SuscripcionService $suscripciones,
         private readonly PuntosService $puntos,
+        private readonly SerieService $series,
     ) {}
 
     /**
      * Registra una venta completa: comprobante, detalles, FIFO, stock, kardex y pagos.
      *
      * $datos ya validados: tipo_comprobante_codigo, cliente_id?, es_credito,
-     * items[{presentacion_id, cantidad}], pagos[{medio_pago_codigo, monto, referencia?}],
+     * items[{presentacion_id, cantidad, series?[id de cada unidad, solo en productos que controlan serie]}], pagos[{medio_pago_codigo, monto, referencia?}],
      * puntos_canjeados? (su valor ya viene repartido como descuento en los items),
      * abono?{medio_pago_codigo, monto, referencia?} solo con es_credito: lo que el cliente
      * paga ahora a cuenta; queda como cobro del turno y la deuda nace por el saldo.
@@ -93,12 +94,20 @@ class VentaService
         }
 
         $this->validarStock($lineas, $sucursalId);
+        $this->validarSeries($lineas);
         $this->suscripciones->verificarLimite($usuario->empresa, 'comprobantes');
 
         return DB::transaction(function () use ($datos, $lineas, $totales, $totalVenta, $abono, $saldoCredito, $adelanto, $apertura, $usuario, $empresaId, $sucursalId, $cliente, $esCredito, $puntosCanjeados) {
             // dentro de la transaccion se vuelve a validar con bloqueo: dos cajas vendiendo
             // el mismo producto a la vez se serializan aqui y la segunda ve el stock real
             $this->validarStock($lineas, $sucursalId, bloquear: true);
+
+            // productos con serie / IMEI: las unidades elegidas se toman con bloqueo (dos cajas no venden la misma)
+            foreach ($lineas as $i => $linea) {
+                if ($linea['series'] !== []) {
+                    $lineas[$i]['series_reservadas'] = $this->series->reservarParaVenta($linea['series'], $linea['producto']->id, $sucursalId);
+                }
+            }
 
             if ($esCredito) {
                 $this->validarLineaDeCredito($cliente, $saldoCredito, bloquear: true);
@@ -450,6 +459,10 @@ class VentaService
         if ($comprobante->notas()->where('estado', 'emitido')->exists()) {
             throw new ErrorDeNegocio('No se puede anular: este comprobante ya tiene notas de crédito emitidas.');
         }
+
+        // equipos con serie / IMEI: si una unidad de esta venta ya reingresó por otro documento, reponerla de nuevo
+        // dejaría stock sin serie. Se comprueba aquí, antes de comunicar la baja a SUNAT
+        $this->series->verificarSinReingresos($comprobante->detalles()->pluck('id')->all());
     }
 
     /** Parte interna de la anulación: stock, capas, pagos, deuda y estado. */
@@ -491,6 +504,9 @@ class VentaService
                     usuarioId: $usuario->id,
                 );
             }
+
+            // las unidades con serie / IMEI de la venta vuelven a estar disponibles (no hace nada si no las hubo)
+            $this->series->devolver($comprobante->detalles->pluck('id')->all(), 'venta_anulada', $comprobante->sucursal_id, $comprobante->id, $usuario);
 
             // los pagos dejan de ser ingresos validos (el arqueo del turno abierto se ajusta solo)
             $comprobante->pagos()->delete();
@@ -562,7 +578,7 @@ class VentaService
         $presentaciones = ProductoPresentacion::query()
             ->where('empresa_id', $empresaId)
             ->whereIn('id', collect($items)->pluck('presentacion_id'))
-            ->with('producto:id,nombre,controla_stock,permite_fraccion,unidad_base_codigo,tipo_afectacion_codigo')
+            ->with('producto:id,nombre,controla_stock,controla_serie,permite_fraccion,unidad_base_codigo,tipo_afectacion_codigo')
             ->get()
             ->keyBy('id');
 
@@ -641,6 +657,9 @@ class VentaService
                 'descuento' => $descuento,
                 'igv' => $igvLinea,
                 'total' => $totalLinea,
+                // ids de las unidades elegidas (solo productos que controlan serie; cotizaciones y pedidos no las envían)
+                // en minúsculas: el mismo id escrito con mayúsculas es la misma unidad
+                'series' => $producto->controla_serie ? array_values(array_unique(array_map('strtolower', array_filter((array) ($item['series'] ?? []), 'is_string')))) : [],
             ];
         }
 
@@ -772,6 +791,40 @@ class VentaService
         }
     }
 
+    /**
+     * Un producto que controla serie se vende eligiendo cada unidad: tantas series como unidades, sin repetir.
+     * (Que sigan disponibles y sean de esta sucursal se comprueba con bloqueo dentro de la transacción.)
+     *
+     * @throws ErrorDeNegocio
+     */
+    private function validarSeries(array $lineas): void
+    {
+        $elegidas = [];
+
+        foreach ($lineas as $linea) {
+            if (! $linea['producto']->controla_serie) {
+                continue;
+            }
+
+            $unidades = $linea['cantidad_base'];
+            if (fmod($unidades, 1) != 0 || count($linea['series']) !== (int) $unidades) {
+                throw new ErrorDeNegocio(sprintf(
+                    '"%s" se vende por serie / IMEI: elige %s (elegiste %d).',
+                    $linea['producto']->nombre,
+                    (int) $unidades === 1 ? 'la unidad que entregas' : 'las '.(int) $unidades.' unidades que entregas',
+                    count($linea['series']),
+                ));
+            }
+
+            foreach ($linea['series'] as $serieId) {
+                if (isset($elegidas[$serieId])) {
+                    throw new ErrorDeNegocio("Elegiste la misma serie dos veces en \"{$linea['producto']->nombre}\".");
+                }
+                $elegidas[$serieId] = true;
+            }
+        }
+    }
+
     public function tomarCorrelativo(string $empresaId, string $sucursalId, ?string $cajaId, string $tipoComprobante): SerieCorrelativo
     {
         // prefiere la serie asignada a la caja; si no hay, usa la general de la sucursal
@@ -884,6 +937,10 @@ class VentaService
             'igv' => $linea['igv'],
             'total' => $linea['total'],
         ]);
+
+        if (! empty($linea['series_reservadas'])) {
+            $this->series->vender($linea['series_reservadas'], $detalle, $comprobante, $usuario);
+        }
 
         foreach ($consumo['consumos'] as $datosConsumo) {
             DetalleConsumoCapa::create([

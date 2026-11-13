@@ -4,6 +4,8 @@ import { Link, router, useForm } from '@inertiajs/vue3'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, Package, ScanBarcode, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
+import ElegirSeries from '@/Components/Pos/ElegirSeries.vue'
+import SeriesDeLinea from '@/Components/Pos/SeriesDeLinea.vue'
 import { puedeEscanear } from '@/composables/escaner'
 
 const props = defineProps({
@@ -61,14 +63,50 @@ const escanerAbierto = ref(false)
 function leerCodigoCamara(codigo) {
     const encontrado = buscarPorCodigo(codigo)
     if (!encontrado) return { ok: false, mensaje: `Código ${codigo} no está registrado en tus productos.` }
+    // con serie / IMEI se eligen las unidades en la lista, no se suman con la cámara
+    if (encontrado.producto.controla_serie) {
+        agregar(encontrado.producto)
+        return { ok: false, mensaje: `"${encontrado.producto.nombre}" viaja por serie / IMEI: cierra la cámara y elige las unidades.` }
+    }
     const fila = agregar(encontrado.producto, encontrado.unidades)
     const aviso = excedeStock(fila) ? ` (solo hay ${cantidad(fila.producto.stock)} disp.)` : ''
     return { ok: !aviso, mensaje: `${encontrado.producto.nombre} · ${cantidad(fila.cantidad)} a transferir${aviso}` }
 }
 
-const filas = ref([]) // { producto, cantidad }
+const filas = ref([]) // { producto, cantidad, series? }
+
+// ---- productos con serie / IMEI: se eligen las unidades que viajan y la cantidad son las elegidas ----
+const seriesDe = ref(null) // producto cuyas unidades se están eligiendo
+const filaDeSeries = computed(() => (seriesDe.value ? filas.value.find((f) => f.producto.id === seriesDe.value.id) : null))
+// unidades disponibles en la sucursal de origen (las mismas que lista el kardex)
+const fuenteSeries = computed(() => (seriesDe.value
+    ? `/stock/${seriesDe.value.id}/kardex${form.sucursal_origen_id ? `?sucursal_id=${form.sucursal_origen_id}` : ''}`
+    : ''))
+const faltaSerie = (fila) => !!fila.producto.controla_serie && (!(fila.series?.length > 0) || fila.series.length !== Number(fila.cantidad))
+
+function confirmarSeries(series) {
+    const producto = seriesDe.value
+    seriesDe.value = null
+    const indice = filas.value.findIndex((f) => f.producto.id === producto.id)
+    if (!series.length) {
+        if (indice >= 0) filas.value.splice(indice, 1)
+        return
+    }
+    if (indice >= 0) {
+        filas.value[indice].series = series
+        filas.value[indice].cantidad = series.length
+    } else {
+        filas.value.push({ producto, cantidad: series.length, series })
+    }
+}
 
 function agregar(producto, unidades = 1) {
+    if (producto.controla_serie) {
+        buscarProducto.value = ''
+        seriesDe.value = producto
+        return filas.value.find((f) => f.producto.id === producto.id) ?? { producto, cantidad: 0, series: [] }
+    }
+
     let fila = filas.value.find((f) => f.producto.id === producto.id)
     if (fila) {
         fila.cantidad = Number(fila.cantidad) + unidades
@@ -87,13 +125,15 @@ function excedeStock(fila) {
 const puedeEnviar = computed(() =>
     filas.value.length > 0 &&
     form.sucursal_destino_id &&
-    filas.value.every((f) => Number(f.cantidad) > 0 && !excedeStock(f)),
+    filas.value.every((f) => Number(f.cantidad) > 0 && !excedeStock(f) && !faltaSerie(f)),
 )
 
 function enviar() {
     form.items = filas.value.map((f) => ({
         producto_id: f.producto.id,
         cantidad: Number(f.cantidad),
+        // solo en productos con serie / IMEI: el id de cada unidad que viaja
+        ...(f.producto.controla_serie ? { series: (f.series ?? []).map((s) => s.id) } : {}),
     }))
 
     form.transform((data) => ({
@@ -233,7 +273,8 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         <div
                             v-for="(fila, i) in filas"
                             :key="fila.producto.id"
-                            class="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 dark:bg-neutral-950"
+                            class="flex flex-wrap items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 dark:bg-neutral-950"
+                            :data-fila-con-serie="fila.producto.controla_serie || undefined"
                         >
                             <div class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-white text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500">
                                 <img v-if="fila.producto.imagen_url" :src="fila.producto.imagen_url" :alt="fila.producto.nombre" class="size-full bg-white object-contain" />
@@ -242,15 +283,18 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-sm font-medium">{{ fila.producto.nombre }}</p>
                                 <p class="text-xs" :class="excedeStock(fila) ? 'font-medium text-red-600 dark:text-red-400' : 'text-neutral-500 dark:text-neutral-400'">
-                                    {{ cantidad(fila.producto.stock) }} disponibles en {{ origen?.nombre }}
+                                    {{ cantidad(fila.producto.stock) }} {{ Number(fila.producto.stock) === 1 ? 'disponible' : 'disponibles' }} en {{ origen?.nombre }}
                                 </p>
                             </div>
+                            <!-- con serie / IMEI la cantidad son las unidades elegidas: no se escribe -->
                             <input
                                 v-model="fila.cantidad"
                                 type="number"
                                 :step="fila.producto.permite_fraccion ? '0.001' : '1'"
                                 min="0"
-                                class="h-9 w-24 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900"
+                                :disabled="!!fila.producto.controla_serie"
+                                :title="fila.producto.controla_serie ? 'Viaja por serie / IMEI: la cantidad son las unidades elegidas' : undefined"
+                                class="h-9 w-24 rounded-lg border border-stone-200 bg-white text-center text-sm focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:disabled:bg-neutral-800"
                                 :class="excedeStock(fila) ? 'border-red-400 dark:border-red-600' : ''"
                             />
                             <button
@@ -260,6 +304,15 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             >
                                 <Trash2 class="size-4" />
                             </button>
+                            <!-- unidades que viajan (productos que controlan serie / IMEI) -->
+                            <SeriesDeLinea
+                                v-if="fila.producto.controla_serie"
+                                class="w-full sm:pl-[3.25rem]"
+                                :series="fila.series ?? []"
+                                :cantidad="Number(fila.cantidad)"
+                                texto-falta="Falta elegir las unidades que envías."
+                                @elegir="seriesDe = fila.producto"
+                            />
                         </div>
                     </div>
                     <p v-else class="mt-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
@@ -280,5 +333,18 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                 </div>
             </template>
         </div>
+
+        <!-- Elegir las unidades con serie / IMEI que viajan (las disponibles en el origen) -->
+        <ElegirSeries
+            v-if="seriesDe"
+            :key="seriesDe.id"
+            :producto="seriesDe"
+            :elegidas="filaDeSeries?.series ?? []"
+            :fuente="fuenteSeries"
+            titulo="Elige las unidades que envías"
+            texto-quitar="Quitar de la transferencia"
+            @confirmar="confirmarSeries"
+            @cerrar="seriesDe = null"
+        />
     </AppLayout>
 </template>

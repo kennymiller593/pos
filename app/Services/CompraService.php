@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class CompraService
 {
-    public function __construct(private readonly InventarioService $inventario) {}
+    public function __construct(private readonly InventarioService $inventario, private readonly SerieService $series) {}
 
     /**
      * Anula una compra mal registrada: retira sus capas de costo y su stock y
@@ -72,6 +72,9 @@ class CompraService
 
                 $cantidad = (float) $capa->cantidad_inicial;
                 $costo = (float) $capa->costo_unitario;
+
+                // equipos con serie / IMEI: todas las unidades de esta compra deben seguir aquí; salen con ella
+                $this->series->anularCompra($detalle->id, $producto, $compra->sucursal_id, $cantidad, $compra->id, $usuario);
 
                 $capa->delete();
                 $this->inventario->descontarStock($producto->id, $compra->sucursal_id, $cantidad);

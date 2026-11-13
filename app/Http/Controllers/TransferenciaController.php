@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exceptions\ErrorDeNegocio;
 use App\Models\Producto;
+use App\Models\SerieMovimiento;
 use App\Models\Sucursal;
 use App\Models\Transferencia;
 use App\Services\BusquedaProductos;
@@ -62,6 +63,27 @@ class TransferenciaController extends Controller
             }
         }
 
+        // series / IMEI que viajan en cada transferencia (quedan en el movimiento de salida de cada unidad)
+        $seriesEnviadas = SerieMovimiento::query()
+            ->join('producto_series', 'producto_series.id', '=', 'serie_movimientos.serie_id')
+            ->whereIn('serie_movimientos.referencia_id', $transferencias->getCollection()->pluck('id'))
+            ->where('serie_movimientos.tipo', 'transferencia_salida')
+            ->orderBy('producto_series.numero_serie')
+            ->toBase()
+            ->get(['serie_movimientos.referencia_id', 'producto_series.producto_id', 'producto_series.numero_serie'])
+            ->groupBy(fn ($s) => "{$s->referencia_id}|{$s->producto_id}");
+        foreach ($transferencias as $transferencia) {
+            // el mismo producto puede salir en dos filas (capas de lotes distintos): sus series se muestran una sola vez
+            $mostrados = [];
+            foreach ($transferencia->detalles as $detalle) {
+                $yaMostrado = isset($mostrados[$detalle->producto_id]);
+                $mostrados[$detalle->producto_id] = true;
+                $detalle->setAttribute('series', $yaMostrado
+                    ? []
+                    : ($seriesEnviadas->get("{$transferencia->id}|{$detalle->producto_id}") ?? collect())->pluck('numero_serie')->unique()->values());
+            }
+        }
+
         return Inertia::render('Transferencias/Index', [
             'transferencias' => $transferencias,
             'filtros' => $buscar !== '' ? ['buscar' => $buscar] : (object) [],
@@ -82,7 +104,7 @@ class TransferenciaController extends Controller
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->whereNotNull('codigo_barras')->where('codigo_barras', '!=', '')
                 ->select('id', 'producto_id', 'codigo_barras', 'factor_conversion')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'imagen_url']);
+            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'controla_serie', 'imagen_url']);
 
         return Inertia::render('Transferencias/Crear', [
             'origen' => Sucursal::find($origenId)?->only('id', 'nombre'),
@@ -99,6 +121,8 @@ class TransferenciaController extends Controller
                 'nombre' => $p->nombre,
                 'codigo_interno' => $p->codigo_interno,
                 'permite_fraccion' => $p->permite_fraccion,
+                // viaja cada unidad con su serie / IMEI: se eligen al agregar el producto
+                'controla_serie' => (bool) $p->controla_serie,
                 'imagen_url' => $p->imagen_url,
                 'stock' => (float) ($p->stock ?? 0),
                 'codigos' => $p->presentaciones->map(fn ($pres) => [
@@ -117,6 +141,9 @@ class TransferenciaController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.producto_id' => ['required', 'uuid'],
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
+            // productos con serie / IMEI: el id de cada unidad que viaja
+            'items.*.series' => ['nullable', 'array', 'max:500'],
+            'items.*.series.*' => ['required', 'uuid'],
         ], [
             'sucursal_destino_id.required' => 'Elige la sucursal de destino.',
             'items.required' => 'Agrega al menos un producto.',

@@ -13,12 +13,14 @@ use App\Models\MedioPago;
 use App\Models\MovimientoPuntos;
 use App\Models\Pedido;
 use App\Models\Producto;
+use App\Models\ProductoSerie;
 use App\Models\TipoDocumentoIdentidad;
 use App\Services\CajaService;
 use App\Services\CobroQrService;
 use App\Services\CotizacionService;
 use App\Services\PedidoService;
 use App\Services\PuntosService;
+use App\Services\SerieService;
 use App\Services\VentaService;
 use App\Support\ContextoSucursal;
 use App\Support\DocumentoIdentidad;
@@ -27,6 +29,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -58,9 +61,20 @@ class PosController extends Controller
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->withSum(['stock as stock' => fn ($q) => $q->where('sucursal_id', $sucursalId)], 'cantidad')
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'categoria_id', 'controla_stock', 'permite_fraccion', 'imagen_url'])
+            ->get(['id', 'nombre', 'codigo_interno', 'categoria_id', 'controla_stock', 'controla_serie', 'permite_fraccion', 'imagen_url'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
+
+        // productos con serie / IMEI: lo vendible son las unidades con serie disponibles en esta sucursal (una unidad
+        // en stock sin número no se puede vender). Una sola consulta agrupada, y solo si hay productos con serie
+        $conSerie = $productos->where('controla_serie', true)->pluck('id');
+        $vendibles = $conSerie->isEmpty() ? collect() : ProductoSerie::query()
+            ->whereIn('producto_id', $conSerie)
+            ->where('sucursal_id', $sucursalId)
+            ->where('estado', 'disponible')
+            ->selectRaw('producto_id, count(*) as total')
+            ->groupBy('producto_id')
+            ->toBase()->pluck('total', 'producto_id');
 
         return Inertia::render('Pos/Index', [
             'apertura' => ['id' => $apertura->id, 'caja' => $apertura->caja->nombre],
@@ -71,9 +85,11 @@ class PosController extends Controller
                 'codigo_interno' => $p->codigo_interno,
                 'categoria_id' => $p->categoria_id,
                 'controla_stock' => $p->controla_stock,
+                // se vende eligiendo la unidad (serie / IMEI); las unidades se piden aparte a /pos/series
+                'controla_serie' => (bool) $p->controla_serie,
                 'permite_fraccion' => $p->permite_fraccion,
                 'imagen_url' => $p->imagen_url,
-                'stock' => (float) ($p->stock ?? 0),
+                'stock' => $p->controla_serie ? (float) min((float) ($p->stock ?? 0), (int) ($vendibles[$p->id] ?? 0)) : (float) ($p->stock ?? 0),
                 'presentaciones' => $p->presentaciones->map(fn ($pres) => [
                     'id' => $pres->id,
                     'nombre' => $pres->nombre,
@@ -226,6 +242,70 @@ class PosController extends Controller
         );
     }
 
+    /**
+     * Unidades con serie / IMEI para el POS, siempre de la sucursal de la caja abierta:
+     *  - ?producto_id=...[&buscar=...]: las disponibles de ese producto, para elegir en el modal.
+     *  - ?numero=...: la unidad de una serie escaneada o escrita (serie exacta o segundo IMEI), con su producto.
+     */
+    public function series(Request $request, SerieService $series): JsonResponse
+    {
+        // parámetros de texto simples: un ?numero[]=x responde 422 en vez de romper
+        $request->validate([
+            'numero' => ['nullable', 'string', 'max:'.SerieService::MAX_LARGO],
+            'producto_id' => ['nullable', 'uuid'],
+            'buscar' => ['nullable', 'string', 'max:'.SerieService::MAX_LARGO],
+        ]);
+
+        $usuario = $request->user();
+        $apertura = $this->caja->aperturaDe($usuario);
+
+        if (! $apertura) {
+            return response()->json(['series' => [], 'encontradas' => [], 'aviso' => 'Necesitas abrir caja antes de vender.']);
+        }
+
+        $sucursalId = $apertura->caja->sucursal_id;
+        $forma = fn (ProductoSerie $s) => ['id' => $s->id, 'producto_id' => $s->producto_id, 'numero_serie' => $s->numero_serie, 'serie_alterna' => $s->serie_alterna];
+
+        $numero = trim((string) $request->query('numero'));
+        if ($numero !== '') {
+            $halladas = $series->buscar($usuario->empresa_id, mb_substr($numero, 0, SerieService::MAX_LARGO));
+            $vendibles = $halladas->filter(fn (ProductoSerie $s) => $s->estado === 'disponible' && $s->sucursal_id === $sucursalId)->values();
+
+            $aviso = null;
+            if ($vendibles->isEmpty() && ($otra = $halladas->first())) {
+                $aviso = match (true) {
+                    $otra->estado === 'vendida' => "La serie {$otra->numero_serie} ya está vendida.",
+                    $otra->estado === 'baja' => "La serie {$otra->numero_serie} está dada de baja.",
+                    $otra->estado === 'en_transito' => "La serie {$otra->numero_serie} está en tránsito entre sucursales.",
+                    default => "La serie {$otra->numero_serie} está en otra sucursal (".($otra->sucursal?->nombre ?? 'otra').').',
+                };
+            }
+
+            // el nombre del producto de cada una: si la misma serie existe en dos productos, el POS deja elegir
+            $nombres = Producto::withTrashed()->whereIn('id', $vendibles->pluck('producto_id'))->pluck('nombre', 'id');
+
+            return response()->json([
+                'encontradas' => $vendibles->map(fn (ProductoSerie $s) => [...$forma($s), 'producto' => $nombres[$s->producto_id] ?? null]),
+                'aviso' => $aviso,
+                'existe' => $halladas->isNotEmpty(),
+            ]);
+        }
+
+        $productoId = (string) $request->query('producto_id');
+        $producto = Str::isUuid($productoId)
+            ? Producto::where('empresa_id', $usuario->empresa_id)->find($productoId)
+            : null;
+
+        if (! $producto) {
+            return response()->json(['series' => []]);
+        }
+
+        return response()->json([
+            'series' => ($lista = $series->disponibles($producto->id, $sucursalId, (string) $request->query('buscar')))->map($forma),
+            'series_truncadas' => $lista->count() >= SerieService::LIMITE_LISTA,
+        ]);
+    }
+
     /** Creación rápida de cliente desde el POS (responde JSON). */
     public function crearCliente(Request $request): JsonResponse
     {
@@ -314,6 +394,9 @@ class PosController extends Controller
             'items.*.cantidad' => ['required', 'numeric', 'gt:0'],
             'items.*.descuento' => ['nullable', 'numeric', 'min:0'],
             'items.*.precio_unitario' => ['nullable', 'numeric', 'gt:0'],
+            // productos que controlan serie / IMEI: el id de cada unidad que se entrega
+            'items.*.series' => ['nullable', 'array', 'max:'.SerieService::MAX_POR_LINEA_VENTA],
+            'items.*.series.*' => ['required', 'uuid'],
             'pagos' => [$esCredito || $entregaPedido ? 'nullable' : 'required', 'array'],
             'pagos.*.medio_pago_codigo' => ['required', Rule::exists('medios_pago', 'codigo')->whereNotIn('codigo', MedioPago::INTERNOS)],
             'pagos.*.monto' => ['required', 'numeric', 'gt:0'],
@@ -327,6 +410,7 @@ class PosController extends Controller
             'canal_venta' => ['nullable', Rule::in(['tienda', 'online'])],
         ], [
             'items.required' => 'El carrito está vacío.',
+            'items.*.series.max' => 'Máximo '.SerieService::MAX_POR_LINEA_VENTA.' equipos con serie por línea; agrega otra línea o haz otra venta.',
             'pagos.required' => 'Indica cómo se pagó la venta.',
             'cliente_id.required' => 'La venta al crédito necesita un cliente.',
             'abono.monto.required_with' => 'El monto a cuenta debe ser mayor a 0.',

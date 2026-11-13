@@ -18,6 +18,9 @@ class Empresa extends Model
     /** Rubros que al registrarse arrancan con el módulo de variantes encendido (se puede apagar en Configuración → Empresa). */
     public const RUBROS_CON_VARIANTES = ['ropa', 'celulares'];
 
+    /** Rubros que al registrarse arrancan con el módulo de series / IMEI encendido (se puede apagar en Configuración → Empresa). */
+    public const RUBROS_CON_SERIES = ['celulares'];
+
     protected $table = 'empresas';
 
     public const CREATED_AT = 'creado_en';
@@ -40,6 +43,7 @@ class Empresa extends Model
         'puntos_minimo_canje',
         'mezclas_activo',
         'variantes_activo',
+        'series_activo',
         'canal_venta_activo',
         'tienda_slug',
         'tienda_publicada',
@@ -85,6 +89,7 @@ class Empresa extends Model
             'puntos_minimo_canje' => 'integer',
             'mezclas_activo' => 'boolean',
             'variantes_activo' => 'boolean',
+            'series_activo' => 'boolean',
             'canal_venta_activo' => 'boolean',
             'tienda_publicada' => 'boolean',
             // adicional de pago: solo lo cambia la plataforma (no es fillable a proposito)

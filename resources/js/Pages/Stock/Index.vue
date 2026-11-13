@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Link, router, useForm } from '@inertiajs/vue3'
+import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
 import {
     AlertTriangle,
@@ -15,6 +15,7 @@ import {
     X,
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import CapturaSeries from '@/Components/Series/CapturaSeries.vue'
 import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
@@ -26,6 +27,7 @@ const props = defineProps({
     sucursales: { type: Array, default: () => [] },
 })
 const comparado = computed(() => props.sucursales.length > 1)
+const page = usePage()
 
 const { puede } = usePermisos()
 // sin permiso de costos el backend manda valor_total = null (y valor_inventario = null por producto)
@@ -78,7 +80,7 @@ watch([soloBajos, soloPorVencer], aplicarFiltros)
 
 // ---- kardex ----
 const kardexProducto = ref(null)
-const kardexDatos = ref({ lotes: [], movimientos: [] })
+const kardexDatos = ref({ lotes: [], series: [], sin_serie: 0, movimientos: [] })
 const cargandoKardex = ref(false)
 
 // viendo varias sucursales, el kardex es de una: se elige en el modal
@@ -86,12 +88,12 @@ const kardexSucursal = ref(props.sucursales[0]?.id ?? '')
 
 async function verKardex(producto) {
     kardexProducto.value = producto
-    kardexDatos.value = { lotes: [], movimientos: [] }
+    kardexDatos.value = { lotes: [], series: [], sin_serie: 0, movimientos: [] }
     cargandoKardex.value = true
     try {
         const consulta = comparado.value ? `?sucursal_id=${kardexSucursal.value}` : ''
         const r = await fetch(`/stock/${producto.id}/kardex${consulta}`, { headers: { Accept: 'application/json' } })
-        if (r.ok) kardexDatos.value = await r.json()
+        if (r.ok) kardexDatos.value = { series: [], sin_serie: 0, ...(await r.json()) }
     } finally {
         cargandoKardex.value = false
     }
@@ -135,22 +137,152 @@ function abrirAjuste(producto) {
     formAjuste.clearErrors()
     Object.assign(formAjuste, AJUSTE_VACIO)
     formAjuste.sucursal_id = comparado.value ? (formAjuste.sucursal_id || props.sucursales[0]?.id) : null
+    seriesEntrada.value = []
+    seriesSalida.value = []
+    buscarSerieBaja.value = ''
+    errorAjuste.value = ''
+    cargarSeriesAjuste()
 }
+// lo que respondió el servidor si rechazó el ajuste (el modal se queda abierto con lo escrito)
+const errorAjuste = ref('')
+
+// ---- ajuste de un producto que controla serie / IMEI ----
+// entrada: se registra la serie de cada unidad; salida: se eligen las unidades que se dan de baja
+const conSerie = computed(() => !!ajusteProducto.value?.controla_serie)
+const seriesEntrada = ref([]) // [{ numero, alterna }]
+const seriesSalida = ref([]) // ids elegidos
+const seriesDisponibles = ref([]) // unidades disponibles en la sucursal del ajuste
+const cargandoSeries = ref(false)
+const buscarSerieBaja = ref('')
+
+// unidades en stock SIN serie registrada en la sucursal del ajuste, y cuántas de ellas se retiran en esta salida
+const sinSerieAjuste = ref(0)
+const sinNumeroSalida = ref(0)
+
+async function cargarSeriesAjuste() {
+    seriesDisponibles.value = []
+    seriesSalida.value = []
+    sinSerieAjuste.value = 0
+    sinNumeroSalida.value = 0
+    if (!conSerie.value) return
+    cargandoSeries.value = true
+    try {
+        const consulta = comparado.value ? `?sucursal_id=${formAjuste.sucursal_id}` : ''
+        const r = await fetch(`/stock/${ajusteProducto.value.id}/kardex${consulta}`, { headers: { Accept: 'application/json' } })
+        if (r.ok) {
+            const datos = await r.json()
+            seriesDisponibles.value = datos.series ?? []
+            seriesTruncadas.value = !!datos.series_truncadas
+            sinSerieAjuste.value = Number(datos.sin_serie ?? 0)
+        }
+    } finally {
+        cargandoSeries.value = false
+    }
+}
+
+// ---- regularización: registrar la serie de unidades que ya están en stock sin número (no mueve stock) ----
+const regularizar = ref(null) // { producto, sucursalId, maximo }
+const seriesRegularizar = ref([])
+const errorRegularizar = ref('')
+const guardandoRegularizar = ref(false)
+
+function abrirRegularizar(producto, sucursalId, maximo) {
+    regularizar.value = { producto, sucursalId: sucursalId || null, maximo: Number(maximo) }
+    seriesRegularizar.value = []
+    errorRegularizar.value = ''
+}
+
+function guardarRegularizar() {
+    if (!seriesRegularizar.value.length || guardandoRegularizar.value) return
+    guardandoRegularizar.value = true
+    errorRegularizar.value = ''
+    router.post(`/stock/${regularizar.value.producto.id}/regularizar-series`, {
+        sucursal_id: regularizar.value.sucursalId,
+        series: seriesRegularizar.value.map((s) => s.numero),
+        series_alternas: seriesRegularizar.value.map((s) => s.alterna || null),
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            // el servidor responde con un aviso de error sin fallar la petición: lo escrito no se pierde
+            if (page.props.flash?.error) {
+                errorRegularizar.value = page.props.flash.error
+                return
+            }
+            regularizar.value = null
+            if (kardexProducto.value) verKardex(kardexProducto.value)
+            if (ajusteProducto.value) cargarSeriesAjuste()
+        },
+        onError: (errores) => (errorRegularizar.value = Object.values(errores)[0] ?? 'Revisa las series.'),
+        onFinish: () => (guardandoRegularizar.value = false),
+    })
+}
+
+// hay más unidades de las que se listan: lo escrito en el buscador se busca en el servidor
+const seriesTruncadas = ref(false)
+watchDebounced(buscarSerieBaja, async (valor) => {
+    if (!seriesTruncadas.value || !ajusteProducto.value || !conSerie.value) return
+    const partes = [`buscar_serie=${encodeURIComponent(valor.replace(/\s+/g, '').toUpperCase())}`]
+    if (comparado.value) partes.push(`sucursal_id=${formAjuste.sucursal_id}`)
+    try {
+        const r = await fetch(`/stock/${ajusteProducto.value.id}/kardex?${partes.join('&')}`, { headers: { Accept: 'application/json' } })
+        if (r.ok) seriesDisponibles.value = (await r.json()).series ?? []
+    } catch { /* se queda la lista que había */ }
+}, { debounce: 300 })
+
+// error de validación del servidor sobre las series del ajuste (series.N, series_alternas.N o serie_ids.N)
+const errorSeriesAjuste = computed(() => Object.entries(formAjuste.errors).find(([campo]) => campo.startsWith('series') || campo.startsWith('serie_ids'))?.[1] ?? '')
+
+const seriesBajaFiltradas = computed(() => {
+    const texto = buscarSerieBaja.value.replace(/\s+/g, '').toUpperCase()
+    return texto
+        ? seriesDisponibles.value.filter((s) => s.numero_serie.includes(texto) || (s.serie_alterna ?? '').includes(texto))
+        : seriesDisponibles.value
+})
+
+function alternarSerieBaja(id) {
+    seriesSalida.value = seriesSalida.value.includes(id) ? seriesSalida.value.filter((x) => x !== id) : [...seriesSalida.value, id]
+}
+
+// en la salida la cantidad es lo elegido; en la entrada, las series deben completar la cantidad
+const unidadesAjuste = computed(() => Math.max(0, Math.round(Number(formAjuste.cantidad || 0))))
+const faltaSerieAjuste = computed(() => {
+    if (!conSerie.value) return ''
+    if (formAjuste.direccion === 'salida') return seriesSalida.value.length + sinNumeroSalida.value > 0 ? '' : 'Elige las unidades que salen.'
+    if (!unidadesAjuste.value) return ''
+    return seriesEntrada.value.length === unidadesAjuste.value ? '' : `Registra las series: van ${seriesEntrada.value.length} de ${unidadesAjuste.value}.`
+})
 // stock actual del producto en la sucursal del ajuste
 const stockActualAjuste = computed(() => (comparado.value
     ? (ajusteProducto.value?.por_sucursal?.[formAjuste.sucursal_id] ?? 0)
     : (ajusteProducto.value?.stock ?? 0)))
 
 function guardarAjuste() {
+    const entrada = formAjuste.direccion === 'entrada'
+    // solo en productos que controlan serie: las series que entran o las unidades que se dan de baja
+    const series = conSerie.value
+        ? (entrada
+            ? { series: seriesEntrada.value.map((s) => s.numero), series_alternas: seriesEntrada.value.map((s) => s.alterna || null) }
+            : { serie_ids: seriesSalida.value, cantidad: seriesSalida.value.length + sinNumeroSalida.value })
+        : {}
+
     formAjuste.transform((data) => ({
         ...data,
+        ...series,
         costo_unitario: data.direccion === 'entrada' ? data.costo_unitario : null,
         numero_lote: data.direccion === 'entrada' ? (data.numero_lote.trim() || null) : null,
         fecha_vencimiento: data.direccion === 'entrada' ? (data.fecha_vencimiento || null) : null,
         motivo: data.motivo.trim() || null,
     })).post(`/stock/${ajusteProducto.value.id}/ajustar`, {
         preserveScroll: true,
-        onSuccess: () => (ajusteProducto.value = null),
+        onStart: () => (errorAjuste.value = ''),
+        // el modal solo se cierra si de verdad se guardó: si el servidor lo rechaza, se queda con lo escrito
+        onSuccess: () => {
+            if (page.props.flash?.error) {
+                errorAjuste.value = page.props.flash.error
+                return
+            }
+            ajusteProducto.value = null
+        },
     })
 }
 
@@ -265,6 +397,17 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                     <div>
                                         <p class="font-medium">{{ p.nombre }}</p>
                                         <p class="font-mono text-xs text-neutral-500 dark:text-neutral-400">{{ p.codigo_interno }}</p>
+                                        <button
+                                            v-if="p.sin_serie > 0"
+                                            type="button"
+                                            class="mt-1 inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-amber-800 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300"
+                                            title="Unidades en stock sin serie / IMEI registrada"
+                                            :data-sin-serie="p.sin_serie"
+                                            @click="verKardex(p)"
+                                        >
+                                            <AlertTriangle class="size-3" />
+                                            {{ p.sin_serie }} sin serie
+                                        </button>
                                     </div>
                                 </div>
                             </td>
@@ -392,6 +535,33 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             </ul>
                         </div>
 
+                        <!-- Unidades en stock sin serie registrada: se regularizan aquí -->
+                        <div v-if="kardexDatos.sin_serie > 0" class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-stone-200 bg-amber-50 px-6 py-3 dark:border-neutral-800 dark:bg-amber-950/30" data-aviso-sin-serie>
+                            <p class="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-200">
+                                <AlertTriangle class="mr-1 inline size-4 align-text-bottom" />
+                                {{ kardexDatos.sin_serie === 1 ? 'Hay 1 unidad sin serie registrada: no se puede vender hasta registrarla.' : `Hay ${kardexDatos.sin_serie} unidades sin serie registrada: no se pueden vender hasta registrarlas.` }}
+                            </p>
+                            <button
+                                v-if="puede('stock.ajustar')"
+                                type="button"
+                                class="h-9 shrink-0 rounded-xl bg-emerald-600 px-3.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                                data-regularizar-abrir
+                                @click="abrirRegularizar(kardexProducto, comparado ? kardexSucursal : null, kardexDatos.sin_serie)"
+                            >
+                                Registrar sus series
+                            </button>
+                        </div>
+
+                        <!-- Series / IMEI disponibles (productos que controlan serie) -->
+                        <div v-if="kardexDatos.series.length" class="border-b border-stone-200 px-6 py-4 dark:border-neutral-800" data-kardex-series>
+                            <p class="mb-2 text-xs font-semibold tracking-wider text-neutral-400 uppercase">Series / IMEI disponibles · {{ kardexDatos.series.length }}</p>
+                            <ul class="scroll-fino flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+                                <li v-for="s in kardexDatos.series" :key="s.id" class="rounded-lg border border-stone-200 px-2 py-1 font-mono text-xs dark:border-neutral-700" :title="s.serie_alterna ? `2.º IMEI: ${s.serie_alterna}` : undefined">
+                                    {{ s.numero_serie }}<span v-if="s.serie_alterna" class="text-neutral-400"> / {{ s.serie_alterna }}</span>
+                                </li>
+                            </ul>
+                        </div>
+
                         <p v-if="!kardexDatos.movimientos.length" class="px-6 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
                             Sin movimientos registrados.
                         </p>
@@ -439,7 +609,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
             <div v-if="ajusteProducto" class="fixed inset-0 z-50 grid place-items-center p-4">
                 <div class="fixed inset-0 bg-neutral-950/60" @click="ajusteProducto = null" />
                 <form
-                    class="relative w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    class="scroll-fino relative max-h-[calc(100dvh-2rem)] w-full overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 text-neutral-900 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    :class="conSerie ? 'max-w-md' : 'max-w-sm'"
+                    :data-ajuste-con-serie="conSerie || undefined"
                     @submit.prevent="guardarAjuste"
                 >
                     <div class="mb-4 flex items-start justify-between gap-3">
@@ -498,12 +670,53 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
                         <div v-if="comparado">
                             <label :class="claseLabel" for="aj_sucursal">Sucursal *</label>
-                            <select id="aj_sucursal" v-model="formAjuste.sucursal_id" :class="claseInput" data-ajuste-sucursal>
+                            <select id="aj_sucursal" v-model="formAjuste.sucursal_id" :class="claseInput" data-ajuste-sucursal @change="cargarSeriesAjuste">
                                 <option v-for="s in sucursales" :key="s.id" :value="s.id">{{ s.nombre }}</option>
                             </select>
                         </div>
 
-                        <div>
+                        <div v-if="conSerie && sinSerieAjuste > 0" class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-amber-50 px-3 py-2.5 dark:bg-amber-950/30" data-aviso-sin-serie>
+                            <p class="min-w-0 flex-1 text-xs text-amber-900 dark:text-amber-200">
+                                {{ sinSerieAjuste === 1 ? 'Hay 1 unidad sin serie registrada.' : `Hay ${sinSerieAjuste} unidades sin serie registrada.` }}
+                            </p>
+                            <button type="button" class="h-8 shrink-0 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700" data-regularizar-abrir @click="abrirRegularizar(ajusteProducto, comparado ? formAjuste.sucursal_id : null, sinSerieAjuste)">
+                                Registrar sus series
+                            </button>
+                        </div>
+
+                        <!-- salida de un producto con serie: se eligen las unidades y la cantidad sale sola -->
+                        <div v-if="conSerie && formAjuste.direccion === 'salida'" data-series-baja>
+                            <div class="mb-1 flex items-center justify-between gap-2">
+                                <span class="text-sm font-medium">Unidades que salen *</span>
+                                <span class="rounded-lg bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 tabular-nums dark:bg-red-950/60 dark:text-red-400" data-series-baja-contador>{{ seriesSalida.length }} elegida{{ seriesSalida.length === 1 ? '' : 's' }}</span>
+                            </div>
+                            <input v-if="seriesDisponibles.length > 6 || seriesTruncadas" v-model="buscarSerieBaja" type="text" autocomplete="off" placeholder="Buscar serie o IMEI..." :class="[claseInput, 'mb-2 font-mono placeholder:font-sans']" data-series-baja-buscar />
+                            <p v-if="cargandoSeries" class="rounded-xl bg-stone-50 px-3 py-4 text-center text-sm text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">Cargando unidades...</p>
+                            <p v-else-if="!seriesDisponibles.length" class="rounded-xl bg-stone-50 px-3 py-4 text-center text-sm text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">No hay unidades con serie disponibles en esta sucursal.</p>
+                            <ul v-else class="scroll-fino max-h-44 space-y-1 overflow-y-auto">
+                                <li v-for="s in seriesBajaFiltradas" :key="s.id">
+                                    <label class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-stone-200 px-3 py-2 text-sm transition-colors has-[:checked]:border-red-400 has-[:checked]:bg-red-50 dark:border-neutral-700 dark:has-[:checked]:border-red-700 dark:has-[:checked]:bg-red-950/30">
+                                        <input type="checkbox" class="size-4 rounded accent-red-600" :checked="seriesSalida.includes(s.id)" :data-serie-baja="s.numero_serie" @change="alternarSerieBaja(s.id)" />
+                                        <span class="min-w-0 truncate font-mono text-xs">{{ s.numero_serie }}<span v-if="s.serie_alterna" class="text-neutral-400"> / {{ s.serie_alterna }}</span></span>
+                                    </label>
+                                </li>
+                            </ul>
+
+                            <p v-if="seriesTruncadas" class="mt-1 text-xs text-neutral-400">Hay más unidades: escribe la serie en el buscador para encontrarla.</p>
+                            <p v-if="errorSeriesAjuste" :class="claseError" data-serie-error-servidor>{{ errorSeriesAjuste }}</p>
+
+                            <!-- unidades sin número: se pueden retirar sin elegir serie, hasta las que hay -->
+                            <div v-if="sinSerieAjuste > 0" class="mt-2 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/30" data-salida-sin-serie>
+                                <span class="min-w-0 text-xs text-amber-900 dark:text-amber-200">Retirar unidades <strong>sin serie</strong> (hay {{ sinSerieAjuste }})</span>
+                                <div class="flex h-9 shrink-0 items-center overflow-hidden rounded-xl border border-stone-300 bg-white dark:border-neutral-700 dark:bg-neutral-950">
+                                    <button type="button" class="grid h-full w-9 place-items-center text-neutral-500 hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-neutral-800" aria-label="Restar" :disabled="sinNumeroSalida <= 0" data-salida-sin-serie-menos @click="sinNumeroSalida--">−</button>
+                                    <span class="w-8 text-center text-sm font-semibold tabular-nums" data-salida-sin-serie-cantidad>{{ sinNumeroSalida }}</span>
+                                    <button type="button" class="grid h-full w-9 place-items-center text-neutral-500 hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-neutral-800" aria-label="Sumar" :disabled="sinNumeroSalida >= sinSerieAjuste" data-salida-sin-serie-mas @click="sinNumeroSalida++">+</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else>
                             <label :class="claseLabel" for="aj_cantidad">Cantidad (unidades base) *</label>
                             <input
                                 id="aj_cantidad"
@@ -544,6 +757,14 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                                 <input id="aj_vence" v-model="formAjuste.fecha_vencimiento" type="date" :class="claseInput" />
                             </div>
                         </div>
+                        <!-- entrada de un producto con serie: una serie por cada unidad -->
+                        <CapturaSeries
+                            v-if="conSerie && formAjuste.direccion === 'entrada'"
+                            v-model="seriesEntrada"
+                            :error="errorSeriesAjuste"
+                            :esperadas="unidadesAjuste"
+                            :producto="ajusteProducto.nombre"
+                        />
                         <p v-if="formAjuste.direccion === 'salida'" class="text-xs text-neutral-400 dark:text-neutral-500">
                             La salida consume las capas de costo más antiguas (FIFO), igual que una venta.
                         </p>
@@ -563,7 +784,9 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </div>
                     </div>
 
-                    <div class="mt-5 flex justify-end gap-2">
+                    <p v-if="errorAjuste" class="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300" data-ajuste-error>{{ errorAjuste }}</p>
+                    <p v-if="faltaSerieAjuste" class="mt-4 text-right text-xs font-medium text-amber-700 dark:text-amber-400" data-falta-serie>{{ faltaSerieAjuste }}</p>
+                    <div class="flex justify-end gap-2" :class="faltaSerieAjuste ? 'mt-2' : 'mt-5'">
                         <button
                             type="button"
                             class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
@@ -573,11 +796,52 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                         </button>
                         <button
                             type="submit"
-                            :disabled="formAjuste.processing"
+                            :disabled="formAjuste.processing || !!faltaSerieAjuste"
                             class="rounded-xl px-5 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                             :class="formAjuste.direccion === 'entrada' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'"
                         >
                             {{ formAjuste.processing ? 'Guardando...' : 'Registrar ajuste' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Teleport>
+
+        <!-- Modal: registrar la serie de unidades que ya están en stock (regularización) -->
+        <Teleport to="body">
+            <div v-if="regularizar" class="fixed inset-0 z-[52] flex items-end justify-center sm:items-center sm:p-4" data-regularizar-series>
+                <div class="fixed inset-0 bg-neutral-950/60" @click="regularizar = null" />
+                <form
+                    class="scroll-fino relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-stone-200 bg-white p-5 text-neutral-900 shadow-xl sm:max-w-md sm:rounded-2xl sm:p-6 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+                    @submit.prevent="guardarRegularizar"
+                >
+                    <div class="mb-3 flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold tracking-wider text-neutral-400 uppercase">Registrar series</p>
+                            <h3 class="text-base leading-snug font-bold tracking-tight">{{ regularizar.producto.nombre }}</h3>
+                        </div>
+                        <button type="button" class="-mt-1.5 -mr-1.5 rounded-lg p-1.5 text-neutral-400 hover:bg-stone-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200" aria-label="Cerrar" @click="regularizar = null">
+                            <X class="size-5" />
+                        </button>
+                    </div>
+                    <p class="mb-3 text-sm text-neutral-600 dark:text-neutral-300">
+                        {{ regularizar.maximo === 1 ? 'Hay 1 unidad en stock sin serie.' : `Hay ${regularizar.maximo} unidades en stock sin serie.` }}
+                        Escanea las que tengas a la mano; el stock y el costo no cambian.
+                    </p>
+
+                    <CapturaSeries v-model="seriesRegularizar" :esperadas="regularizar.maximo" opcional :producto="regularizar.producto.nombre" />
+
+                    <p v-if="errorRegularizar" class="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300" data-regularizar-error>{{ errorRegularizar }}</p>
+
+                    <div class="mt-4 flex justify-end gap-2">
+                        <button type="button" class="rounded-xl border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="regularizar = null">Cancelar</button>
+                        <button
+                            type="submit"
+                            :disabled="!seriesRegularizar.length || guardandoRegularizar"
+                            class="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            data-regularizar-guardar
+                        >
+                            {{ guardandoRegularizar ? 'Guardando...' : `Registrar ${seriesRegularizar.length || ''} ${seriesRegularizar.length === 1 ? 'serie' : 'series'}` }}
                         </button>
                     </div>
                 </form>

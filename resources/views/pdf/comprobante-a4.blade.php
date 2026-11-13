@@ -147,7 +147,7 @@
                     <tr>
                         <td class="centrado">{{ rtrim(rtrim(number_format($detalle->cantidad, 3), '0'), '.') }}</td>
                         <td class="centrado">{{ trim((string) $detalle->unidad_codigo) ?: 'NIU' }}</td>
-                        <td>{{ $detalle->descripcion }}</td>
+                        <td>{{ $detalle->descripcion }}@if ($detalle->textoSeries() !== '')<div style="word-break: break-all;">{{ $detalle->textoSeries() }}</div>@endif</td>
                         <td class="num">{{ number_format($detalle->precio_unitario, 2) }}</td>
                         <td class="num">{{ (float) $detalle->descuento > 0 ? number_format($detalle->descuento, 2) : '—' }}</td>
                         <td class="num">{{ number_format($detalle->total, 2) }}</td>

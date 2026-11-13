@@ -327,6 +327,14 @@ function convertir() {
 const comprobanteNota = ref(null)
 const formNota = useForm({ motivo: '06', items: [], medio_pago_codigo: 'efectivo', referencia: '' })
 const cantidadesNota = ref({}) // detalle_id -> cantidad a devolver
+// equipos con serie / IMEI: detalle_id -> ids de las unidades que vuelven (la cantidad son las elegidas)
+const seriesNota = ref({})
+const conSeriesNota = (d) => (d.series_vendidas?.length ?? 0) > 0
+function alternarSerieNota(d, serieId) {
+    const elegidas = seriesNota.value[d.id] ?? []
+    seriesNota.value[d.id] = elegidas.includes(serieId) ? elegidas.filter((x) => x !== serieId) : [...elegidas, serieId]
+    cantidadesNota.value[d.id] = seriesNota.value[d.id].length || ''
+}
 
 const puedeNotaCredito = (c) =>
     puede('comprobantes.nota_credito') && esElectronico(c) && c.estado === 'emitido' && ['aceptado', 'observado'].includes(c.sunat?.estado)
@@ -345,6 +353,7 @@ function abrirNotaCredito(c) {
     formNota.referencia = ''
     formNota.medio_pago_codigo = medioPagoPorDefecto(c)
     cantidadesNota.value = Object.fromEntries(c.detalles.map((d) => [d.id, '']))
+    seriesNota.value = {}
 }
 
 const totalNota = computed(() => {
@@ -362,7 +371,11 @@ function emitirNota() {
     formNota.items = formNota.motivo === '07'
         ? Object.entries(cantidadesNota.value)
             .filter(([, cant]) => Number(cant) > 0)
-            .map(([detalle_id, cantidad]) => ({ detalle_id, cantidad: Number(cantidad) }))
+            .map(([detalle_id, cantidad]) => ({
+                detalle_id,
+                cantidad: Number(cantidad),
+                ...(seriesNota.value[detalle_id]?.length ? { series: seriesNota.value[detalle_id] } : {}),
+            }))
         : []
 
     formNota.post(`/comprobantes/${comprobanteNota.value.id}/nota-credito`, {
@@ -906,15 +919,31 @@ const claseInput =
                             <div
                                 v-for="d in comprobanteNota.detalles"
                                 :key="d.id"
-                                class="flex items-center justify-between gap-3 rounded-xl border border-stone-200 px-3 py-2 text-sm dark:border-neutral-800"
+                                class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-stone-200 px-3 py-2 text-sm dark:border-neutral-800"
                             >
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex-1">
                                     <p class="truncate">{{ d.descripcion }}</p>
                                     <p class="text-xs text-neutral-500 dark:text-neutral-400">
                                         Vendido: {{ Number(d.cantidad) }} × S/ {{ Number(d.precio_unitario).toFixed(2) }}
                                     </p>
                                 </div>
+                                <!-- equipo con serie / IMEI: se elige qué unidad vuelve y la cantidad sale sola -->
+                                <template v-if="conSeriesNota(d)">
+                                    <span class="shrink-0 rounded-lg bg-stone-100 px-2 py-1 text-xs font-semibold tabular-nums dark:bg-neutral-800" data-nc-series-contador>{{ (seriesNota[d.id] ?? []).length }} de {{ d.series_vendidas.length }}</span>
+                                    <div class="flex w-full flex-wrap gap-1.5" data-nc-series>
+                                        <label
+                                            v-for="s in d.series_vendidas"
+                                            :key="s.id"
+                                            class="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-stone-200 px-2.5 py-1 font-mono text-xs transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50 dark:border-neutral-700 dark:has-[:checked]:border-emerald-600 dark:has-[:checked]:bg-emerald-950/30"
+                                            :title="s.serie_alterna ? `2.º IMEI: ${s.serie_alterna}` : undefined"
+                                        >
+                                            <input type="checkbox" class="size-4 rounded accent-emerald-600" :checked="(seriesNota[d.id] ?? []).includes(s.id)" :data-nc-serie="s.numero_serie" @change="alternarSerieNota(d, s.id)" />
+                                            {{ s.numero_serie }}
+                                        </label>
+                                    </div>
+                                </template>
                                 <input
+                                    v-else
                                     v-model="cantidadesNota[d.id]"
                                     type="number"
                                     min="0"

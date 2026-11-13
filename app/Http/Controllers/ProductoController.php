@@ -266,6 +266,8 @@ class ProductoController extends Controller
             unset($datos['codigo_interno']);
         }
         $datos['stock_minimo'] = $datos['stock_minimo'] ?? 0;
+        // serie / IMEI: sin el módulo activo el campo no se toca (el producto conserva lo que tenía)
+        $datos['controla_serie'] = $request->controlaSerie();
 
         // el Nuevo RUS no discrimina IGV: lo gravado se guarda como exonerado
         if ($request->user()->empresa->esRus() && ($datos['tipo_afectacion_codigo'] ?? null) === '10') {

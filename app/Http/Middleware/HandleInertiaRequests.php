@@ -95,6 +95,8 @@ class HandleInertiaRequests extends Middleware
                             'mezclas_activo' => (bool) $usuario->empresa->mezclas_activo,
                             // módulo opcional: productos con variantes (modelos con talla, color...)
                             'variantes_activo' => (bool) $usuario->empresa->variantes_activo,
+                            // módulo opcional: productos con serie / IMEI por unidad
+                            'series_activo' => (bool) $usuario->empresa->series_activo,
                             // opción: el POS pregunta si la venta fue en tienda u online
                             'canal_venta_activo' => (bool) $usuario->empresa->canal_venta_activo,
                         ],

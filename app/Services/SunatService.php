@@ -186,6 +186,8 @@ class SunatService
     /** @return SaleDetail[] */
     private function detallesUbl(Comprobante $comprobante): array
     {
+        $comprobante->loadMissing('detalles.series');
+
         return $comprobante->detalles->map(function ($d) {
             $cantidad = (float) $d->cantidad;
             $igv = (float) $d->igv;
@@ -197,7 +199,8 @@ class SunatService
             // del XML cierre exacta aunque la linea tenga descuento
             return (new SaleDetail)
                 ->setUnidad(trim((string) $d->unidad_codigo) ?: 'NIU')
-                ->setDescripcion($d->descripcion)
+                // con las series / IMEI de las unidades vendidas, sin pasar de 500 caracteres ni cortar una serie a la mitad
+                ->setDescripcion($d->descripcionParaXml(500))
                 ->setCantidad($cantidad)
                 ->setMtoValorUnitario($cantidad > 0 ? round($valorVenta / $cantidad, 10) : 0.0)
                 ->setMtoValorVenta($valorVenta)

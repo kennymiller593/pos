@@ -12,13 +12,13 @@ use Illuminate\Support\Facades\DB;
 
 class TransferenciaService
 {
-    public function __construct(private readonly InventarioService $inventario) {}
+    public function __construct(private readonly InventarioService $inventario, private readonly SerieService $series) {}
 
     /**
      * Envía mercadería: consume FIFO en el origen, descuenta stock y deja la
      * transferencia "en tránsito". El costo viaja en el kardex de salida.
      *
-     * $datos: sucursal_destino_id, observacion?, items[{producto_id, cantidad}]
+     * $datos: sucursal_destino_id, observacion?, items[{producto_id, cantidad, series?[ids de las unidades, solo productos con serie]}]
      *
      * @throws ErrorDeNegocio
      */
@@ -44,6 +44,11 @@ class TransferenciaService
             ->groupBy('producto_id')
             ->map(fn ($items) => round($items->sum('cantidad'), 3));
 
+        // productos con serie / IMEI: las unidades elegidas, también consolidadas por producto
+        $seriesPorProducto = collect($datos['items'])
+            ->groupBy('producto_id')
+            ->map(fn ($items) => $items->flatMap(fn ($i) => array_map('strtolower', array_filter((array) ($i['series'] ?? []), 'is_string')))->unique()->values()->all());
+
         $productos = Producto::query()
             ->where('empresa_id', $empresaId)
             ->whereIn('id', $cantidades->keys())
@@ -61,6 +66,14 @@ class TransferenciaService
                 throw new ErrorDeNegocio("\"{$producto->nombre}\" no controla stock: no se puede transferir.");
             }
 
+            // con serie / IMEI viaja cada unidad con su número: tantas series como unidades
+            if ($producto->controla_serie) {
+                $elegidas = count($seriesPorProducto[$productoId] ?? []);
+                if (fmod($cantidad, 1) != 0 || $elegidas !== (int) $cantidad) {
+                    throw new ErrorDeNegocio(sprintf('"%s" controla serie / IMEI: elige %s (elegiste %d).', $producto->nombre, (int) $cantidad === 1 ? 'la unidad que envías' : 'las '.(int) $cantidad.' unidades que envías', $elegidas));
+                }
+            }
+
             if (! $producto->permite_fraccion && fmod($cantidad, 1) != 0) {
                 throw new ErrorDeNegocio("\"{$producto->nombre}\" no permite cantidades fraccionadas.");
             }
@@ -71,7 +84,7 @@ class TransferenciaService
             }
         }
 
-        return DB::transaction(function () use ($usuario, $empresaId, $sucursalOrigenId, $destino, $datos, $cantidades) {
+        return DB::transaction(function () use ($usuario, $empresaId, $sucursalOrigenId, $destino, $datos, $cantidades, $productos, $seriesPorProducto) {
             $transferencia = Transferencia::create([
                 'empresa_id' => $empresaId,
                 'sucursal_origen_id' => $sucursalOrigenId,
@@ -84,6 +97,11 @@ class TransferenciaService
             foreach ($cantidades as $productoId => $cantidad) {
                 $consumo = $this->inventario->consumirFifo($productoId, $sucursalOrigenId, $cantidad);
                 $this->inventario->descontarStock($productoId, $sucursalOrigenId, $cantidad);
+
+                // las unidades con serie / IMEI salen con la transferencia (quedan en tránsito)
+                if ($productos->get($productoId)->controla_serie) {
+                    $this->series->enviarEnTransferencia($seriesPorProducto[$productoId], $productos->get($productoId), $transferencia, $usuario);
+                }
 
                 // un detalle por lote consumido (FEFO), para que el lote y su
                 // costo viajen al destino; sin lote queda una sola linea
@@ -170,6 +188,9 @@ class TransferenciaService
                 );
             }
 
+            // las unidades con serie / IMEI que viajaban quedan disponibles en el destino
+            $this->series->recibirTransferencia($transferencia, $usuario);
+
             $transferencia->update(['estado' => 'recibida', 'recibida_en' => now()]);
         });
     }
@@ -208,6 +229,9 @@ class TransferenciaService
                     loteId: $detalle->lote_id,
                 );
             }
+
+            // las unidades con serie / IMEI que viajaban vuelven a estar disponibles en el origen
+            $this->series->anularTransferencia($transferencia, $usuario);
 
             $transferencia->update(['estado' => 'anulada']);
         });

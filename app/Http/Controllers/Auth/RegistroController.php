@@ -91,6 +91,8 @@ class RegistroController extends Controller
                 'rubro_codigo' => $datos['rubro_codigo'],
                 // los rubros que venden por talla, color o modelo arrancan con las variantes encendidas
                 'variantes_activo' => in_array($datos['rubro_codigo'], Empresa::RUBROS_CON_VARIANTES, true),
+                // quien vende celulares arranca además registrando el IMEI de cada equipo
+                'series_activo' => in_array($datos['rubro_codigo'], Empresa::RUBROS_CON_SERIES, true),
                 'activo' => true,
             ]);
 

@@ -9,7 +9,7 @@ import { CircleAlert, CircleCheck, Flashlight, FlashlightOff, LoaderCircle, Scan
 
 const props = defineProps({
     abierto: { type: Boolean, default: false },
-    // (codigo: string) => { ok: boolean, mensaje: string, detalle?: string }
+    // (codigo: string) => { ok: boolean, mensaje: string, detalle?: string } (o una promesa que lo resuelve)
     alLeer: { type: Function, required: true },
     // texto de resumen al pie, p. ej. "3 productos · S/ 85.00"
     resumen: { type: String, default: '' },
@@ -199,7 +199,17 @@ function leido(codigo) {
     ultimoMomento = ahora
     ultimoVisto = ahora
 
-    const resultado = props.alLeer(codigo) ?? { ok: false, mensaje: '' }
+    // alLeer puede devolver una promesa (p. ej. buscar una serie / IMEI en el servidor): el aviso sale al resolverse
+    const respuesta = props.alLeer(codigo)
+    if (typeof respuesta?.then === 'function') {
+        respuesta.then((r) => mostrarResultado(r, codigo), () => mostrarResultado(null, codigo))
+        return
+    }
+    mostrarResultado(respuesta, codigo)
+}
+
+function mostrarResultado(resultado, codigo) {
+    resultado = resultado ?? { ok: false, mensaje: '' }
     ultimo.value = { ...resultado, codigo }
     avisar(resultado.ok)
 
