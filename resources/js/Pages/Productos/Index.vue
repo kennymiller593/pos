@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { Link, router } from '@inertiajs/vue3'
+import { Link, router, usePage } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Package, Pencil, Plus, Search, ShoppingCart, Trash2, Truck } from '@lucide/vue'
+import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Layers, Package, Pencil, Plus, Search, ShoppingCart, Trash2, Truck } from '@lucide/vue'
 import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
@@ -42,6 +42,15 @@ const buscar = ref(props.filtros.buscar ?? '')
 const categoriaId = ref(props.filtros.categoria_id ?? '')
 const estado = ref(props.filtros.estado ?? '')
 
+// ---- modelos con variantes (módulo opcional: sin él, nada de esto se muestra) ----
+const page = usePage()
+const variantesActivo = computed(() => !!page.props.auth?.user?.empresa?.variantes_activo)
+const grupoId = ref(props.filtros.grupo_id ?? '')
+const modelos = computed(() => (variantesActivo.value ? props.catalogos.modelos ?? [] : []))
+const modeloFiltrado = computed(() => modelos.value.find((m) => m.id === grupoId.value) ?? null)
+// el enlace "Ver variantes" de cada fila sobra cuando la lista ya está filtrada por ese modelo
+const enlazaModelo = (p) => variantesActivo.value && !!p.grupo && !modeloFiltrado.value
+
 function aplicarFiltros() {
     router.get(
         '/productos',
@@ -49,6 +58,7 @@ function aplicarFiltros() {
             buscar: buscar.value || undefined,
             categoria_id: categoriaId.value || undefined,
             estado: estado.value || undefined,
+            grupo_id: grupoId.value || undefined,
             orden: orden.value.columna !== 'producto' || orden.value.dir !== 'asc' ? orden.value.columna : undefined,
             dir: orden.value.columna !== 'producto' || orden.value.dir !== 'asc' ? orden.value.dir : undefined,
         },
@@ -57,7 +67,7 @@ function aplicarFiltros() {
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([categoriaId, estado], aplicarFiltros)
+watch([categoriaId, estado, grupoId], aplicarFiltros)
 
 // Excel con lo que se ve en la lista (mismos filtros y orden), sin paginar
 const urlExportar = computed(() => {
@@ -65,6 +75,7 @@ const urlExportar = computed(() => {
     if (buscar.value) parametros.set('buscar', buscar.value)
     if (categoriaId.value) parametros.set('categoria_id', categoriaId.value)
     if (estado.value) parametros.set('estado', estado.value)
+    if (grupoId.value) parametros.set('grupo_id', grupoId.value)
     if (orden.value.columna !== 'producto' || orden.value.dir !== 'asc') {
         parametros.set('orden', orden.value.columna)
         parametros.set('dir', orden.value.dir)
@@ -107,6 +118,19 @@ async function eliminar(producto) {
     }
 }
 
+async function eliminarModelo(modelo) {
+    const confirmado = await confirmar({
+        titulo: 'Eliminar modelo',
+        mensaje: `"${modelo.nombre}" y todas sus variantes dejarán de aparecer en el sistema. Las ventas y compras ya registradas no cambian.`,
+        textoConfirmar: 'Eliminar modelo',
+        peligro: true,
+    })
+
+    if (confirmado) {
+        router.delete(`/productos/modelos/${modelo.id}`)
+    }
+}
+
 function presentacionDefault(producto) {
     return producto.presentaciones?.find((p) => p.es_default) ?? producto.presentaciones?.[0] ?? null
 }
@@ -128,8 +152,9 @@ function claseStock(producto) {
 <template>
     <AppLayout titulo="Productos">
         <!-- Barra de acciones -->
-        <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-1 flex-col gap-3 sm:flex-row">
+        <!-- con variantes hay un filtro y un botón más: la barra pasa a dos renglones hasta pantallas muy anchas -->
+        <div class="mb-4 flex flex-col gap-3" :class="variantesActivo ? '2xl:flex-row 2xl:items-center 2xl:justify-between' : 'lg:flex-row lg:items-center lg:justify-between'">
+            <div class="flex flex-1 flex-col gap-3 sm:flex-row" :class="variantesActivo && 'sm:flex-wrap'">
                 <div class="relative w-full sm:max-w-xs">
                     <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                     <input
@@ -154,11 +179,22 @@ function claseStock(producto) {
                     <option value="activo">Activos</option>
                     <option value="inactivo">Inactivos</option>
                 </select>
+                <select
+                    v-if="modelos.length"
+                    v-model="grupoId"
+                    class="h-10 min-w-0 rounded-xl border border-stone-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none sm:max-w-48 dark:border-neutral-800 dark:bg-neutral-900"
+                    aria-label="Filtrar por modelo"
+                    data-filtro-modelo
+                >
+                    <option value="">Todos los modelos</option>
+                    <option v-for="m in modelos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+                </select>
             </div>
-            <div class="flex flex-col gap-2 sm:flex-row">
+            <div :class="variantesActivo ? 'grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap' : 'flex flex-col gap-2 sm:flex-row'">
                 <a
                     :href="urlExportar"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    :class="variantesActivo && 'order-1 !px-2 sm:order-none sm:!px-4'"
                     title="Descargar en Excel los productos de la lista"
                 >
                     <Download class="size-4" />
@@ -167,6 +203,7 @@ function claseStock(producto) {
                 <Link
                     href="/productos/etiquetas"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    :class="variantesActivo && 'order-3 !px-2 sm:order-none sm:!px-4'"
                     title="Imprimir etiquetas con código de barras"
                 >
                     <Barcode class="size-4" />
@@ -175,18 +212,80 @@ function claseStock(producto) {
                 <button
                     v-if="puede('productos.gestionar')"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    :class="variantesActivo && 'order-2 !px-2 sm:order-none sm:!px-4'"
                     @click="importarAbierto = true"
                 >
                     <FileSpreadsheet class="size-4" />
                     Importar Excel
                 </button>
+                <Link
+                    v-if="variantesActivo && puede('productos.gestionar')"
+                    href="/productos/modelos/crear"
+                    class="order-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-stone-50 sm:order-none sm:px-4 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    title="Un modelo con tallas, colores u otras variantes"
+                    data-nuevo-modelo
+                >
+                    <Layers class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Nuevo con variantes
+                </Link>
                 <button
                     v-if="puede('productos.gestionar')"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+                    :class="variantesActivo && 'order-5 col-span-2 sm:order-none'"
                     @click="nuevo"
                 >
                     <Plus class="size-4" />
                     Nuevo producto
+                </button>
+            </div>
+        </div>
+
+        <!-- Modelo filtrado: sus variantes abajo, y desde aquí se edita o elimina el modelo completo -->
+        <div
+            v-if="modeloFiltrado"
+            class="mb-4 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900/60 dark:bg-emerald-950/20"
+            data-modelo-filtrado
+        >
+            <div class="flex min-w-0 items-center gap-3">
+                <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">
+                    <Layers class="size-5" />
+                </span>
+                <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold">{{ modeloFiltrado.nombre }}</p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400">{{ productos.total }} {{ productos.total === 1 ? 'variante' : 'variantes' }}</p>
+                </div>
+            </div>
+            <!-- una sola fila también en celular: Editar · Ver todos · Eliminar (solo icono en celular) -->
+            <div class="flex gap-2">
+                <Link
+                    v-if="puede('productos.gestionar')"
+                    :href="`/productos/modelos/${modeloFiltrado.id}/editar`"
+                    class="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-white px-4 text-sm font-semibold whitespace-nowrap text-emerald-700 transition-colors hover:bg-emerald-50 sm:flex-none dark:border-emerald-500 dark:bg-neutral-900 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                    data-editar-modelo
+                >
+                    <Pencil class="size-4" />
+                    Editar modelo
+                </Link>
+                <button
+                    type="button"
+                    class="inline-flex h-10 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium whitespace-nowrap transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    :class="!puede('productos.gestionar') && 'flex-1 sm:flex-none'"
+                    data-ver-todos
+                    @click="grupoId = ''"
+                >
+                    Ver todos
+                </button>
+                <button
+                    v-if="puede('productos.gestionar') && puede('productos.eliminar')"
+                    type="button"
+                    class="inline-flex size-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-medium text-red-600 transition-colors hover:bg-red-50 sm:w-auto sm:px-4 dark:border-neutral-700 dark:bg-neutral-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                    aria-label="Eliminar modelo"
+                    title="Eliminar modelo"
+                    data-eliminar-modelo
+                    @click="eliminarModelo(modeloFiltrado)"
+                >
+                    <Trash2 class="size-4" />
+                    <span class="hidden sm:inline">Eliminar</span>
                 </button>
             </div>
         </div>
@@ -241,7 +340,21 @@ function claseStock(producto) {
                                     </div>
                                     <div>
                                         <p class="font-medium">{{ p.nombre }}</p>
-                                        <p v-if="p.marca" class="text-xs text-neutral-500 dark:text-neutral-400">{{ p.marca.nombre }}</p>
+                                        <!-- variante de un modelo (módulo activo y sin filtrar ya por él): "Marca · Ver variantes" -->
+                                        <p v-if="enlazaModelo(p)" class="text-xs text-neutral-500 dark:text-neutral-400">
+                                            <template v-if="p.marca">{{ p.marca.nombre }} · </template>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 py-1.5 text-xs font-medium text-emerald-700 hover:underline sm:py-0 dark:text-emerald-400"
+                                                :title="`Ver las variantes de ${p.grupo.nombre}`"
+                                                data-chip-modelo
+                                                @click="grupoId = p.grupo.id"
+                                            >
+                                                <Layers class="size-3 shrink-0" />
+                                                Ver variantes
+                                            </button>
+                                        </p>
+                                        <p v-else-if="p.marca" class="text-xs text-neutral-500 dark:text-neutral-400">{{ p.marca.nombre }}</p>
                                     </div>
                                 </div>
                             </td>

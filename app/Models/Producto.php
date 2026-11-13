@@ -104,6 +104,9 @@ class Producto extends Model
         'controla_stock',
         'stock_minimo',
         'atributos',
+        // variante de un modelo (producto_grupos): a cuál pertenece y su posición entre las combinaciones
+        'grupo_id',
+        'variante_orden',
         'imagen_url',
         'activo',
         // tienda en linea
@@ -139,6 +142,12 @@ class Producto extends Model
     public function marca(): BelongsTo
     {
         return $this->belongsTo(Marca::class, 'marca_id');
+    }
+
+    /** El modelo del que es variante (null en un producto suelto). */
+    public function grupo(): BelongsTo
+    {
+        return $this->belongsTo(ProductoGrupo::class, 'grupo_id');
     }
 
     public function unidadBase(): BelongsTo

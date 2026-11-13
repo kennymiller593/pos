@@ -54,6 +54,7 @@ use App\Http\Controllers\TiendaConfigController;
 use App\Http\Controllers\TiendaController;
 use App\Http\Controllers\TiendaDominioController;
 use App\Http\Controllers\MezclaController;
+use App\Http\Controllers\ProductoGrupoController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Middleware\CabecerasTienda;
@@ -284,6 +285,15 @@ Route::middleware('auth')->group(function () {
     });
     Route::put('/productos/{producto}', [ProductoController::class, 'update'])->middleware('can:productos.gestionar')->name('productos.update');
     Route::delete('/productos/{producto}', [ProductoController::class, 'destroy'])->middleware('can:productos.eliminar')->name('productos.destroy');
+    // modelos con variantes: talla, color... (módulo opcional: Configuración → Empresa). Cada variante es un producto normal
+    Route::middleware(['variantes.activas', 'can:productos.gestionar'])->group(function () {
+        Route::get('/productos/modelos/crear', [ProductoGrupoController::class, 'crear'])->name('productos.modelos.crear');
+        Route::post('/productos/modelos', [ProductoGrupoController::class, 'store'])->name('productos.modelos.store');
+        Route::get('/productos/modelos/{grupo}/editar', [ProductoGrupoController::class, 'editar'])->name('productos.modelos.editar');
+        Route::put('/productos/modelos/{grupo}', [ProductoGrupoController::class, 'update'])->name('productos.modelos.update');
+        // eliminar el modelo elimina sus productos: pide el mismo permiso que eliminar un producto
+        Route::delete('/productos/modelos/{grupo}', [ProductoGrupoController::class, 'destroy'])->middleware('can:productos.eliminar')->name('productos.modelos.destroy');
+    });
 
     Route::get('/catalogos', [CatalogoController::class, 'index'])->middleware('can:productos.ver')->name('catalogos.index');
     Route::middleware('can:catalogos.gestionar')->group(function () {

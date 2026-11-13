@@ -15,6 +15,9 @@ class Empresa extends Model
     /** Afectacion con la que el Nuevo RUS emite lo gravado (catalogo 07: exonerado, operacion onerosa). */
     public const AFECTACION_RUS = '20';
 
+    /** Rubros que al registrarse arrancan con el módulo de variantes encendido (se puede apagar en Configuración → Empresa). */
+    public const RUBROS_CON_VARIANTES = ['ropa', 'celulares'];
+
     protected $table = 'empresas';
 
     public const CREATED_AT = 'creado_en';
@@ -36,6 +39,7 @@ class Empresa extends Model
         'puntos_valor',
         'puntos_minimo_canje',
         'mezclas_activo',
+        'variantes_activo',
         'canal_venta_activo',
         'tienda_slug',
         'tienda_publicada',
@@ -80,6 +84,7 @@ class Empresa extends Model
             'puntos_valor' => 'decimal:2',
             'puntos_minimo_canje' => 'integer',
             'mezclas_activo' => 'boolean',
+            'variantes_activo' => 'boolean',
             'canal_venta_activo' => 'boolean',
             'tienda_publicada' => 'boolean',
             // adicional de pago: solo lo cambia la plataforma (no es fillable a proposito)

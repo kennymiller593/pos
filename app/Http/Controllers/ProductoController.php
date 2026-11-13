@@ -9,6 +9,7 @@ use App\Models\Categoria;
 use App\Models\Empresa;
 use App\Models\Marca;
 use App\Models\Producto;
+use App\Models\ProductoGrupo;
 use App\Models\ProductoPresentacion;
 use App\Models\TipoAfectacionIgv;
 use App\Models\UnidadMedida;
@@ -19,6 +20,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -44,6 +46,10 @@ class ProductoController extends Controller
                 // vista previa del codigo que tomara el proximo producto (se confirma al guardar)
                 'siguienteCodigo' => Producto::siguienteCodigo($empresaId),
                 'tiposAfectacion' => TipoAfectacionIgv::orderBy('codigo')->get(['codigo', 'nombre']),
+                // modelos con variantes, para filtrar la lista (solo con el módulo encendido)
+                'modelos' => $request->user()->empresa->variantes_activo
+                    ? ProductoGrupo::where('empresa_id', $empresaId)->orderBy('nombre')->get(['id', 'nombre'])
+                    : [],
             ],
         ]);
     }
@@ -52,6 +58,12 @@ class ProductoController extends Controller
     private function consulta(Request $request): array
     {
         $filtros = $request->only(['buscar', 'categoria_id', 'estado']);
+
+        // variantes de un modelo (módulo opcional): solo con un id bien formado, y salen en el orden de sus tallas
+        $grupoId = $request->query('grupo_id');
+        if (is_string($grupoId) && Str::isUuid($grupoId)) {
+            $filtros['grupo_id'] = $grupoId;
+        }
 
         // orden por columna (?orden=precio&dir=desc); por defecto, por nombre
         $orden = in_array($request->query('orden'), self::ORDENES, true) ? $request->query('orden') : 'producto';
@@ -63,6 +75,7 @@ class ProductoController extends Controller
                 'categoria:id,nombre',
                 'marca:id,nombre',
                 'unidadBase:codigo,nombre',
+                'grupo:id,nombre',
                 'presentaciones' => fn ($q) => $q->orderByDesc('es_default')->orderBy('nombre'),
             ])
             // stock de la sucursal elegida en el selector (null = todas las que puede ver)
@@ -72,6 +85,8 @@ class ProductoController extends Controller
                 ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
             ->when($filtros['categoria_id'] ?? null, fn ($q, $categoria) => $q->where('categoria_id', $categoria))
             ->when($filtros['estado'] ?? null, fn ($q, $estado) => $q->where('activo', $estado === 'activo'))
+            ->when($filtros['grupo_id'] ?? null, fn ($q, $grupo) => $q->where('grupo_id', $grupo)
+                ->when($orden === 'producto', fn ($w) => $w->orderBy('variante_orden', $dir)))
             ->tap(fn ($q) => $this->ordenar($q, $orden, $dir));
 
         return [$consulta, $filtros, $orden, $dir];

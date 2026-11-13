@@ -89,6 +89,8 @@ class RegistroController extends Controller
                 'nombre_comercial' => $datos['nombre_comercial'] ?? null,
                 'regimen_tributario' => $datos['regimen_tributario'],
                 'rubro_codigo' => $datos['rubro_codigo'],
+                // los rubros que venden por talla, color o modelo arrancan con las variantes encendidas
+                'variantes_activo' => in_array($datos['rubro_codigo'], Empresa::RUBROS_CON_VARIANTES, true),
                 'activo' => true,
             ]);
 

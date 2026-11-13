@@ -34,6 +34,7 @@ class EmpresaController extends Controller
                 'cuentas_bancarias' => $empresa->cuentas_bancarias,
                 'pie_cotizacion' => $empresa->pie_cotizacion,
                 'mezclas_activo' => (bool) $empresa->mezclas_activo,
+                'variantes_activo' => (bool) $empresa->variantes_activo,
                 'canal_venta_activo' => (bool) $empresa->canal_venta_activo,
                 // para el acceso a la facturación electrónica (se configura en su propia pantalla)
                 'facturacion_electronica' => (bool) $empresa->facturacion_electronica,
@@ -141,6 +142,7 @@ class EmpresaController extends Controller
             'cuentas_bancarias' => ['nullable', 'string', 'max:500'],
             'pie_cotizacion' => ['nullable', 'string', 'max:1000'],
             'mezclas_activo' => ['nullable', 'boolean'],
+            'variantes_activo' => ['nullable', 'boolean'],
             'canal_venta_activo' => ['nullable', 'boolean'],
         ], [
             'pie_cotizacion.max' => 'El texto al pie de la cotización no debe pasar de 1000 caracteres.',
@@ -164,6 +166,7 @@ class EmpresaController extends Controller
 
         unset($datos['logo'], $datos['logo_eliminar']);
         $datos['mezclas_activo'] = $request->boolean('mezclas_activo');
+        $datos['variantes_activo'] = $request->boolean('variantes_activo');
         $datos['canal_venta_activo'] = $request->boolean('canal_venta_activo');
 
         $empresa->update($datos);

@@ -11,6 +11,7 @@ use App\Http\Middleware\SoloDominioPrincipal;
 use App\Http\Middleware\SoloPlataforma;
 use App\Http\Middleware\SuscripcionVigente;
 use App\Http\Middleware\UsuarioActivo;
+use App\Http\Middleware\VariantesActivas;
 use App\Support\Tienda;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -51,6 +52,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'flash.conservar' => ConservarFlash::class,
             'mezclas.activas' => MezclasActivas::class,
+            'variantes.activas' => VariantesActivas::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
