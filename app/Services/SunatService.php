@@ -405,6 +405,8 @@ class SunatService
                 ->setMtoOperGravadas((float) $comprobante->total_gravado)
                 ->setMtoOperExoneradas((float) $comprobante->total_exonerado)
                 ->setMtoOperInafectas((float) $comprobante->total_inafecto)
+                // SUNAT exige la tasa del IGV en cada línea del resumen (sin ella rechaza con 2992)
+                ->setPorcentajeIgv(18.0)
                 ->setMtoIGV((float) $comprobante->total_igv)]);
     }
 

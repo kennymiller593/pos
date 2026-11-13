@@ -110,6 +110,8 @@ class BajaSunatTest extends TestCase
         $detalle = $this->enviador->ultimaBaja->getDetails()[0];
         $this->assertSame('3', $detalle->getEstado());
         $this->assertSame('B001-1', $detalle->getSerieNro());
+        // la tasa del IGV va en la línea: sin ella SUNAT rechaza el resumen con el error 2992
+        $this->assertSame(18.0, $detalle->getPorcentajeIgv());
 
         $registro = ComprobanteSunat::find($comprobante->id);
         $this->assertSame('baja', $registro->estado);
