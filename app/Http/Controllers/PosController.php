@@ -21,6 +21,7 @@ use App\Services\CotizacionService;
 use App\Services\PedidoService;
 use App\Services\PuntosService;
 use App\Services\SerieService;
+use App\Services\VarianteService;
 use App\Services\VentaService;
 use App\Support\ContextoSucursal;
 use App\Support\DocumentoIdentidad;
@@ -61,9 +62,12 @@ class PosController extends Controller
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->withSum(['stock as stock' => fn ($q) => $q->where('sucursal_id', $sucursalId)], 'cantidad')
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'categoria_id', 'controla_stock', 'controla_serie', 'permite_fraccion', 'imagen_url'])
+            ->get(['id', 'nombre', 'codigo_interno', 'categoria_id', 'controla_stock', 'controla_serie', 'permite_fraccion', 'imagen_url', 'grupo_id', 'atributos', 'variante_orden'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
+
+        // variantes (tallas y colores): los modelos de esos productos, para agruparlos en una tarjeta con su rejilla
+        $modelos = VarianteService::modelosDe($request->user()->empresa, $productos);
 
         // productos con serie / IMEI: lo vendible son las unidades con serie disponibles en esta sucursal (una unidad
         // en stock sin número no se puede vender). Una sola consulta agrupada, y solo si hay productos con serie
@@ -90,6 +94,8 @@ class PosController extends Controller
                 'permite_fraccion' => $p->permite_fraccion,
                 'imagen_url' => $p->imagen_url,
                 'stock' => $p->controla_serie ? (float) min((float) ($p->stock ?? 0), (int) ($vendibles[$p->id] ?? 0)) : (float) ($p->stock ?? 0),
+                // solo en variantes de un modelo: grupo_id, grupo, atributos y variante_orden
+                ...VarianteService::camposDeVariante($p, $modelos),
                 'presentaciones' => $p->presentaciones->map(fn ($pres) => [
                     'id' => $pres->id,
                     'nombre' => $pres->nombre,
@@ -111,6 +117,8 @@ class PosController extends Controller
             'pedido' => $this->pedidoParaCarrito($request, $apertura),
             // reglas del programa de puntos, o null si la empresa no lo usa
             'puntos' => $this->puntos->reglas($request->user()->empresa),
+            // solo si hay variantes a la venta: [{ id, nombre, atributos: [{ nombre, valores }] }]
+            ...($modelos->isNotEmpty() ? ['modelos' => VarianteService::modelosParaPantalla($modelos)] : []),
         ]);
     }
 

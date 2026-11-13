@@ -9,6 +9,7 @@ use App\Models\Producto;
 use App\Models\ProductoGrupo;
 use App\Models\UnidadMedida;
 use App\Models\Usuario;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -84,6 +85,56 @@ class VarianteService
     }
 
     /**
+     * Modelos a los que pertenecen esos productos, con su definición de características (el orden de sus valores
+     * arma la rejilla talla × color del POS, compras, transferencias y stock). Una sola consulta, y ninguna si la
+     * empresa no usa variantes o ninguno de los productos es variante.
+     *
+     * @param  Collection<int, Producto>  $productos
+     * @return Collection<string, ProductoGrupo> por id
+     */
+    public static function modelosDe(Empresa $empresa, $productos)
+    {
+        if (! $empresa->variantes_activo) {
+            return collect();
+        }
+
+        $ids = collect($productos)->pluck('grupo_id')->filter()->unique()->values();
+
+        return $ids->isEmpty() ? collect() : ProductoGrupo::query()
+            ->where('empresa_id', $empresa->id)
+            ->whereIn('id', $ids)
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'atributos'])
+            ->keyBy('id');
+    }
+
+    /** La lista compacta de modelos que viaja a la pantalla: [{ id, nombre, atributos: [{ nombre, valores }] }]. */
+    public static function modelosParaPantalla($modelos): array
+    {
+        return collect($modelos)->values()->map(fn (ProductoGrupo $g) => [
+            'id' => $g->id,
+            'nombre' => $g->nombre,
+            'atributos' => self::normalizarAtributos($g->atributos ?? []),
+        ])->all();
+    }
+
+    /**
+     * Lo que se añade a un producto en las pantallas de operación cuando es variante de uno de esos modelos.
+     * Un producto sin modelo no lleva ninguna clave de más: su forma queda igual que siempre.
+     */
+    public static function camposDeVariante(Producto $producto, $modelos): array
+    {
+        $modelo = $producto->grupo_id ? $modelos->get($producto->grupo_id) : null;
+
+        return $modelo ? [
+            'grupo_id' => $producto->grupo_id,
+            'grupo' => $modelo->nombre,
+            'atributos' => (object) ($producto->atributos ?? []),
+            'variante_orden' => (int) $producto->variante_orden,
+        ] : [];
+    }
+
+    /**
      * Crea o actualiza un modelo y sus variantes.
      *
      * $datos: nombre, categoria_id, marca_id, unidad_base_codigo, tipo_afectacion_codigo, precio_base, costo,
@@ -95,6 +146,8 @@ class VarianteService
      * Las combinaciones omitidas se recuerdan en el modelo (producto_grupos.omitidas): una combinación sin fila
      * que ya estaba omitida sigue omitida, no se crea sola al volver a guardar.
      * El stock inicial solo aplica a variantes que se crean en esta llamada y entra a $sucursalId.
+     * $datos['controla_serie'] (true|false) marca o desmarca la serie / IMEI en TODAS las variantes del modelo; null o
+     * ausente no toca las que existen y las nuevas nacen como las demás. Con serie no se carga stock inicial.
      */
     public function guardarGrupo(Usuario $usuario, array $datos, ?ProductoGrupo $grupo = null, ?string $sucursalId = null): ProductoGrupo
     {
@@ -112,6 +165,7 @@ class VarianteService
 
         $filas = collect($datos['variantes'] ?? [])->keyBy(fn ($f) => self::clave($f['valores'] ?? []));
         $precioBase = (float) $datos['precio_base'];
+        $serie = isset($datos['controla_serie']) ? (bool) $datos['controla_serie'] : null;
         $costo = round((float) ($datos['costo'] ?? 0), 6);
         $puedePrecios = $usuario->can('productos.precios');
         $puedeStock = $usuario->can('stock.ajustar') && $sucursalId !== null;
@@ -131,10 +185,10 @@ class VarianteService
         // mismo candado que el alta y la importación de productos: los códigos internos (P0001...) no se repiten.
         // 60 s de vida como en la importación: un modelo de 200 variantes no debe soltarlo a medias.
         $grupo = Cache::lock("producto-codigo:{$empresaId}", 60)->block(10, function () use (
-            $usuario, $datos, $grupo, $sucursalId, $empresaId, $atributos, $filas, $precioBase, $costo, $puedePrecios, $puedeStock, $afectacion, $omitidasAntes, &$cambiosPrecio,
+            $usuario, $datos, $grupo, $sucursalId, $empresaId, $atributos, $filas, $precioBase, $costo, $puedePrecios, $puedeStock, $afectacion, $omitidasAntes, $serie, &$cambiosPrecio,
         ) {
             return DB::transaction(function () use (
-                $usuario, $datos, $grupo, $sucursalId, $empresaId, $atributos, $filas, $precioBase, $costo, $puedePrecios, $puedeStock, $afectacion, $omitidasAntes, &$cambiosPrecio,
+                $usuario, $datos, $grupo, $sucursalId, $empresaId, $atributos, $filas, $precioBase, $costo, $puedePrecios, $puedeStock, $afectacion, $omitidasAntes, $serie, &$cambiosPrecio,
             ) {
                 // el siguiente código se calcula una vez bajo el candado y se va sumando en memoria
                 $siguienteCodigo = (int) substr(Producto::siguienteCodigo($empresaId), 1);
@@ -149,7 +203,14 @@ class VarianteService
                     'activo' => true,
                 ])->save();
 
+                // serie / IMEI a nivel de modelo: todas sus variantes (también las inactivas) quedan igual
+                if ($serie !== null && $grupo->exists) {
+                    Producto::where('grupo_id', $grupo->id)->where('controla_serie', ! $serie)->update(['controla_serie' => $serie]);
+                }
+
                 $existentes = $grupo->variantes()->with('presentaciones')->get();
+                // las variantes que se creen ahora: lo pedido o, si no se dijo nada, como las que ya hay
+                $serieNuevas = $serie ?? $grupo->controlaSerie($existentes);
                 $porClave = $existentes->keyBy(fn (Producto $p) => self::clave(self::valoresDe($p, $atributos)));
 
                 // la unidad se fija al crear el modelo: las variantes nuevas siguen la de las que ya existen
@@ -225,6 +286,7 @@ class VarianteService
                         'permite_fraccion' => false,
                         'controla_lote' => false,
                         'controla_stock' => true,
+                        'controla_serie' => $serieNuevas,
                         'stock_minimo' => 0,
                         'activo' => true,
                         ...$comunes,
@@ -246,7 +308,8 @@ class VarianteService
 
                     // stock inicial: entra como ajuste con su capa FIFO, igual que al crear un producto
                     $stock = round((float) ($fila['stock_inicial'] ?? 0), 3);
-                    if ($stock > 0 && $puedeStock) {
+                    // con serie no hay stock inicial: cada unidad entra con su número (compra o ajuste)
+                    if ($stock > 0 && $puedeStock && ! $serieNuevas) {
                         $this->inventario->ingresarCapa($variante, $sucursalId, $stock, $costo);
                         $this->inventario->incrementarStock($empresaId, $variante->id, $sucursalId, $stock);
                         $this->inventario->registrarMovimiento(

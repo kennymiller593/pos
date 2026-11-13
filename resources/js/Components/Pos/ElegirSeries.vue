@@ -3,7 +3,7 @@
 // Trae las disponibles de la sucursal de la caja (/pos/series). Con la pistola lectora: se escanea el IMEI en
 // el buscador y Enter lo marca. En el celular sube desde abajo, como una hoja.
 import { computed, nextTick, onMounted, ref } from 'vue'
-import { watchDebounced } from '@vueuse/core'
+import { useEventListener, watchDebounced } from '@vueuse/core'
 import { Check, LoaderCircle, ScanBarcode, Search, X } from '@lucide/vue'
 
 const props = defineProps({
@@ -21,8 +21,15 @@ const props = defineProps({
     // tope de unidades que se pueden elegir (0 = sin tope): una línea de venta lleva como máximo 50
     maximo: { type: Number, default: 0 },
     textoQuitar: { type: String, default: 'Quitar del carrito' },
+    // todavía no hay una línea con este producto: sin unidades elegidas no hay nada que quitar, solo se cancela
+    sinLinea: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirmar', 'cerrar'])
+
+// Esc cierra aunque el foco no esté dentro del cuadro (en el celular no se enfoca el buscador)
+useEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape') emit('cerrar')
+})
 
 const LIMITE = 500 // lo que devuelve el servidor de una vez; con más, se busca en el servidor
 const normalizar = (texto) => String(texto ?? '').replace(/\s+/g, '').toUpperCase()
@@ -112,12 +119,13 @@ function alPresionarEnter() {
     texto.value = ''
 }
 
-const confirmar = () => emit('confirmar', elegidasLista.value)
+const soloCancelar = computed(() => props.sinLinea && total.value === 0)
+const confirmar = () => (soloCancelar.value ? emit('cerrar') : emit('confirmar', elegidasLista.value))
 </script>
 
 <template>
     <Teleport to="body">
-        <div class="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4" data-elegir-series @keydown.esc="emit('cerrar')">
+        <div class="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4" data-elegir-series>
             <div class="fixed inset-0 bg-neutral-950/60" @click="emit('cerrar')" />
             <div class="relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-stone-200 bg-white text-neutral-900 shadow-xl sm:max-w-md sm:rounded-2xl dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100">
                 <!-- cabecera -->
@@ -203,9 +211,18 @@ const confirmar = () => emit('confirmar', elegidasLista.value)
                         <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ total }}</span>
                         {{ total === 1 ? 'unidad elegida' : 'unidades elegidas' }}
                     </p>
-                    <button type="button" class="h-11 shrink-0 rounded-xl border border-stone-300 px-4 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="emit('cerrar')">Cancelar</button>
-                    <button type="button" class="h-11 shrink-0 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700" data-elegir-series-confirmar @click="confirmar">
-                        {{ total ? 'Listo' : textoQuitar }}
+                    <button v-if="!soloCancelar" type="button" class="h-11 shrink-0 rounded-xl border border-stone-300 px-4 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="emit('cerrar')">Cancelar</button>
+                    <button
+                        type="button"
+                        class="h-11 shrink-0 rounded-xl px-5 text-sm font-semibold transition-colors"
+                        :class="soloCancelar
+                            ? 'border border-stone-300 hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                        data-elegir-series-confirmar
+                        :data-solo-cancelar="soloCancelar || undefined"
+                        @click="confirmar"
+                    >
+                        {{ total ? 'Listo' : (soloCancelar ? 'Cancelar' : textoQuitar) }}
                     </button>
                 </div>
             </div>

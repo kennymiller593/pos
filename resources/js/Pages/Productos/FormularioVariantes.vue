@@ -29,7 +29,11 @@ const editando = computed(() => !!props.modelo)
 const esRus = computed(() => page.props.auth?.user?.empresa?.regimen_tributario === 'RUS')
 // los precios de las variantes que ya existen solo los cambia quien tiene productos.precios
 const preciosBloqueados = computed(() => editando.value && !puede('productos.precios'))
-const puedeStock = computed(() => puede('stock.ajustar'))
+// serie / IMEI (módulo opcional): una casilla a nivel de modelo que marca todas sus variantes
+const seriesActivo = computed(() => !!page.props.auth?.user?.empresa?.series_activo)
+const conSerie = computed(() => seriesActivo.value && !!form.controla_serie)
+// con serie no hay stock inicial: cada unidad entra con su número, en una compra o un ajuste de stock
+const puedeStock = computed(() => puede('stock.ajustar') && !conSerie.value)
 
 const form = useForm({
     nombre: props.modelo?.nombre ?? '',
@@ -42,6 +46,7 @@ const form = useForm({
     precio_base: props.modelo?.precio_base ?? '',
     costo: '',
     sucursal_id: '',
+    controla_serie: !!props.modelo?.controla_serie,
     atributos: props.modelo
         ? props.modelo.atributos.map((a) => ({ nombre: a.nombre, valores: [...a.valores] }))
         : [{ nombre: 'Talla', valores: [] }],
@@ -243,7 +248,7 @@ function irAlProblema() {
 }
 
 // ---- errores: en qué pestaña cae cada uno (punto rojo en la pestaña y salto a la primera) ----
-const CAMPOS_MODELO = ['nombre', 'categoria_id', 'marca_id', 'unidad_base_codigo', 'tipo_afectacion_codigo', 'precio_base', 'costo', 'sucursal_id']
+const CAMPOS_MODELO = ['nombre', 'categoria_id', 'marca_id', 'unidad_base_codigo', 'tipo_afectacion_codigo', 'precio_base', 'costo', 'sucursal_id', 'controla_serie']
 const pestanaDeError = (campo) => (campo.startsWith('variantes') ? 'variantes' : campo.startsWith('atributos') ? 'varia' : CAMPOS_MODELO.includes(campo) ? 'modelo' : null)
 const intentoGuardar = ref(false)
 const pestanasConError = computed(() => {
@@ -285,6 +290,8 @@ function guardar() {
         precio_base: Number(data.precio_base),
         costo: data.costo === '' ? null : Number(data.costo),
         sucursal_id: stockTotal.value > 0 && viendoTodas.value ? data.sucursal_id || null : null,
+        // sin el módulo de series el campo no viaja: el servidor no toca lo que tengan las variantes
+        controla_serie: seriesActivo.value ? !!data.controla_serie : undefined,
     })
     const opciones = {
         preserveScroll: true,
@@ -426,6 +433,19 @@ const clasePrimario =
                             <p v-else-if="faltaCosto" :class="claseError" data-falta-costo>Falta el costo: cargaste stock inicial.</p>
                             <p v-else :class="claseAyuda">Lo que te costó cada unidad del stock inicial.</p>
                         </div>
+                    </div>
+
+                    <!-- serie / IMEI a nivel de modelo (solo con el módulo de series): marca todas sus variantes -->
+                    <div v-if="seriesActivo" class="mt-4 border-t border-stone-100 pt-4 dark:border-neutral-800">
+                        <label class="flex items-center gap-2 text-sm font-medium">
+                            <input v-model="form.controla_serie" type="checkbox" class="size-4 rounded accent-emerald-600" data-modelo-controla-serie />
+                            Controla serie / IMEI
+                        </label>
+                        <p v-if="form.errors.controla_serie" :class="claseError" data-modelo-serie-error>{{ form.errors.controla_serie }}</p>
+                        <p v-else-if="conSerie" :class="claseAyuda" data-modelo-nota-serie>
+                            Todas las variantes se venden eligiendo la serie / IMEI de cada equipo. No llevan stock inicial: carga el stock con una compra o un ajuste de stock indicando las series.
+                        </p>
+                        <p v-else :class="claseAyuda">Para celulares y equipos: cada unidad se registra y se vende con su número.</p>
                     </div>
                 </section>
 

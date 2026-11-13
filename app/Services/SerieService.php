@@ -37,6 +37,32 @@ class SerieService
     public const MENSAJE_PATRON = 'La serie solo puede tener letras, números, guion, punto, barra o guion bajo.';
 
     /**
+     * Por qué un producto que ya existe no puede empezar a controlar serie / IMEI ($activar) o dejar de hacerlo,
+     * o null si puede. Lo usan el formulario del producto y el del modelo con variantes ($sujeto dice de quién se habla).
+     *  - Activar con stock sí se puede (esas unidades quedan "sin serie" y se regularizan desde Stock); lo que no
+     *    puede haber es mercadería en camino, que llegaría sin número.
+     *  - Desactivar exige que no queden unidades con serie disponibles ni en tránsito.
+     */
+    public static function impedimentoParaCambiar(Producto $producto, bool $activar, string $sujeto = 'Este producto'): ?string
+    {
+        if ($activar) {
+            $enCamino = DB::table('transferencia_detalles as d')
+                ->join('transferencias as t', 't.id', '=', 'd.transferencia_id')
+                ->where('d.producto_id', $producto->id)
+                ->whereIn('t.estado', ['pendiente', 'en_transito'])
+                ->exists();
+
+            return $enCamino ? "{$sujeto} tiene una transferencia en camino. Recíbela o anúlala antes de activar serie / IMEI." : null;
+        }
+
+        $vivas = ProductoSerie::where('producto_id', $producto->id)->whereIn('estado', ['disponible', 'en_transito'])->count();
+
+        return $vivas > 0
+            ? "{$sujeto} tiene {$vivas} ".($vivas === 1 ? 'unidad' : 'unidades')." con serie en stock. Véndelas o dalas de baja antes de quitar el control de serie / IMEI."
+            : null;
+    }
+
+    /**
      * Regla de validación para cada serie que llega de un formulario (se comprueba ya sin espacios, como se guarda).
      * $opcional: admite vacío (segundo IMEI).
      */

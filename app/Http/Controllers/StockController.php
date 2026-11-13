@@ -8,14 +8,17 @@ use App\Models\CapaCosto;
 use App\Models\Lote;
 use App\Models\MovimientoInventario;
 use App\Models\Producto;
+use App\Models\ProductoGrupo;
 use App\Models\ProductoSerie;
 use App\Models\Stock;
 use App\Services\InventarioService;
 use App\Services\SerieService;
+use App\Services\VarianteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,6 +35,21 @@ class StockController extends Controller
         $ids = $sucursalId ? [$sucursalId] : $contexto->accesibles->pluck('id')->all();
         $marcas = implode(',', array_fill(0, max(1, count($ids)), '?'));
         $filtros = $request->only(['buscar', 'bajos', 'vencen']);
+
+        // variantes (tallas y colores): modelos con productos en inventario, para filtrar y ver su stock en matriz.
+        // Sin el módulo o sin modelos no se manda nada de más
+        $modelos = $request->user()->empresa->variantes_activo
+            ? ProductoGrupo::query()
+                ->where('empresa_id', $empresaId)
+                ->whereHas('variantes', fn ($q) => $q->where('activo', true)->where('controla_stock', true))
+                ->orderBy('nombre')
+                ->get(['id', 'empresa_id', 'nombre', 'atributos'])
+            : collect();
+        $grupoId = $request->query('grupo_id');
+        $modelo = is_string($grupoId) && Str::isUuid($grupoId) ? $modelos->firstWhere('id', $grupoId) : null;
+        if ($modelo) {
+            $filtros['grupo_id'] = $modelo->id;
+        }
 
         $capasPorVencer = fn ($q) => $q
             ->whereIn('sucursal_id', $ids)
@@ -60,6 +78,8 @@ class StockController extends Controller
                 ->where('nombre', 'ilike', "%{$buscar}%")
                 ->orWhere('codigo_interno', 'ilike', "%{$buscar}%")))
             ->when($filtros['bajos'] ?? null, fn ($q) => $q->whereRaw("({$condicionBajo})", [...$ids, ...$ids]))
+            // las variantes de un modelo salen en el orden de sus tallas, como en Productos
+            ->when($modelo, fn ($q) => $q->where('grupo_id', $modelo->id)->orderBy('variante_orden'))
             ->orderBy('nombre')
             ->paginate(15)
             ->withQueryString();
@@ -141,7 +161,49 @@ class StockController extends Controller
             'sucursal' => $contexto->nombreDe($sucursalId),
             // [{ id, nombre }] cuando se ven varias: una columna por sucursal y selector en ajustes y kardex
             'sucursales' => count($ids) > 1 ? $contexto->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values() : [],
+            // solo con modelos en inventario: el filtro por modelo [{ id, nombre }] y, con uno elegido, su matriz
+            ...($modelos->isNotEmpty() ? ['modelos' => $modelos->map(fn ($g) => ['id' => $g->id, 'nombre' => $g->nombre])->values()] : []),
+            ...($modelo ? ['matriz' => $this->matrizDe($modelo, $ids)] : []),
         ]);
+    }
+
+    /**
+     * El stock de todas las variantes del modelo (sin paginar: son como mucho 200) para la vista talla × color:
+     * la suma de las sucursales que se están viendo y, si son varias, el detalle de cada una.
+     */
+    private function matrizDe(ProductoGrupo $modelo, array $ids): array
+    {
+        $variantes = Producto::query()
+            ->where('empresa_id', $modelo->empresa_id)
+            ->where('grupo_id', $modelo->id)
+            ->where('activo', true)
+            ->where('controla_stock', true)
+            ->withSum(['stock as stock' => fn ($q) => $q->whereIn('sucursal_id', $ids)], 'cantidad')
+            ->orderBy('variante_orden')->orderBy('nombre')
+            ->get(['id', 'nombre', 'atributos', 'stock_minimo', 'variante_orden']);
+
+        $porSucursal = count($ids) > 1
+            ? Stock::query()
+                ->whereIn('producto_id', $variantes->pluck('id'))
+                ->whereIn('sucursal_id', $ids)
+                ->get(['producto_id', 'sucursal_id', 'cantidad'])
+                ->groupBy('producto_id')
+            : null;
+
+        return [
+            'id' => $modelo->id,
+            'nombre' => $modelo->nombre,
+            'atributos' => VarianteService::normalizarAtributos($modelo->atributos ?? []),
+            'variantes' => $variantes->map(fn (Producto $p) => [
+                'id' => $p->id,
+                'nombre' => $p->nombre,
+                'atributos' => (object) ($p->atributos ?? []),
+                'stock' => (float) ($p->stock ?? 0),
+                'stock_minimo' => (float) $p->stock_minimo,
+                ...($porSucursal !== null ? ['por_sucursal' => (object) ($porSucursal[$p->id] ?? collect())
+                    ->mapWithKeys(fn ($s) => [$s->sucursal_id => (float) $s->cantidad])->all()] : []),
+            ])->values(),
+        ];
     }
 
     public function kardex(Request $request, Producto $producto): JsonResponse

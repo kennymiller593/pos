@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 /**
  * Un "modelo" con variantes (Polo básico en tallas y colores). Solo agrupa: cada variante es un
@@ -61,6 +62,21 @@ class ProductoGrupo extends Model
     public function marca(): BelongsTo
     {
         return $this->belongsTo(Marca::class, 'marca_id');
+    }
+
+    /**
+     * ¿El modelo controla serie / IMEI? Lo dicen sus variantes a la venta (todas la llevan); sin ninguna activa,
+     * las que tenga. Las variantes nuevas nacen igual.
+     *
+     * @param  Collection<int, Producto>|null  $variantes  ya cargadas (para no consultar otra vez)
+     */
+    public function controlaSerie($variantes = null): bool
+    {
+        $variantes ??= $this->variantes()->get(['id', 'activo', 'controla_serie']);
+        $activas = $variantes->where('activo', true);
+        $base = $activas->isNotEmpty() ? $activas : $variantes;
+
+        return $base->isNotEmpty() && $base->every(fn (Producto $p) => (bool) $p->controla_serie);
     }
 
     /** Los productos del modelo, en el orden de sus combinaciones. */

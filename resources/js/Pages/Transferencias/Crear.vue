@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import { ArrowLeft, ArrowLeftRight, ArrowRight, Package, ScanBarcode, Search, Trash2 } from '@lucide/vue'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, Layers, Package, ScanBarcode, Search, Trash2 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
 import ElegirSeries from '@/Components/Pos/ElegirSeries.vue'
 import SeriesDeLinea from '@/Components/Pos/SeriesDeLinea.vue'
+import MatrizCantidades from '@/Components/Variantes/MatrizCantidades.vue'
 import { puedeEscanear } from '@/composables/escaner'
+import { agruparPorModelo, buscarConModelos } from '@/utils/variantes'
 
 const props = defineProps({
     origen: { type: Object, default: null },
@@ -14,6 +16,8 @@ const props = defineProps({
     origenes: { type: Array, default: () => [] },
     destinos: { type: Array, required: true },
     productos: { type: Array, required: true },
+    // variantes (tallas y colores): modelos de los productos con `grupo_id` [{ id, nombre, atributos }]; vacío si no hay
+    modelos: { type: Array, default: () => [] },
 })
 
 const cantidad = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 3 })
@@ -28,16 +32,48 @@ const form = useForm({
 // ---- items ----
 const buscarProducto = ref('')
 
-const resultados = computed(() => {
-    const texto = buscarProducto.value.trim().toLowerCase()
-    if (!texto) return []
-    return props.productos
-        .filter((p) =>
-            p.nombre.toLowerCase().includes(texto)
-            || p.codigo_interno.toLowerCase().includes(texto)
-            || p.codigos.some((c) => c.codigo === texto))
-        .slice(0, 8)
-})
+// lo escrito contra los productos (nombre, código o código de barras) y, si hay variantes, contra sus modelos:
+// los modelos salen primero y de sus variantes solo las que lo escrito señala de forma concreta
+const resultadosBusqueda = computed(() => buscarConModelos(
+    buscarProducto.value,
+    props.productos,
+    modelosTransferencia.value,
+    (p, texto) => p.nombre.toLowerCase().includes(texto)
+        || p.codigo_interno.toLowerCase().includes(texto)
+        || p.codigos.some((c) => c.codigo === texto),
+))
+const resultados = computed(() => resultadosBusqueda.value.productos)
+const resultadosModelo = computed(() => resultadosBusqueda.value.modelos)
+
+// ---- variantes (tallas y colores): el modelo entero se transfiere con una matriz de cantidades ----
+// Map grupo_id → { id, nombre, modelo, variantes }; vacío si la empresa no tiene variantes
+const modelosTransferencia = computed(() => agruparPorModelo(props.productos, props.modelos))
+
+const stockDeModelo = (grupo) => grupo.variantes.reduce((n, v) => n + Math.max(0, Number(v.stock)), 0)
+
+const matrizDe = ref(null) // modelo cuya matriz de cantidades está abierta
+function abrirMatriz(grupo) {
+    matrizDe.value = grupo
+    buscarProducto.value = ''
+}
+
+// tope de cada celda: lo que queda en el origen descontando lo que ya está en la transferencia
+const yaEnFilas = (producto) => Number(filas.value.find((f) => f.producto.id === producto.id)?.cantidad || 0)
+const restanteDe = (variante) => Math.max(0, Math.floor(Number(variante.stock) - yaEnFilas(variante)))
+
+// una fila normal por cada variante con cantidad (si ya estaba, se suma). Las que viajan por serie / IMEI
+// quedan con la cantidad pedida y la fila avisa cuántas unidades faltan elegir; las ya elegidas se conservan
+function confirmarMatriz({ cantidades }) {
+    const grupo = matrizDe.value
+    matrizDe.value = null
+    for (const variante of grupo.variantes) {
+        const unidades = Number(cantidades[variante.id] ?? 0)
+        if (!(unidades > 0)) continue
+        const fila = filas.value.find((f) => f.producto.id === variante.id)
+        if (fila) fila.cantidad = Number(fila.cantidad) + unidades
+        else filas.value.push({ producto: variante, cantidad: unidades, ...(variante.controla_serie ? { series: [] } : {}) })
+    }
+}
 
 // producto con ese código de barras y cuántas unidades base representa (una caja x25 = 25)
 function buscarPorCodigo(codigo) {
@@ -83,6 +119,12 @@ const fuenteSeries = computed(() => (seriesDe.value
     ? `/stock/${seriesDe.value.id}/kardex${form.sucursal_origen_id ? `?sucursal_id=${form.sucursal_origen_id}` : ''}`
     : ''))
 const faltaSerie = (fila) => !!fila.producto.controla_serie && (!(fila.series?.length > 0) || fila.series.length !== Number(fila.cantidad))
+// cuántas unidades pide la fila cuando aún no coinciden con las elegidas (se sumó por la matriz de variantes):
+// el selector lo recuerda arriba y conserva marcadas las que ya estaban
+const pedidasDeSeries = computed(() => {
+    const fila = filaDeSeries.value
+    return fila && (fila.series?.length ?? 0) !== Number(fila.cantidad) ? Number(fila.cantidad) || 0 : 0
+})
 
 function confirmarSeries(series) {
     const producto = seriesDe.value
@@ -239,9 +281,24 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                             <ScanBarcode class="size-5" />
                         </button>
                         <div
-                            v-if="resultados.length"
+                            v-if="resultados.length || resultadosModelo.length"
                             class="absolute top-12 right-0 left-0 z-10 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
                         >
+                            <!-- modelo con variantes: abre la matriz de cantidades (talla × color) -->
+                            <button
+                                v-for="g in resultadosModelo"
+                                :key="g.id"
+                                type="button"
+                                class="flex w-full items-center gap-3 border-b border-stone-100 bg-emerald-50/60 px-3.5 py-2.5 text-left text-sm hover:bg-emerald-50 dark:border-neutral-700 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
+                                :data-opcion-modelo="g.nombre"
+                                @click="abrirMatriz(g)"
+                            >
+                                <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">
+                                    <Layers class="size-4" />
+                                </span>
+                                <span class="min-w-0 truncate font-medium">{{ g.nombre }} <span class="font-normal text-neutral-500 dark:text-neutral-400">· {{ g.variantes.length }} variantes</span></span>
+                                <span class="ml-auto shrink-0 text-xs text-neutral-500 dark:text-neutral-400">{{ cantidad(stockDeModelo(g)) }} disp.</span>
+                            </button>
                             <button
                                 v-for="p in resultados"
                                 :key="p.id"
@@ -334,12 +391,28 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
             </template>
         </div>
 
+        <!-- Matriz de cantidades de un modelo con variantes: agrega una fila por cada variante con cantidad -->
+        <MatrizCantidades
+            v-if="matrizDe"
+            :key="matrizDe.id"
+            :grupo="matrizDe"
+            titulo="Transferir por variantes"
+            texto-confirmar="Agregar a la transferencia"
+            :stock-de="restanteDe"
+            :maximo-de="restanteDe"
+            :ayuda="`Cada celda llega hasta lo disponible en ${origen?.nombre ?? 'el origen'}.`"
+            data-matriz-transferencia
+            @confirmar="confirmarMatriz"
+            @cerrar="matrizDe = null"
+        />
+
         <!-- Elegir las unidades con serie / IMEI que viajan (las disponibles en el origen) -->
         <ElegirSeries
             v-if="seriesDe"
             :key="seriesDe.id"
             :producto="seriesDe"
             :elegidas="filaDeSeries?.series ?? []"
+            :pedidas="pedidasDeSeries"
             :fuente="fuenteSeries"
             titulo="Elige las unidades que envías"
             texto-quitar="Quitar de la transferencia"

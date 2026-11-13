@@ -21,6 +21,7 @@ use App\Services\CajaService;
 use App\Services\CompraService;
 use App\Services\InventarioService;
 use App\Services\SerieService;
+use App\Services\VarianteService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -151,9 +152,12 @@ class CompraController extends Controller
             ->where('activo', true)
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->orderByDesc('es_default')->orderBy('nombre')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'controla_serie', 'permite_fraccion', 'imagen_url'])
+            ->get(['id', 'nombre', 'codigo_interno', 'controla_stock', 'controla_lote', 'controla_serie', 'permite_fraccion', 'imagen_url', 'grupo_id', 'atributos', 'variante_orden'])
             ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
             ->values();
+
+        // variantes (tallas y colores): los modelos de esos productos, para comprar con la matriz de cantidades
+        $modelos = VarianteService::modelosDe($request->user()->empresa, $productos);
 
         // el último costo pagado por cada presentación (de la compra más reciente): sale de referencia al agregar el producto
         $ultimoCosto = CompraDetalle::query()
@@ -201,6 +205,8 @@ class CompraController extends Controller
                 'permite_fraccion' => $p->permite_fraccion,
                 'imagen_url' => $p->imagen_url,
                 'lotes_recientes' => $lotesRecientes[$p->id] ?? [],
+                // solo en variantes de un modelo: grupo_id, grupo, atributos y variante_orden
+                ...VarianteService::camposDeVariante($p, $modelos),
                 'presentaciones' => $p->presentaciones->map(fn ($pres) => [
                     'id' => $pres->id,
                     'nombre' => $pres->nombre,
@@ -223,6 +229,8 @@ class CompraController extends Controller
             // sucursal que recibe la mercadería: la del selector; viendo "todas", se elige en el formulario
             'sucursalDestino' => $this->contextoSucursal($request)->nombreDe($this->sucursalDeTrabajo($request)),
             'sucursales' => $this->sucursalDeTrabajo($request) ? [] : $this->contextoSucursal($request)->accesibles->map(fn ($s) => ['id' => $s->id, 'nombre' => $s->nombre])->values(),
+            // solo si hay variantes: [{ id, nombre, atributos: [{ nombre, valores }] }]
+            ...($modelos->isNotEmpty() ? ['modelos' => VarianteService::modelosParaPantalla($modelos)] : []),
         ]);
     }
 

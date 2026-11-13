@@ -75,7 +75,7 @@
         'mainEntity' => [
             '@type' => 'ItemList',
             'numberOfItems' => $productos->total(),
-            'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
+            'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['modelo']['nombre'] ?? $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
         ],
     ];
 
@@ -151,12 +151,14 @@
                             @foreach ($vitrina as $i => $p)
                                 <a href="{{ $p['url'] }}" class="group relative overflow-hidden rounded-3xl bg-white shadow-xl ring-1 shadow-slate-900/5 ring-slate-200/70 transition duration-300 hover:-translate-y-1 hover:shadow-2xl {{ $i === 0 && $vitrina->count() === 3 ? 'row-span-2' : '' }}">
                                     <div class="{{ $i === 0 && $vitrina->count() === 3 ? 'h-full min-h-72' : 'aspect-[4/3]' }}">
-                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" width="800" height="600" @if ($i > 0) loading="lazy" @else fetchpriority="high" @endif
+                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['modelo']['nombre'] ?? $p['nombre'] }}" width="800" height="600" @if ($i > 0) loading="lazy" @else fetchpriority="high" @endif
                                             class="size-full object-contain p-5 transition-transform duration-500 group-hover:scale-105">
                                     </div>
                                     <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pt-8 pb-3.5">
-                                        <p class="line-clamp-1 text-sm font-medium">{{ $p['nombre'] }}</p>
-                                        @if ($p['precio'] !== null)
+                                        <p class="line-clamp-1 text-sm font-medium">{{ $p['modelo']['nombre'] ?? $p['nombre'] }}</p>
+                                        @if ($p['modelo'] && $p['modelo']['precio_desde'] !== null)
+                                            <p class="text-sm font-semibold text-(--marca-texto)" data-modelo-precio>{{ $p['modelo']['varios_precios'] ? 'Desde ' : '' }}S/ {{ number_format($p['modelo']['precio_desde'], 2) }}</p>
+                                        @elseif ($p['precio'] !== null)
                                             <p class="text-sm font-semibold text-(--marca-texto)">S/ {{ number_format($p['precio'], 2) }}</p>
                                         @endif
                                     </div>

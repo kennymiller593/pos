@@ -14,6 +14,7 @@ import {
     ExternalLink,
     History,
     Landmark,
+    Layers,
     LoaderCircle,
     LockOpen,
     Mail,
@@ -44,6 +45,8 @@ import { usePermisos } from '@/composables/permisos'
 import PanelBilletera from '@/Components/Pos/PanelBilletera.vue'
 import ElegirSeries from '@/Components/Pos/ElegirSeries.vue'
 import SeriesDeLinea from '@/Components/Pos/SeriesDeLinea.vue'
+import SelectorVariante from '@/Components/Pos/SelectorVariante.vue'
+import { agruparPorModelo, coincidePalabras, normalizar } from '@/utils/variantes'
 import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import { useImpresion } from '@/composables/impresion'
 import { useSonido } from '@/composables/sonido'
@@ -64,6 +67,8 @@ const props = defineProps({
     pedido: { type: Object, default: null },
     // programa de puntos: { soles_por_punto, valor, minimo_canje }, o null si la empresa no lo usa
     puntos: { type: Object, default: null },
+    // variantes (tallas y colores): modelos de los productos con `grupo_id` [{ id, nombre, atributos }]; vacío si no hay
+    modelos: { type: Array, default: () => [] },
 })
 
 const page = usePage()
@@ -83,24 +88,88 @@ const categoriaActiva = ref(null)
 
 const productosFiltrados = computed(() => {
     const texto = buscar.value.trim().toLowerCase()
+    // solo para variantes de un modelo: "polo rojo m" encuentra "Polo básico M Rojo" (palabras en cualquier orden)
+    const palabras = texto && modelosPos.value.size ? normalizar(texto).split(/\s+/) : null
     return props.productos.filter((p) => {
         if (categoriaActiva.value && p.categoria_id !== categoriaActiva.value) return false
         if (!texto) return true
         return (
             p.nombre.toLowerCase().includes(texto) ||
             p.codigo_interno.toLowerCase().includes(texto) ||
-            p.presentaciones.some((pres) => pres.codigo_barras === texto)
+            p.presentaciones.some((pres) => pres.codigo_barras === texto) ||
+            (palabras !== null && modelosPos.value.has(p.grupo_id) && coincidePalabras(normalizar(p.nombre), palabras))
         )
     })
 })
+
+// ---- variantes (tallas y colores): las de un mismo modelo se juntan en UNA tarjeta que abre su cuadro ----
+// Map grupo_id → { esModelo, id, nombre, modelo, variantes, precioMin, precioIgual, stock, ... }; vacío sin variantes
+const modelosPos = computed(() => {
+    const grupos = agruparPorModelo(props.productos, props.modelos)
+    for (const grupo of grupos.values()) {
+        const precios = grupo.variantes.map((v) => Number(presentacionDefault(v)?.precio_venta ?? 0))
+        const conStock = grupo.variantes.filter((v) => v.controla_stock)
+        grupo.precioMin = Math.min(...precios)
+        grupo.precioIgual = Math.max(...precios) - grupo.precioMin < 0.005
+        grupo.imagen_url = grupo.variantes.find((v) => v.imagen_url)?.imagen_url ?? null
+        grupo.controla_stock = conStock.length > 0
+        grupo.stock = Math.round(conStock.reduce((n, v) => n + Math.max(0, Number(v.stock)), 0) * 1000) / 1000
+        // agotado: ninguna variante se puede vender
+        grupo.agotado = conStock.length === grupo.variantes.length && grupo.stock <= 0
+    }
+    return grupos
+})
+
+// lo que se dibuja en la grilla: productos sueltos y, por cada modelo, una sola tarjeta (en el lugar de su
+// primera variante). Sin modelos es la misma lista de productos de siempre.
+const tarjetas = computed(() => {
+    const filtrados = productosFiltrados.value
+    const modelos = modelosPos.value
+    if (!modelos.size) return filtrados
+
+    const texto = normalizar(buscar.value)
+    const palabras = texto ? texto.split(/\s+/) : []
+    // con texto: cuántas variantes de cada modelo coinciden con lo escrito
+    const coinciden = new Map()
+    if (texto) {
+        for (const p of filtrados) {
+            if (modelos.has(p.grupo_id)) coinciden.set(p.grupo_id, (coinciden.get(p.grupo_id) ?? 0) + 1)
+        }
+    }
+
+    const puestos = new Set()
+    const lista = []
+    for (const p of filtrados) {
+        const modelo = p.grupo_id ? modelos.get(p.grupo_id) : null
+        if (!modelo) {
+            lista.push(p)
+            continue
+        }
+        // lo escrito apunta a UNA variante concreta (y no es solo el nombre del modelo): esa variante, directa
+        if (texto && coinciden.get(p.grupo_id) === 1 && !coincidePalabras(modelo.nombreNormalizado, palabras)) {
+            lista.push(p)
+            continue
+        }
+        if (!puestos.has(p.grupo_id)) {
+            puestos.add(p.grupo_id)
+            lista.push(modelo)
+        }
+    }
+    return lista
+})
+
+// cuadro talla × color abierto (el id del modelo: su tarjeta se recalcula cuando cambia el stock)
+const selectorGrupo = ref(null)
+const tarjetaSelector = computed(() => (selectorGrupo.value ? modelosPos.value.get(selectorGrupo.value) ?? null : null))
+const abrirSelector = (tarjeta) => (selectorGrupo.value = tarjeta.grupoId)
 
 // Con miles de productos no se dibujan todas las tarjetas (el POS se volvía lento, sobre todo
 // en celulares): se muestran de a 60 y se cargan más al acercarse al final. Buscar, escanear
 // y filtrar por categoría siguen trabajando sobre el catálogo completo.
 const POR_TANDA = 60
 const limiteVisible = ref(POR_TANDA)
-const productosVisibles = computed(() => productosFiltrados.value.slice(0, limiteVisible.value))
-const hayMasProductos = computed(() => productosFiltrados.value.length > limiteVisible.value)
+const productosVisibles = computed(() => tarjetas.value.slice(0, limiteVisible.value))
+const hayMasProductos = computed(() => tarjetas.value.length > limiteVisible.value)
 const centinela = ref(null)
 
 watch([buscar, categoriaActiva], () => (limiteVisible.value = POR_TANDA))
@@ -142,9 +211,11 @@ function alPresionarEnter() {
         buscar.value = ''
         return
     }
-    // sin código exacto: si el filtro deja un solo producto, agrégalo
-    if (productosFiltrados.value.length === 1) {
-        agregar(productosFiltrados.value[0])
+    // sin código exacto: si el filtro deja un solo producto, agrégalo (si es un modelo, se abre su cuadro de variantes)
+    if (tarjetas.value.length === 1) {
+        const unica = tarjetas.value[0]
+        if (unica.esModelo) abrirSelector(unica)
+        else agregar(unica)
         buscar.value = ''
         return
     }
@@ -245,6 +316,17 @@ function agregar(producto, presentacion = null, conSonido = true) {
     if (conSonido) pitido('ok')
     return true
 }
+
+// unidades base de cada producto que ya están en el carrito ({ [producto.id]: n }): el contador de cada
+// celda del cuadro de variantes. Solo se calcula con el cuadro abierto.
+const enCarritoPorProducto = computed(() => {
+    const mapa = {}
+    if (!tarjetaSelector.value) return mapa
+    for (const item of carrito.value) {
+        mapa[item.producto.id] = Math.round(((mapa[item.producto.id] ?? 0) + Number(item.cantidad || 0) * Number(item.presentacion.factor_conversion)) * 1000) / 1000
+    }
+    return mapa
+})
 
 // ================= series / IMEI (productos que controlan serie) =================
 // La línea lleva `series` ([{ id, numero_serie, serie_alterna }]) y su cantidad es cuántas unidades se eligieron.
@@ -1536,9 +1618,58 @@ const claseInput =
 
                 <!-- Grilla de productos -->
                 <div v-if="productosFiltrados.length" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
+                    <template v-for="p in productosVisibles" :key="p.id">
+                    <!-- modelo con variantes (tallas y colores): una sola tarjeta que abre su cuadro -->
                     <div
-                        v-for="p in productosVisibles"
-                        :key="p.id"
+                        v-if="p.esModelo"
+                        role="button"
+                        tabindex="0"
+                        class="group cursor-pointer overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-left shadow-sm shadow-slate-900/[0.03] transition-all hover:border-[#4F46E5] hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-none dark:hover:border-emerald-600"
+                        :class="p.agotado ? 'opacity-60' : ''"
+                        :data-tarjeta-modelo="p.nombre"
+                        :data-modelo-id="p.grupoId"
+                        :aria-label="`${p.nombre}: elegir entre ${p.variantes.length} variantes`"
+                        @click="abrirSelector(p)"
+                        @keyup.enter="abrirSelector(p)"
+                    >
+                        <div class="relative aspect-[4/3] w-full overflow-hidden bg-[#F8FAFC] dark:bg-neutral-800">
+                            <img
+                                v-if="p.imagen_url"
+                                :src="p.imagen_url"
+                                :alt="p.nombre"
+                                loading="lazy"
+                                class="size-full bg-white object-contain transition-transform duration-200 group-hover:scale-105"
+                            />
+                            <div v-else class="grid size-full place-items-center text-[#CBD5E1] dark:text-neutral-600">
+                                <Layers class="size-10" />
+                            </div>
+                            <span
+                                v-if="p.controla_stock"
+                                class="absolute top-2 right-2 rounded-full px-2 py-0.5 text-[11px] font-semibold shadow-sm"
+                                :class="p.agotado
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-white/90 text-neutral-600 backdrop-blur-sm dark:bg-neutral-900/80 dark:text-neutral-300'"
+                                data-modelo-stock
+                            >
+                                {{ p.stock }} disp.
+                            </span>
+                            <span
+                                class="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-lg bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 shadow-sm backdrop-blur-sm dark:bg-neutral-900/80 dark:text-neutral-300"
+                                data-distintivo-variantes
+                            >
+                                <Layers class="size-3" />
+                                {{ p.variantes.length }} variantes
+                            </span>
+                        </div>
+                        <div class="p-3">
+                            <p class="line-clamp-2 min-h-10 text-sm font-medium text-[#0F172A] dark:text-neutral-100">{{ p.nombre }}</p>
+                            <p class="mt-1 flex min-h-7 items-baseline gap-1 pt-0.5 text-base font-bold tracking-tight text-emerald-700 dark:text-emerald-400" data-modelo-precio>
+                                <span v-if="!p.precioIgual" class="text-xs font-medium text-neutral-500 dark:text-neutral-400">desde</span>{{ soles(p.precioMin) }}
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        v-else
                         role="button"
                         tabindex="0"
                         class="group overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-left shadow-sm shadow-slate-900/[0.03] transition-all dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-none"
@@ -1588,6 +1719,7 @@ const claseInput =
                             </div>
                         </div>
                     </div>
+                    </template>
                 </div>
                 <div v-else class="mt-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
                     No se encontraron productos.
@@ -1598,7 +1730,7 @@ const claseInput =
                         class="rounded-xl border border-[#E2E8F0] bg-white px-4 py-2 text-xs font-medium text-[#64748B] hover:bg-[#F1F5F9] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400"
                         @click="cargarMasProductos"
                     >
-                        Mostrando {{ productosVisibles.length }} de {{ productosFiltrados.length }} · ver más
+                        Mostrando {{ productosVisibles.length }} de {{ tarjetas.length }} · ver más
                     </button>
                 </div>
 
@@ -2057,6 +2189,18 @@ const claseInput =
             </div>
         </Transition>
 
+        <!-- ============ Cuadro talla × color de un modelo con variantes ============ -->
+        <SelectorVariante
+            v-if="tarjetaSelector"
+            :key="tarjetaSelector.id"
+            :tarjeta="tarjetaSelector"
+            :en-carrito="enCarritoPorProducto"
+            :aviso="avisoSinStock"
+            :en-pausa="!!seriesDe"
+            @agregar="agregar($event)"
+            @cerrar="selectorGrupo = null"
+        />
+
         <!-- ============ Elegir unidades con serie / IMEI ============ -->
         <ElegirSeries
             v-if="seriesDe"
@@ -2066,6 +2210,7 @@ const claseInput =
             :excluidas="seriesEnOtrasLineas"
             :pedidas="lineaDeSeries && !(lineaDeSeries.series?.length > 0) ? Number(lineaDeSeries.cantidad) : 0"
             :maximo="50"
+            :sin-linea="!lineaDeSeries"
             @confirmar="confirmarSeries"
             @cerrar="seriesDe = null"
         />

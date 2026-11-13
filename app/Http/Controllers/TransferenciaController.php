@@ -9,6 +9,7 @@ use App\Models\Sucursal;
 use App\Models\Transferencia;
 use App\Services\BusquedaProductos;
 use App\Services\TransferenciaService;
+use App\Services\VarianteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -104,7 +105,10 @@ class TransferenciaController extends Controller
             ->with(['presentaciones' => fn ($q) => $q->where('activo', true)->whereNotNull('codigo_barras')->where('codigo_barras', '!=', '')
                 ->select('id', 'producto_id', 'codigo_barras', 'factor_conversion')])
             ->orderBy('nombre')
-            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'controla_serie', 'imagen_url']);
+            ->get(['id', 'nombre', 'codigo_interno', 'permite_fraccion', 'controla_serie', 'imagen_url', 'grupo_id', 'atributos', 'variante_orden']);
+
+        // variantes (tallas y colores): los modelos de esos productos, para transferir con la matriz de cantidades
+        $modelos = VarianteService::modelosDe($usuario->empresa, $productos);
 
         return Inertia::render('Transferencias/Crear', [
             'origen' => Sucursal::find($origenId)?->only('id', 'nombre'),
@@ -129,7 +133,11 @@ class TransferenciaController extends Controller
                     'codigo' => $pres->codigo_barras,
                     'factor' => (float) $pres->factor_conversion,
                 ])->values(),
+                // solo en variantes de un modelo: grupo_id, grupo, atributos y variante_orden
+                ...VarianteService::camposDeVariante($p, $modelos),
             ]),
+            // solo si hay variantes: [{ id, nombre, atributos: [{ nombre, valores }] }]
+            ...($modelos->isNotEmpty() ? ['modelos' => VarianteService::modelosParaPantalla($modelos)] : []),
         ]);
     }
 

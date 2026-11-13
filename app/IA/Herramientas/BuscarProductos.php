@@ -12,6 +12,9 @@ class BuscarProductos extends CatalogoDeLaEmpresa implements Tool
 {
     public const MAXIMO = 5;
 
+    /** Cuántas filas se leen para juntar las variantes de un mismo modelo en un solo resultado. */
+    private const FILAS_CON_MODELOS = 80;
+
     public function name(): string
     {
         return 'buscar_productos';
@@ -50,8 +53,18 @@ class BuscarProductos extends CatalogoDeLaEmpresa implements Tool
         $busqueda = app(Busqueda::class);
         $productos = collect();
         for ($minimo = count($palabras); $minimo >= 1 && $productos->isEmpty(); $minimo--) {
-            $productos = $busqueda->aplicar(clone $base, $palabras, $minimo, conDescripcion: true)
-                ->limit(self::MAXIMO + 1)->get()->filter(fn ($p) => $p->presentaciones->isNotEmpty());
+            $encontrados = $busqueda->aplicar(clone $base, $palabras, $minimo, conDescripcion: true);
+            $productos = (clone $encontrados)->limit(self::MAXIMO + 1)->get()->filter(fn ($p) => $p->presentaciones->isNotEmpty());
+
+            // un modelo con tallas y colores no debe llenar la respuesta con sus variantes: queda la que mejor
+            // coincide y su descripción ya cuenta qué otras hay (sin variantes entre los resultados, nada cambia)
+            if ($this->empresa->variantes_activo && $productos->contains(fn ($p) => $p->grupo_id !== null)) {
+                $productos = $encontrados->limit(self::FILAS_CON_MODELOS)->get()
+                    ->filter(fn ($p) => $p->presentaciones->isNotEmpty())
+                    ->unique(fn ($p) => $p->grupo_id ?? $p->id)
+                    ->take(self::MAXIMO + 1)
+                    ->values();
+            }
         }
 
         if ($productos->isEmpty()) {

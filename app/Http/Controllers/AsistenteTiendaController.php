@@ -153,9 +153,10 @@ class AsistenteTiendaController extends Controller
             return [];
         }
 
-        return $this->catalogo->productos($empresa)->whereIn('productos.codigo_interno', $codigos)->get()
-            ->sortBy(fn ($p) => array_search($p->codigo_interno, $codigos, true))
-            ->map(fn ($p) => $this->catalogo->tarjeta($p, $config))
+        $recomendados = $this->catalogo->productos($empresa)->whereIn('productos.codigo_interno', $codigos)->get()
+            ->sortBy(fn ($p) => array_search($p->codigo_interno, $codigos, true));
+
+        return $this->catalogo->tarjetas($recomendados, $config, $empresa)
             ->map(fn (array $t) => [
                 'nombre' => $t['nombre'],
                 'categoria' => $t['categoria'],

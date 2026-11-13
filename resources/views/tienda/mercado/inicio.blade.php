@@ -73,7 +73,7 @@
         'mainEntity' => [
             '@type' => 'ItemList',
             'numberOfItems' => $productos->total(),
-            'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
+            'itemListElement' => $productos->values()->map(fn ($p, $i) => ['@type' => 'ListItem', 'position' => ($pagina - 1) * $productos->perPage() + $i + 1, 'name' => $p['modelo']['nombre'] ?? $p['nombre'], 'url' => rtrim($tienda['url'], '/').$p['url']])->all(),
         ],
     ];
 
@@ -157,13 +157,15 @@
                             @foreach ($ofertas as $p)
                                 <a href="{{ $p['url'] }}" class="group flex w-44 shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl shadow-black/15 transition hover:-translate-y-1 sm:w-52 lg:w-auto {{ $ofertas->count() === 1 ? 'lg:max-w-xs' : '' }}">
                                     <span class="relative block aspect-square overflow-hidden bg-white">
-                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}" @if ($loop->first) fetchpriority="high" @else loading="lazy" @endif width="400" height="400" class="size-full object-contain p-4 transition-transform duration-300 group-hover:scale-105">
+                                        <img src="{{ $p['imagen'] }}" alt="{{ $p['modelo']['nombre'] ?? $p['nombre'] }}" @if ($loop->first) fetchpriority="high" @else loading="lazy" @endif width="400" height="400" class="size-full object-contain p-4 transition-transform duration-300 group-hover:scale-105">
                                         <span class="absolute top-2.5 left-2.5 rounded-md bg-(--mercado-fondo) px-2 py-1 text-[10px] font-bold tracking-wider text-(--sobre-fondo) uppercase">{{ $destacados['origen'] === 'nuevos' ? 'Novedad' : ($destacados['origen'] === 'vendidos' ? 'Más pedido' : 'Destacado') }}</span>
                                     </span>
                                     <span class="flex flex-1 flex-col px-3.5 pt-2 pb-3.5">
-                                        <span class="line-clamp-2 text-sm leading-snug font-bold">{{ $p['nombre'] }}</span>
+                                        <span class="line-clamp-2 text-sm leading-snug font-bold">{{ $p['modelo']['nombre'] ?? $p['nombre'] }}</span>
                                         <span class="mt-auto pt-2">
-                                            @if ($p['precio'] !== null)
+                                            @if ($p['modelo'] && $p['modelo']['precio_desde'] !== null)
+                                                <span class="inline-block rounded-lg bg-(--marca-suave) px-2.5 py-1 text-base font-extrabold text-(--marca-texto)" data-modelo-precio>{{ $p['modelo']['varios_precios'] ? 'Desde ' : '' }}S/ {{ number_format($p['modelo']['precio_desde'], 2) }}</span>
+                                            @elseif ($p['precio'] !== null)
                                                 <span class="inline-block rounded-lg bg-(--marca-suave) px-2.5 py-1 text-base font-extrabold text-(--marca-texto)">S/ {{ number_format($p['precio'], 2) }}</span>
                                             @else
                                                 <span class="text-xs font-semibold text-slate-500">Consultar precio</span>

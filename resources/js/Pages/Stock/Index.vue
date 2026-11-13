@@ -8,6 +8,7 @@ import {
     ArrowUpCircle,
     Boxes,
     History,
+    Layers,
     Package,
     Search,
     SlidersHorizontal,
@@ -16,6 +17,7 @@ import {
 } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import CapturaSeries from '@/Components/Series/CapturaSeries.vue'
+import RejillaVariantes from '@/Components/Variantes/RejillaVariantes.vue'
 import { usePermisos } from '@/composables/permisos'
 
 const props = defineProps({
@@ -25,6 +27,10 @@ const props = defineProps({
     sucursal: { type: String, default: null },
     // viendo varias sucursales: [{ id, nombre }] para la columna de cada una
     sucursales: { type: Array, default: () => [] },
+    // variantes (tallas y colores): modelos con inventario [{ id, nombre }] para el filtro; vacío si no hay
+    modelos: { type: Array, default: () => [] },
+    // con un modelo filtrado: { id, nombre, atributos, variantes: [{ id, nombre, atributos, stock, stock_minimo, por_sucursal? }] }
+    matriz: { type: Object, default: null },
 })
 const comparado = computed(() => props.sucursales.length > 1)
 const page = usePage()
@@ -67,16 +73,34 @@ const buscar = ref(props.filtros.buscar ?? '')
 const soloBajos = ref(!!props.filtros.bajos)
 const soloPorVencer = ref(!!props.filtros.vencen)
 
+// modelo con variantes elegido (solo hay filtro si la empresa tiene modelos)
+const grupoId = ref(props.filtros.grupo_id ?? '')
+
 function aplicarFiltros() {
     router.get('/stock', {
         buscar: buscar.value || undefined,
         bajos: soloBajos.value ? 1 : undefined,
         vencen: soloPorVencer.value ? 1 : undefined,
+        grupo_id: grupoId.value || undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 }
 
 watchDebounced(buscar, aplicarFiltros, { debounce: 350 })
-watch([soloBajos, soloPorVencer], aplicarFiltros)
+watch([soloBajos, soloPorVencer, grupoId], aplicarFiltros)
+
+// ---- matriz talla × color del modelo filtrado ----
+const totalMatriz = computed(() => (props.matriz?.variantes ?? []).reduce((n, v) => n + Number(v.stock ?? 0), 0))
+const stockCelda = (variante) => Number(variante.stock ?? 0)
+// mismo criterio que la columna Estado de la lista
+function estadoCelda(variante) {
+    const stock = Number(variante.stock ?? 0)
+    if (stock <= 0) return 'agotado'
+    return Number(variante.stock_minimo) > 0 && stock <= Number(variante.stock_minimo) ? 'bajo' : 'ok'
+}
+// viendo varias sucursales, tocar una celda detalla cuánto hay en cada una
+const celdaMatriz = ref(null)
+const detalleCelda = computed(() => (props.matriz?.variantes ?? []).find((v) => v.id === celdaMatriz.value) ?? null)
+watch(() => props.matriz?.id, () => (celdaMatriz.value = null))
 
 // ---- kardex ----
 const kardexProducto = ref(null)
@@ -357,6 +381,70 @@ const claseError = 'mt-1 text-xs text-red-600 dark:text-red-400'
                     class="h-10 w-full rounded-xl border border-stone-200 bg-white pr-4 pl-10 text-sm placeholder-neutral-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder-neutral-500"
                 />
             </div>
+            <!-- modelos con variantes (tallas y colores): solo si la empresa tiene alguno -->
+            <select
+                v-if="modelos.length"
+                v-model="grupoId"
+                class="h-10 w-full min-w-0 rounded-xl border border-stone-200 bg-white px-3 text-sm focus:border-emerald-500 focus:outline-none sm:w-auto sm:max-w-56 dark:border-neutral-800 dark:bg-neutral-900"
+                aria-label="Filtrar por modelo"
+                data-filtro-modelo
+            >
+                <option value="">Todos los modelos</option>
+                <option v-for="m in modelos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+            </select>
+        </div>
+
+        <!-- Modelo filtrado: su stock en matriz talla × color (la lista de sus variantes sigue abajo) -->
+        <div
+            v-if="matriz"
+            class="mb-4 rounded-2xl border border-stone-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
+            data-stock-matriz
+            :data-modelo="matriz.nombre"
+        >
+            <div class="mb-3 flex items-center gap-3">
+                <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                    <Layers class="size-5" />
+                </span>
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold">{{ matriz.nombre }}</p>
+                    <p class="text-xs text-neutral-500 dark:text-neutral-400" data-stock-matriz-total>
+                        {{ cantidad(totalMatriz) }} {{ totalMatriz === 1 ? 'unidad' : 'unidades' }} en {{ matriz.variantes.length }} variantes
+                        · {{ sucursal ? sucursal : (comparado ? 'todas tus sucursales' : 'tu sucursal') }}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    data-stock-matriz-quitar
+                    @click="grupoId = ''"
+                >
+                    <X class="size-4" />
+                    <span class="hidden sm:inline">Ver todos</span>
+                </button>
+            </div>
+            <div class="sm:max-w-3xl">
+                <RejillaVariantes
+                    modo="lectura"
+                    :atributos="matriz.atributos"
+                    :variantes="matriz.variantes"
+                    :stock-de="stockCelda"
+                    :estado-de="estadoCelda"
+                    :tocable="comparado"
+                    :elegida="celdaMatriz"
+                    clase-scroll="max-h-72"
+                    @tocar="celdaMatriz = celdaMatriz === $event.id ? null : $event.id"
+                />
+            </div>
+            <template v-if="comparado">
+                <div v-if="detalleCelda" class="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-stone-50 px-3 py-2 text-xs dark:bg-neutral-950" data-stock-matriz-detalle>
+                    <span class="font-semibold">{{ detalleCelda.nombre }}</span>
+                    <span v-for="s in sucursales" :key="s.id" class="text-neutral-600 tabular-nums dark:text-neutral-300" :data-detalle-sucursal="s.nombre">
+                        {{ s.nombre }}: <span class="font-semibold">{{ cantidad(detalleCelda.por_sucursal?.[s.id] ?? 0) }}</span>
+                    </span>
+                </div>
+                <p v-else class="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">Cada celda es el total de tus sucursales; toca una para ver cuánto hay en cada una.</p>
+            </template>
+            <p v-else class="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">Atenuado: sin stock. En ámbar: en el mínimo o por debajo.</p>
         </div>
 
         <!-- Tabla -->

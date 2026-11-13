@@ -92,16 +92,16 @@ class TiendaController extends Controller
             return response()->json(['productos' => [], 'total' => 0]);
         }
 
-        $consulta = $this->catalogo->buscar($this->catalogo->productos($empresa), $buscar);
+        // un modelo con tallas y colores se sugiere una sola vez
+        $consulta = $this->catalogo->porModelo($empresa, $this->catalogo->buscar($this->catalogo->productos($empresa), $buscar));
         $total = (clone $consulta)->toBase()->getCountForPagination();
 
-        $productos = $consulta->orderBy('productos.nombre')->limit(self::SUGERENCIAS)->get()
-            ->map(fn ($p) => $this->catalogo->tarjeta($p, $config))
+        $productos = $this->catalogo->tarjetas($consulta->orderBy('productos.nombre')->limit(self::SUGERENCIAS)->get(), $config, $empresa)
             ->map(fn (array $t) => [
-                'nombre' => $t['nombre'],
+                'nombre' => $t['modelo']['nombre'] ?? $t['nombre'],
                 'url' => $t['url'],
-                'imagen' => $t['imagen'],
-                'precio' => $t['precio'],
+                'imagen' => $t['imagen'] ?? $t['modelo']['imagen'] ?? null,
+                'precio' => $t['modelo'] ? $t['modelo']['precio_desde'] : $t['precio'],
                 'detalle' => $t['marca'] ?: $t['categoria'],
             ]);
 
@@ -127,16 +127,19 @@ class TiendaController extends Controller
             ->when($categoria, fn ($q) => $q->where('productos.categoria_id', $categoria->id))
             ->when($marca !== '', fn ($q) => $q->whereHas('marca', fn ($m) => $m->where('nombre', $marca)))
             ->when($hasta !== null, fn ($q) => $q->whereHas('presentaciones', fn ($p) => $p->where('activo', true)->where('precio_venta', '<=', $hasta)))
+            // una tarjeta por modelo: de sus tallas y colores queda la que mejor lo representa entre las que pasan los filtros
+            ->tap(fn ($q) => $this->catalogo->porModelo($empresa, $q))
             // por defecto, primero lo que hay para vender: una primera página llena de "Agotado" espanta
             ->when($orden === 'nombre' && $config['mostrar_stock'], fn ($q) => $q->orderByRaw(
                 '(CASE WHEN NOT productos.controla_stock OR COALESCE((SELECT SUM(s.cantidad) FROM stock s WHERE s.producto_id = productos.id), 0) > 0 THEN 0 ELSE 1 END)'
             ))
-            ->when($orden === 'menor', fn ($q) => $q->orderBy('precio'))
-            ->when($orden === 'mayor', fn ($q) => $q->orderByDesc('precio'))
+            // un modelo se ordena por su precio más bajo (el "Desde" de su tarjeta)
+            ->when($orden === 'menor', fn ($q) => $this->catalogo->ordenarPorPrecio($empresa, $q))
+            ->when($orden === 'mayor', fn ($q) => $this->catalogo->ordenarPorPrecio($empresa, $q, deMayorAMenor: true))
             ->orderBy('productos.nombre')
             ->paginate($portada ? self::EN_PORTADA : self::POR_PAGINA)
-            ->withQueryString()
-            ->through(fn ($p) => $this->catalogo->tarjeta($p, $config));
+            ->withQueryString();
+        $productos->setCollection($this->catalogo->tarjetas($productos->getCollection(), $config, $empresa));
 
         // una página más allá de la última no existe: 404 de verdad, no una página vacía que Google indexe
         abort_if($productos->currentPage() > 1 && $productos->isEmpty(), 404);
@@ -163,7 +166,7 @@ class TiendaController extends Controller
                 'origen' => $destacados['origen'],
                 // título que puso el dueño; sin él, cada plantilla pone el suyo según el origen
                 'titulo' => $config['destacados_titulo'],
-                'productos' => $destacados['productos']->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
+                'productos' => $this->catalogo->tarjetas($destacados['productos'], $config, $empresa),
             ] : null,
         ]);
     }
@@ -201,20 +204,34 @@ class TiendaController extends Controller
             }
         }
 
-        $tarjeta = $this->catalogo->tarjeta($producto, $config);
+        $tarjeta = $this->catalogo->tarjeta($producto, $config, $empresa);
         $contexto = $this->contexto($request, $empresa, $config);
-        $enlace = rtrim($contexto['tienda']['url'], '/').$tarjeta['url'];
+        $base = rtrim($contexto['tienda']['url'], '/');
+        $enlace = $base.$tarjeta['url'];
+        // el mensaje de "Pedir por WhatsApp" de la página; en una variante dice además su talla y color
+        $mensaje = fn (array $para) => Tienda::enlaceWhatsapp(
+            $config['whatsapp'],
+            "Hola, me interesa este producto de {$contexto['tienda']['nombre']}:\n{$para['nombre']}".(isset($para['variante']) ? "\n({$para['variante']})" : '')."\n{$base}{$para['url']}",
+        );
+
+        // variante de un modelo: cada talla y color lleva su propio mensaje, y los buscadores reciben una sola dirección
+        if ($tarjeta['modelo']) {
+            $tarjeta['modelo']['variantes'] = array_map(fn (array $v) => [...$v, 'pedido' => $mensaje($v['para_pedido'])], $tarjeta['modelo']['variantes']);
+            $actual = collect($tarjeta['modelo']['variantes'])->firstWhere('actual', true);
+        }
 
         return view('tienda.producto', [
             ...$contexto,
             'producto' => $tarjeta,
             'categoriaUrl' => $contexto['categorias']->firstWhere('id', $producto->categoria_id)?->url,
             'enlace' => $enlace,
-            'pedido' => Tienda::enlaceWhatsapp(
+            // en un modelo, todas sus variantes declaran la misma dirección: la de su primera variante (no cambia con el stock)
+            'canonica' => $tarjeta['modelo'] ? $base.$tarjeta['modelo']['canonica'] : $enlace,
+            'pedido' => isset($actual) ? $actual['pedido'] : Tienda::enlaceWhatsapp(
                 $config['whatsapp'],
                 "Hola, me interesa este producto de {$contexto['tienda']['nombre']}:\n{$producto->nombre}\n{$enlace}",
             ),
-            'relacionados' => $this->catalogo->relacionados($empresa, $producto)->map(fn ($p) => $this->catalogo->tarjeta($p, $config)),
+            'relacionados' => $this->catalogo->tarjetas($this->catalogo->relacionados($empresa, $producto), $config, $empresa),
             // evento "vio un producto" para las herramientas de medición
             'medicionEvento' => ['tipo' => 'producto', 'id' => (string) $producto->id, 'nombre' => $producto->nombre, 'precio' => $tarjeta['precio'], 'categoria' => $tarjeta['categoria']],
         ]);
@@ -365,7 +382,9 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $base = rtrim((string) Tienda::urlDe($empresa), '/');
 
-        $productos = $this->catalogo->productos($empresa)->orderBy('productos.nombre')->limit(5000)->get();
+        // un modelo con tallas y colores entra una sola vez, con la dirección de su primera variante: la misma
+        // que sus páginas declaran como canónica, y que no cambia cuando una talla se agota
+        $productos = $this->catalogo->porModelo($empresa, $this->catalogo->productos($empresa), estable: true)->orderBy('productos.nombre')->limit(5000)->get();
         // la portada, el catálogo y cada categoría cambian cuando cambia alguno de sus productos
         $fecha = fn ($coleccion) => $coleccion->max('actualizado_en')?->toDateString();
         $porCategoria = $productos->groupBy('categoria_id')->map($fecha);

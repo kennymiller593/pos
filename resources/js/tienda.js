@@ -119,6 +119,142 @@ if (buscador && sugerencias) {
     })
 }
 
+// ---------------------------------------------------------------- variantes (talla, color...)
+// En la página de un modelo cada opción es un enlace a su variante. Aquí, en vez de abrir otra página, se
+// cambia en el sitio: precio, disponibilidad, foto, lo que se añade al pedido, el mensaje de WhatsApp y la dirección.
+const selectorVariante = document.querySelector('[data-elegir-variante]')
+const variantes = (() => {
+    try {
+        return JSON.parse(selectorVariante?.querySelector('[data-variantes]')?.textContent || 'null')
+    } catch {
+        return null
+    }
+})()
+
+if (selectorVariante && Array.isArray(variantes) && variantes.length) {
+    const grupos = [...selectorVariante.querySelectorAll('[data-atributo-variante]')]
+    const importe = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const alternar = (elemento, atributo, si) => (si ? elemento.setAttribute(atributo, '') : elemento.removeAttribute(atributo))
+
+    // la variante que la página trae elegida
+    const elegidos = grupos.map((g) => g.querySelector('[data-opcion-variante][aria-current="true"]')?.dataset.valor)
+    let actual = variantes.find((v) => v.valores.every((valor, i) => valor === elegidos[i]))
+
+    // en cuántos de los otros atributos una variante coincide con la elegida
+    const iguales = (v, salvo) => v.valores.reduce((n, valor, i) => n + (i !== salvo && valor === actual.valores[i] ? 1 : 0), 0)
+    // a qué variante lleva un valor: de las que lo tienen, primero las disponibles y entre ellas la que más se parece a
+    // la elegida; si ninguna está disponible, la agotada más parecida (la misma cuenta que hace el servidor al armar
+    // los enlaces: CatalogoTiendaService::varianteCon). Si la tienda no muestra disponibilidad, solo manda el parecido.
+    const varianteCon = (indice, valor) => {
+        let mejor = null
+        let puntos = -1
+        for (const v of variantes) {
+            if (v.valores[indice] !== valor) continue
+            const suyos = (v.disponible !== false ? 100 : 0) + iguales(v, indice)
+            if (suyos > puntos) [mejor, puntos] = [v, suyos]
+        }
+        return mejor
+    }
+
+    function mostrar(v) {
+        actual = v
+        const agotado = v.disponible === false
+
+        grupos.forEach((grupo, i) => {
+            const elegida = grupo.querySelector('[data-variante-elegida]')
+            if (elegida) elegida.textContent = v.valores[i]
+
+            grupo.querySelectorAll('[data-opcion-variante]').forEach((opcion) => {
+                const destino = varianteCon(i, opcion.dataset.valor)
+                if (!destino) return
+                const sinStock = destino.disponible === false
+                opcion.href = destino.url
+                opcion.setAttribute('aria-current', opcion.dataset.valor === v.valores[i] ? 'true' : 'false')
+                opcion.setAttribute('aria-label', `${grupo.dataset.atributoVariante} ${opcion.dataset.valor}${sinStock ? ' (agotado)' : ''}`)
+                alternar(opcion, 'data-variante-agotada', sinStock)
+                const salta = iguales(destino, i) < v.valores.length - 1
+                alternar(opcion, 'data-variante-salta', salta)
+                if (salta) opcion.title = 'Disponible en otra combinación'
+                else opcion.removeAttribute('title')
+            })
+        })
+
+        // precio (y precio por mayor, si esa variante lo tiene)
+        const precio = document.querySelector('[data-variante-precio]')
+        if (precio && v.precio !== null) precio.textContent = importe(v.precio)
+        const mayorista = document.querySelector('[data-variante-mayorista]')
+        if (mayorista) {
+            mayorista.hidden = !v.mayorista
+            if (v.mayorista) {
+                mayorista.querySelector('[data-variante-mayorista-precio]').textContent = `S/ ${importe(v.mayorista.precio)}`
+                mayorista.querySelector('[data-variante-mayorista-desde]').textContent = String(Number(v.mayorista.desde))
+            }
+        }
+
+        // disponibilidad (solo si la tienda la muestra)
+        const disponible = document.querySelector('[data-variante-disponible]')
+        const sinStock = document.querySelector('[data-variante-agotado]')
+        if (disponible) disponible.hidden = v.disponible !== true
+        if (sinStock) sinStock.hidden = !agotado
+
+        // foto: la de la variante; si no tiene la suya, viene la del modelo (nunca queda la de la variante anterior)
+        const foto = document.querySelector('[data-variante-imagen]')
+        if (foto) {
+            if (v.imagen && foto.getAttribute('src') !== v.imagen) foto.src = v.imagen
+            foto.classList.toggle('opacity-50', agotado)
+            foto.classList.toggle('grayscale', agotado)
+        }
+
+        // lo que se añade al pedido es esta variante; agotada no se puede añadir
+        const zona = document.querySelector('[data-variante-zona]')
+        if (zona) {
+            zona.hidden = agotado
+            const anadir = zona.querySelector('[data-anadir]')
+            if (anadir) anadir.dataset.anadir = JSON.stringify(v.anadir)
+            const cantidad = zona.querySelector('[data-cantidad-elegida]')
+            if (cantidad) cantidad.value = 1
+        }
+        const acciones = document.querySelector('[data-variante-acciones]')
+        if (acciones && zona) {
+            acciones.classList.toggle('mt-2', !agotado)
+            acciones.classList.toggle('mt-5', agotado)
+        }
+
+        // "Pedir por WhatsApp" lleva el nombre, la talla y el color de esta variante
+        if (v.pedido) document.querySelectorAll('[data-pedir-producto]').forEach((enlace) => (enlace.href = v.pedido))
+        const textoPedido = document.querySelector('[data-variante-texto-pedido]')
+        if (textoPedido) textoPedido.textContent = agotado ? 'Preguntar cuándo llega' : 'Pedir por WhatsApp'
+        const textoBarra = document.querySelector('[data-variante-texto-barra]')
+        if (textoBarra) textoBarra.textContent = agotado ? 'Preguntar' : 'Pedir'
+
+        // la barra del celular
+        const nombre = document.querySelector('[data-variante-nombre]')
+        if (nombre) nombre.textContent = v.nombre
+        const precioBarra = document.querySelector('[data-variante-precio-barra]')
+        if (precioBarra && v.precio !== null) precioBarra.textContent = `S/ ${importe(v.precio)}`
+
+        // la dirección queda en la de la variante: al compartirla o recargar se abre la misma
+        try {
+            history.replaceState(history.state, '', v.url + location.search + location.hash)
+        } catch {
+            // sin acceso al historial la página igual quedó cambiada
+        }
+    }
+
+    if (actual) {
+        selectorVariante.addEventListener('click', (e) => {
+            const opcion = e.target.closest('[data-opcion-variante]')
+            // con Ctrl, Shift o el botón del medio el enlace se abre aparte, como cualquier otro
+            if (!opcion || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return
+            const destino = varianteCon(Number(opcion.dataset.atributo), opcion.dataset.valor)
+            if (!destino) return
+            e.preventDefault()
+            if (destino !== actual) mostrar(destino)
+        })
+        selectorVariante.setAttribute('data-variantes-listas', '')
+    }
+}
+
 // ---------------------------------------------------------------- pedido
 const panel = document.getElementById('pedido')
 
@@ -162,7 +298,8 @@ if (panel && datos.whatsapp) {
 
         const lineas = items.map((i) => {
             const precio = i.precio !== null && i.precio !== undefined ? ` — ${soles(i.cantidad * i.precio)}` : ''
-            return `• ${i.cantidad} x ${i.nombre}${i.unidad ? ` (${i.unidad})` : ''}${precio}`
+            // una variante dice además su talla y color con todas las letras
+            return `• ${i.cantidad} x ${i.nombre}${i.variante ? ` (${i.variante})` : ''}${i.unidad ? ` (${i.unidad})` : ''}${precio}`
         })
 
         return [
@@ -189,6 +326,7 @@ if (panel && datos.whatsapp) {
                     <a href="${texto(i.url)}" class="line-clamp-2 flex-1 text-sm leading-snug font-medium hover:text-(--marca-texto)">${texto(i.nombre)}</a>
                     <button type="button" data-quitar class="-mt-1 -mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600" aria-label="Quitar ${texto(i.nombre)} del pedido" title="Quitar">${icono(TRAZOS.quitar)}</button>
                 </div>
+                ${i.variante ? `<p class="text-xs text-slate-500" data-item-variante>${texto(i.variante)}</p>` : ''}
                 ${i.unidad ? `<p class="text-xs text-slate-500">${texto(i.unidad)}</p>` : ''}
                 <div class="mt-2 flex items-center justify-between gap-3">
                     <div class="flex h-9 items-center rounded-lg ring-1 ring-slate-200">

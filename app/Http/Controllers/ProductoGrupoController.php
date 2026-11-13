@@ -32,7 +32,7 @@ class ProductoGrupoController extends Controller
     public function store(ProductoGrupoRequest $request): RedirectResponse
     {
         try {
-            $grupo = $this->variantes->guardarGrupo($request->user(), $request->validated(), null, $this->sucursalElegida($request, 'sucursal_id'));
+            $grupo = $this->variantes->guardarGrupo($request->user(), $this->datos($request), null, $this->sucursalElegida($request, 'sucursal_id'));
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -80,6 +80,8 @@ class ProductoGrupoController extends Controller
                 'unidad_base_codigo' => $variantes->first()?->unidad_base_codigo,
                 'tipo_afectacion_codigo' => $variantes->first() ? trim((string) $variantes->first()->tipo_afectacion_codigo) : null,
                 'precio_base' => $precioBase !== null ? (float) $precioBase : null,
+                // serie / IMEI a nivel de modelo: todas sus variantes a la venta la controlan
+                'controla_serie' => $grupo->controlaSerie($variantes),
                 'variantes' => $variantes->map(fn (Producto $p) => [
                     'id' => $p->id,
                     'codigo_interno' => $p->codigo_interno,
@@ -100,7 +102,7 @@ class ProductoGrupoController extends Controller
         $this->autorizar($request, $grupo);
 
         try {
-            $this->variantes->guardarGrupo($request->user(), $request->validated(), $grupo, $this->sucursalElegida($request, 'sucursal_id'));
+            $this->variantes->guardarGrupo($request->user(), $this->datos($request), $grupo, $this->sucursalElegida($request, 'sucursal_id'));
         } catch (ErrorDeNegocio $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -127,6 +129,12 @@ class ProductoGrupoController extends Controller
         }
 
         return redirect('/productos')->with('success', "Modelo \"{$grupo->nombre}\" eliminado con {$this->contar($eliminadas, 'variante')}.");
+    }
+
+    /** Lo validado, con la serie / IMEI como la entiende el request: sin el módulo activo va null y no se toca. */
+    private function datos(ProductoGrupoRequest $request): array
+    {
+        return [...$request->validated(), 'controla_serie' => $request->controlaSerie()];
     }
 
     /** Un usuario jamás ve ni toca modelos de otra empresa. */

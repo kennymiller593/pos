@@ -3,12 +3,22 @@
     $mayorista = collect($p['presentaciones'])->firstWhere('mayorista', '!=', null)['mayorista'] ?? null;
     $subtitulo = $p['categoria'] ?: $p['marca'];
 @endphp
-<article class="group relative flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-900/10 hover:ring-slate-300" data-tarjeta-mercado>
+@php
+    // variante de un modelo (tallas y colores): la tarjeta es del modelo entero; null en un producto suelto
+    $m = $p['modelo'] ?? null;
+    $titulo = $m ? $m['nombre'] : $p['nombre'];
+    $disponible = $m ? $m['disponible'] : $p['disponible'];
+    $precio = $m ? $m['precio_desde'] : $p['precio'];
+    $foto = $p['imagen'] ?: ($m['imagen'] ?? null);
+    // con varias tallas o colores no se añade a ciegas: el botón lleva a la página a elegir
+    $elegir = $m && $m['cuantas'] > 1;
+@endphp
+<article class="group relative flex h-full flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-slate-900/10 hover:ring-slate-300"@if ($m) data-tarjeta-modelo="{{ $m['cuantas'] }}"@endif data-tarjeta-mercado>
     <a href="{{ $p['url'] }}" class="flex flex-1 flex-col focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--marca)">
         <div class="relative aspect-square overflow-hidden bg-white">
-            @if ($p['imagen'])
-                <img src="{{ $p['imagen'] }}" alt="{{ $p['nombre'] }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="600" height="600" @if ($p['miniatura'] ?? null) srcset="{{ $p['miniatura'] }} 400w, {{ $p['imagen'] }} 800w" sizes="(min-width: 1280px) 16vw, (min-width: 768px) 30vw, 48vw"@endif
-                    class="size-full object-contain p-5 transition-transform duration-300 group-hover:scale-105 {{ $p['disponible'] === false ? 'opacity-40 grayscale' : '' }}">
+            @if ($foto)
+                <img src="{{ $foto }}" alt="{{ $titulo }}"@if ($prioritaria ?? false) fetchpriority="high"@else loading="lazy"@endif decoding="async" width="600" height="600" @if (($p['miniatura'] ?? null) && $p['imagen']) srcset="{{ $p['miniatura'] }} 400w, {{ $p['imagen'] }} 800w" sizes="(min-width: 1280px) 16vw, (min-width: 768px) 30vw, 48vw"@endif
+                    class="size-full object-contain p-5 transition-transform duration-300 group-hover:scale-105 {{ $disponible === false ? 'opacity-40 grayscale' : '' }}">
             @else
                 <div class="grid size-full place-items-center bg-slate-50 text-slate-300">@include('tienda.icono', ['n' => 'paquete', 'clase' => 'size-12', 'grosor' => 1.25])</div>
             @endif
@@ -17,7 +27,7 @@
                 <span class="absolute top-2.5 right-2.5 max-w-[55%] truncate rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-bold tracking-wider text-slate-500 uppercase ring-1 ring-slate-200">{{ $p['marca'] }}</span>
             @endif
             {{-- insignia --}}
-            @if ($p['disponible'] === false)
+            @if ($disponible === false)
                 <span class="absolute top-2.5 left-2.5 rounded-md bg-slate-900 px-2 py-1 text-[11px] font-bold tracking-wide text-white uppercase">Agotado</span>
             @elseif (($insignia ?? null) === 'nuevo')
                 <span class="absolute top-2.5 left-2.5 rounded-md bg-red-600 px-2 py-1 text-[11px] font-bold tracking-wide text-white uppercase">Novedad</span>
@@ -31,10 +41,16 @@
         <div class="h-1 bg-(--marca)/80"></div>
 
         <div class="flex flex-1 flex-col px-3.5 pt-3">
-            <h3 class="line-clamp-2 text-[15px] leading-snug font-bold text-slate-900 group-hover:text-(--marca-texto)">{{ $p['nombre'] }}</h3>
-            <p class="mt-auto pt-2 leading-none">
-                @if ($p['precio'] !== null)
-                    <span class="text-xl font-extrabold tracking-tight text-(--marca-texto)">S/ {{ number_format($p['precio'], 2) }}</span>
+            <h3 class="line-clamp-2 text-[15px] leading-snug font-bold text-slate-900 group-hover:text-(--marca-texto)">{{ $titulo }}</h3>
+            @if ($m && $m['variacion'])
+                <p class="mt-1 truncate text-xs text-slate-500" data-modelo-variacion>{{ $m['variacion'] }}</p>
+            @endif
+            <p class="mt-auto pt-2 leading-none"@if ($m) data-modelo-precio @endif>
+                @if ($precio !== null)
+                    @if ($m && $m['varios_precios'])
+                        <span class="text-xs font-semibold text-slate-500">Desde</span>
+                    @endif
+                    <span class="text-xl font-extrabold tracking-tight text-(--marca-texto)">S/ {{ number_format($precio, 2) }}</span>
                     @if ($p['presentacion'])
                         <span class="text-xs text-slate-500">/ {{ mb_strtolower($p['presentacion']) }}</span>
                     @endif
@@ -52,7 +68,16 @@
     </a>
 
     {{-- cantidad, agregar al carrito (el pedido completo sale por WhatsApp) y comprar este producto por WhatsApp; si está agotado, consultar --}}
-    @if ($p['pedido'])
+    @if ($p['pedido'] && $elegir)
+        <div class="px-3 pt-3 pb-3 sm:px-3.5 sm:pb-3.5">
+            {{-- en celular, 44 px de alto: es el único botón de la tarjeta --}}
+            <a href="{{ $p['url'] }}" data-elegir-modelo
+                class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-(--boton-carrito) px-2 text-[13px] font-bold text-(--sobre-boton-carrito) transition hover:brightness-110 sm:h-10"
+                aria-label="Ver las opciones de {{ $titulo }}">
+                Ver opciones
+            </a>
+        </div>
+    @elseif ($p['pedido'])
         <div class="@container px-3 pt-3 pb-3 sm:px-3.5 sm:pb-3.5" data-zona-pedido>
             @if ($p['disponible'] !== false)
                 {{-- en tarjetas angostas (celular) va todo apilado; en las anchas, cantidad y botón en una fila --}}

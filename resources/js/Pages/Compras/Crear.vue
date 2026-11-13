@@ -3,11 +3,13 @@ import { fechaLocal } from '@/utils/fechas'
 import { computed, nextTick, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Boxes, Building2, ChevronRight, HandCoins, Info, LoaderCircle, MapPin, Minus, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
+import { Boxes, Building2, ChevronRight, HandCoins, Info, Layers, LoaderCircle, MapPin, Minus, Package, Plus, ScanBarcode, Search, Trash2, Truck, X } from '@lucide/vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import EscanerCamara from '@/Components/EscanerCamara.vue'
 import CapturaSeries from '@/Components/Series/CapturaSeries.vue'
+import MatrizCantidades from '@/Components/Variantes/MatrizCantidades.vue'
 import { puedeEscanear } from '@/composables/escaner'
+import { agruparPorModelo, buscarConModelos } from '@/utils/variantes'
 
 const props = defineProps({
     productos: { type: Array, required: true },
@@ -18,6 +20,8 @@ const props = defineProps({
     // caja abierta de quien registra (para descontar la compra al contado) y los medios de pago
     caja: { type: Object, default: () => ({ abierta: false, efectivo: 0 }) },
     mediosPago: { type: Array, default: () => [] },
+    // variantes (tallas y colores): modelos de los productos con `grupo_id` [{ id, nombre, atributos }]; vacío si no hay
+    modelos: { type: Array, default: () => [] },
 })
 
 const soles = (n) => `S/ ${Number(n ?? 0).toFixed(2)}`
@@ -123,16 +127,58 @@ async function guardarProveedor() {
 // ================= items =================
 const buscarProducto = ref('')
 
-const resultadosProducto = computed(() => {
-    const texto = buscarProducto.value.trim().toLowerCase()
-    if (!texto) return []
-    return props.productos
-        .filter((p) =>
-            p.nombre.toLowerCase().includes(texto)
-            || p.codigo_interno.toLowerCase().includes(texto)
-            || p.presentaciones.some((pres) => pres.codigo_barras === texto))
-        .slice(0, 8)
-})
+// lo escrito contra los productos (nombre, código o código de barras) y, si hay variantes, contra sus modelos:
+// los modelos salen primero y de sus variantes solo las que lo escrito señala de forma concreta
+const resultadosBusqueda = computed(() => buscarConModelos(
+    buscarProducto.value,
+    props.productos,
+    modelosCompra.value,
+    (p, texto) => p.nombre.toLowerCase().includes(texto)
+        || p.codigo_interno.toLowerCase().includes(texto)
+        || p.presentaciones.some((pres) => pres.codigo_barras === texto),
+))
+const resultadosProducto = computed(() => resultadosBusqueda.value.productos)
+const resultadosModelo = computed(() => resultadosBusqueda.value.modelos)
+
+// ---- variantes (tallas y colores): el modelo entero se compra con una matriz de cantidades ----
+// Map grupo_id → { id, nombre, modelo, variantes }; vacío si la empresa no tiene variantes
+const modelosCompra = computed(() => agruparPorModelo(props.productos, props.modelos))
+
+const matrizDe = ref(null) // modelo cuya matriz de cantidades está abierta
+function abrirMatriz(grupo) {
+    matrizDe.value = grupo
+    buscarProducto.value = ''
+}
+
+const presentacionPrincipal = (producto) => producto.presentaciones.find((p) => p.es_default) ?? producto.presentaciones[0]
+
+// si todas las variantes costaron lo mismo la última vez, ese costo sale de referencia; si no, cada una toma el suyo
+function costoComun(grupo) {
+    const costos = grupo.variantes.map((v) => presentacionPrincipal(v)?.ultimo_costo ?? null)
+    return costos[0] != null && costos.every((c) => c === costos[0]) ? costos[0] : ''
+}
+
+// una fila normal por cada variante con cantidad (si ya estaba en la compra, se suma y, si se indicó un costo,
+// también lo toma: es el que mostró el total de la matriz); de ahí en adelante es la compra de siempre
+function confirmarMatriz({ cantidades, costo }) {
+    const grupo = matrizDe.value
+    matrizDe.value = null
+    for (const variante of grupo.variantes) {
+        const unidadesVariante = Number(cantidades[variante.id] ?? 0)
+        if (!(unidadesVariante > 0)) continue
+        const def = presentacionPrincipal(variante)
+        const existente = filas.value.find((f) => f.presentacion_id === def.id)
+        if (existente) {
+            existente.cantidad = Number(existente.cantidad) + unidadesVariante
+            if (costo !== null) existente.costo_unitario = costo
+            continue
+        }
+        const fila = nuevaFila(variante, def)
+        fila.cantidad = unidadesVariante
+        if (costo !== null) fila.costo_unitario = costo
+        filas.value.push(fila)
+    }
+}
 
 // producto y presentación con ese código de barras exacto (o null)
 function buscarPorCodigo(codigo) {
@@ -175,21 +221,26 @@ function agregarProducto(producto, presentacion = null) {
     if (fila) {
         fila.cantidad = Number(fila.cantidad) + 1
     } else {
-        fila = {
-            producto,
-            presentacion_id: def.id,
-            cantidad: 1,
-            // de referencia, lo último que se pagó por esa presentación (se puede cambiar)
-            costo_unitario: def.ultimo_costo ?? '',
-            numero_lote: '',
-            fecha_vencimiento: '',
-            // productos que controlan serie / IMEI: una por unidad [{ numero, alterna }]
-            series: [],
-        }
+        fila = nuevaFila(producto, def)
         filas.value.push(fila)
     }
     buscarProducto.value = ''
     return fila
+}
+
+// una fila de la compra recién agregada (1 unidad de esa presentación)
+function nuevaFila(producto, presentacion) {
+    return {
+        producto,
+        presentacion_id: presentacion.id,
+        cantidad: 1,
+        // de referencia, lo último que se pagó por esa presentación (se puede cambiar)
+        costo_unitario: presentacion.ultimo_costo ?? '',
+        numero_lote: '',
+        fecha_vencimiento: '',
+        // productos que controlan serie / IMEI: una por unidad [{ numero, alterna }]
+        series: [],
+    }
 }
 
 // botones − / +: de uno en uno (una cantidad menor a 1, p. ej. 0.5 kg, se escribe en el campo)
@@ -788,9 +839,24 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                                 </button>
                             </div>
                             <div
-                                v-if="resultadosProducto.length"
+                                v-if="resultadosProducto.length || resultadosModelo.length"
                                 class="absolute top-full right-0 left-0 z-20 mt-1 overflow-hidden rounded-xl border border-stone-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
                             >
+                                <!-- modelo con variantes: abre la matriz de cantidades (talla × color) -->
+                                <button
+                                    v-for="g in resultadosModelo"
+                                    :key="g.id"
+                                    type="button"
+                                    class="flex w-full items-center gap-3 border-b border-stone-100 bg-emerald-50/60 px-3.5 py-2.5 text-left text-sm hover:bg-emerald-50 dark:border-neutral-700 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
+                                    :data-opcion-modelo="g.nombre"
+                                    @click="abrirMatriz(g)"
+                                >
+                                    <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-emerald-600 dark:bg-neutral-900 dark:text-emerald-400">
+                                        <Layers class="size-4" />
+                                    </span>
+                                    <span class="min-w-0 truncate font-medium">{{ g.nombre }} <span class="font-normal text-neutral-500 dark:text-neutral-400">· {{ g.variantes.length }} variantes</span></span>
+                                    <span class="ml-auto shrink-0 text-xs font-medium text-emerald-700 dark:text-emerald-400">Por tallas</span>
+                                </button>
                                 <button
                                     v-for="p in resultadosProducto"
                                     :key="p.id"
@@ -982,6 +1048,21 @@ const claseNumero = 'grid size-6 place-items-center rounded-lg bg-emerald-100 te
                 </aside>
             </div>
         </div>
+
+        <!-- Matriz de cantidades de un modelo con variantes: agrega una fila por cada variante con cantidad -->
+        <MatrizCantidades
+            v-if="matrizDe"
+            :key="matrizDe.id"
+            :grupo="matrizDe"
+            titulo="Comprar por variantes"
+            texto-confirmar="Agregar a la compra"
+            con-costo
+            :costo-inicial="costoComun(matrizDe)"
+            ayuda="Se agrega una fila por cada variante con cantidad; el lote, las series y el costo se ajustan después en su fila."
+            data-matriz-compra
+            @confirmar="confirmarMatriz"
+            @cerrar="matrizDe = null"
+        />
 
         <!-- Modal nuevo proveedor -->
         <Teleport to="body">

@@ -2,9 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Models\ProductoSerie;
+use App\Services\SerieService;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ProductoRequest extends FormRequest
@@ -168,25 +167,10 @@ class ProductoRequest extends FormRequest
             return;
         }
 
-        if ($ahora) {
-            // con stock sí se puede activar: esas unidades quedan "sin serie" y se regularizan desde Stock.
-            // Lo que no puede haber es mercadería en camino, que llegaría sin número
-            $enCamino = DB::table('transferencia_detalles as d')
-                ->join('transferencias as t', 't.id', '=', 'd.transferencia_id')
-                ->where('d.producto_id', $producto->id)
-                ->whereIn('t.estado', ['pendiente', 'en_transito'])
-                ->exists();
-
-            if ($enCamino) {
-                $validator->errors()->add('controla_serie', 'Este producto tiene una transferencia en camino. Recíbela o anúlala antes de activar serie / IMEI.');
-            }
-
-            return;
-        }
-
-        $vivas = ProductoSerie::where('producto_id', $producto->id)->whereIn('estado', ['disponible', 'en_transito'])->count();
-        if ($vivas > 0) {
-            $validator->errors()->add('controla_serie', "Este producto tiene {$vivas} unidad(es) con serie en stock. Véndelas o dalas de baja antes de quitar el control de serie / IMEI.");
+        // activar con una transferencia en camino o desactivar con unidades con serie en stock: no se puede
+        // (la misma regla vale para el modelo con variantes)
+        if ($motivo = SerieService::impedimentoParaCambiar($producto, $ahora)) {
+            $validator->errors()->add('controla_serie', $motivo);
         }
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\ProductoGrupo;
+use App\Services\SerieService;
 use App\Services\VarianteService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,8 @@ class ProductoGrupoRequest extends FormRequest
             'costo' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             // a qué sucursal entra el stock inicial (viendo "todas")
             'sucursal_id' => ['nullable', 'uuid'],
+            // todas las variantes llevan serie / IMEI (módulo opcional; sin el módulo activo el campo se ignora)
+            'controla_serie' => ['nullable', 'boolean'],
 
             'atributos' => ['required', 'array', 'min:1', 'max:'.VarianteService::MAX_ATRIBUTOS],
             'atributos.*.nombre' => ['required', 'string', 'max:30'],
@@ -88,6 +91,20 @@ class ProductoGrupoRequest extends FormRequest
         ];
     }
 
+    /**
+     * Serie / IMEI a nivel de modelo: lo que diga el formulario cuando la empresa tiene el módulo activo. null = no
+     * se toca (sin el módulo, o una pantalla abierta desde antes que no manda el campo): cada variante conserva lo
+     * que tenía.
+     */
+    public function controlaSerie(): ?bool
+    {
+        if (! $this->user()->empresa->series_activo || ! $this->has('controla_serie')) {
+            return null;
+        }
+
+        return $this->boolean('controla_serie');
+    }
+
     public function after(): array
     {
         return [function ($validator) {
@@ -137,7 +154,50 @@ class ProductoGrupoRequest extends FormRequest
             }
 
             $this->validarFilas($validator, $grupo instanceof ProductoGrupo ? $grupo : null);
+            $this->validarSerie($validator, $grupo instanceof ProductoGrupo ? $grupo : null);
         }];
+    }
+
+    /**
+     * Serie / IMEI del modelo: se marca o desmarca en todas sus variantes, con las reglas del producto
+     * (SerieService::impedimentoParaCambiar) variante por variante; y con serie no hay stock inicial.
+     */
+    private function validarSerie($validator, ?ProductoGrupo $grupo): void
+    {
+        $pedido = $this->controlaSerie();
+        $variantes = $grupo ? $grupo->variantes()->with(['presentaciones' => fn ($q) => $q->where('activo', true)])->get() : collect();
+
+        foreach ($pedido === null ? [] : $variantes as $variante) {
+            if ((bool) $variante->controla_serie === $pedido) {
+                continue;
+            }
+            $sujeto = "La variante \"{$variante->nombre}\"";
+
+            // lo que el formulario del producto impide al marcar la casilla, aquí por cada variante que ya existe
+            $motivo = match (true) {
+                ! $pedido => null,
+                (bool) $variante->controla_lote => "{$sujeto} controla lote: un producto no puede controlar lote y serie / IMEI a la vez.",
+                (bool) $variante->permite_fraccion => "{$sujeto} permite fracción: con serie / IMEI se vende por unidades enteras.",
+                ! $variante->controla_stock => "{$sujeto} no controla stock: para controlar serie / IMEI debe controlarlo.",
+                $variante->presentaciones->contains(fn ($p) => abs((float) $p->factor_conversion - 1) > 0.0000001) => "{$sujeto} tiene una presentación de varias unidades: con serie / IMEI cada presentación es una unidad.",
+                default => null,
+            } ?? SerieService::impedimentoParaCambiar($variante, $pedido, $sujeto);
+
+            if ($motivo) {
+                $validator->errors()->add('controla_serie', $motivo);
+
+                break; // un motivo a la vez: se corrige y se vuelve a guardar
+            }
+        }
+
+        // con serie hace falta el número de cada unidad: eso lo piden la compra y el ajuste de stock
+        if ($pedido ?? ($grupo?->controlaSerie($variantes) ?? false)) {
+            foreach ((array) $this->input('variantes') as $i => $fila) {
+                if ((float) ($fila['stock_inicial'] ?? 0) > 0 && ! filter_var($fila['omitir'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                    $validator->errors()->add("variantes.{$i}.stock_inicial", 'Este modelo controla serie / IMEI: carga el stock con una compra o un ajuste de stock indicando las series.');
+                }
+            }
+        }
     }
 
     /** Códigos de barras sin repetir (entre filas y contra los que ya usa la empresa) y costo cuando se carga stock. */

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { Link, router, usePage } from '@inertiajs/vue3'
 import { watchDebounced } from '@vueuse/core'
-import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, Download, FileSpreadsheet, Layers, Package, Pencil, Plus, Search, ShoppingCart, Trash2, Truck } from '@lucide/vue'
+import { Barcode, ChevronDown, ChevronsUpDown, ChevronUp, FileSpreadsheet, Layers, Package, Pencil, Plus, Search, ShoppingCart, Trash2, Truck } from '@lucide/vue'
 import HistorialProducto from '@/Components/Productos/HistorialProducto.vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useConfirmar } from '@/composables/confirmar'
@@ -152,10 +152,10 @@ function claseStock(producto) {
 <template>
     <AppLayout titulo="Productos">
         <!-- Barra de acciones -->
-        <!-- con variantes hay un filtro y un botón más: la barra pasa a dos renglones hasta pantallas muy anchas -->
-        <div class="mb-4 flex flex-col gap-3" :class="variantesActivo ? '2xl:flex-row 2xl:items-center 2xl:justify-between' : 'lg:flex-row lg:items-center lg:justify-between'">
-            <div class="flex flex-1 flex-col gap-3 sm:flex-row" :class="variantesActivo && 'sm:flex-wrap'">
-                <div class="relative w-full sm:max-w-xs">
+        <!-- con variantes hay un filtro y un botón más: filtros arriba y botones abajo; en una sola línea desde 1720 px -->
+        <div class="mb-4 flex flex-col gap-3" :class="variantesActivo ? 'min-[1720px]:flex-row min-[1720px]:items-center min-[1720px]:justify-between' : 'lg:flex-row lg:items-center lg:justify-between'">
+            <div class="flex flex-1 flex-col gap-3 sm:flex-row" :class="variantesActivo && 'sm:flex-wrap min-[1720px]:flex-nowrap'">
+                <div class="relative w-full sm:max-w-xs" :class="variantesActivo && 'sm:w-auto sm:min-w-44 sm:flex-1'">
                     <Search class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-neutral-400" />
                     <input
                         v-model="buscar"
@@ -190,20 +190,20 @@ function claseStock(producto) {
                     <option v-for="m in modelos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
                 </select>
             </div>
-            <div :class="variantesActivo ? 'grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap' : 'flex flex-col gap-2 sm:flex-row'">
+            <div :class="variantesActivo ? 'grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:flex-wrap min-[1720px]:shrink-0 min-[1720px]:flex-nowrap' : 'flex flex-col gap-2 sm:flex-row'">
                 <a
                     :href="urlExportar"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-                    :class="variantesActivo && 'order-1 !px-2 sm:order-none sm:!px-4'"
+                    :class="variantesActivo && 'order-1 !px-2 sm:order-none sm:!px-3 xl:!px-4'"
                     title="Descargar en Excel los productos de la lista"
                 >
-                    <Download class="size-4" />
-                    Exportar Excel
+                    <FileSpreadsheet class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Exportar
                 </a>
                 <Link
                     href="/productos/etiquetas"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-                    :class="variantesActivo && 'order-3 !px-2 sm:order-none sm:!px-4'"
+                    :class="variantesActivo && 'order-3 !px-2 sm:order-none sm:!px-3 xl:!px-4'"
                     title="Imprimir etiquetas con código de barras"
                 >
                     <Barcode class="size-4" />
@@ -212,16 +212,17 @@ function claseStock(producto) {
                 <button
                     v-if="puede('productos.gestionar')"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium transition-colors hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
-                    :class="variantesActivo && 'order-2 !px-2 sm:order-none sm:!px-4'"
+                    :class="variantesActivo && 'order-2 !px-2 sm:order-none sm:!px-3 xl:!px-4'"
+                    title="Importar productos desde un Excel"
                     @click="importarAbierto = true"
                 >
-                    <FileSpreadsheet class="size-4" />
-                    Importar Excel
+                    <FileSpreadsheet class="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    Importar
                 </button>
                 <Link
                     v-if="variantesActivo && puede('productos.gestionar')"
                     href="/productos/modelos/crear"
-                    class="order-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-stone-50 sm:order-none sm:px-4 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    class="order-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-stone-50 sm:order-none sm:px-3 xl:px-4 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
                     title="Un modelo con tallas, colores u otras variantes"
                     data-nuevo-modelo
                 >
@@ -231,7 +232,7 @@ function claseStock(producto) {
                 <button
                     v-if="puede('productos.gestionar')"
                     class="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-                    :class="variantesActivo && 'order-5 col-span-2 sm:order-none'"
+                    :class="variantesActivo && 'order-5 col-span-2 sm:order-none sm:!px-4 xl:!px-5'"
                     @click="nuevo"
                 >
                     <Plus class="size-4" />
