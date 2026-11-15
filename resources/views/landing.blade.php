@@ -64,6 +64,7 @@
         ? $ilimitado
         : number_format((int) $valor, 0, '.', ',').' '.((int) $valor === 1 ? $singular : $plural);
     $destacado = fn ($plan) => $plan->codigo === 'negocio';
+    $gratis = fn ($plan) => (float) $plan->precio_mensual <= 0;
 
     // ---- datos estructurados para buscadores (se arman aquí: en la plantilla, Blade tomaría "@context" por una directiva) ----
     $precios = $planes->pluck('precio_mensual')->map(fn ($p) => (float) $p)->filter(fn ($p) => $p > 0);
@@ -158,7 +159,7 @@
     <meta name="twitter:image" content="{{ $imagenSocial }}">
     <meta name="theme-color" content="#053C8F">
     {{-- ícono propio de InkaPos, solo en esta página --}}
-    <link rel="icon" type="image/svg+xml" href="/images/inkapos-favicon.svg?v=1">
+    <link rel="icon" type="image/svg+xml" href="/images/inkapos-favicon.svg?v=2">
     <link rel="apple-touch-icon" href="/images/inkapos-icono-180.png?v=1">
     @foreach ($precargar as $fuente)
         <link rel="preload" href="{{ $fuente }}" as="font" type="font/woff2" crossorigin>
@@ -172,7 +173,8 @@
     <a href="#contenido" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-full focus:bg-white focus:px-5 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-marca focus:shadow-lg">Saltar al contenido</a>
 
     {{-- ============ Barra superior ============ --}}
-    <header id="arriba" class="sticky top-0 z-40 border-b border-tinta/10 bg-white/95 backdrop-blur-md">
+    <span id="arriba" class="absolute top-0" aria-hidden="true"></span>
+    <header class="sticky top-0 z-40 border-b border-tinta/10 bg-white/95 backdrop-blur-md">
         <div class="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
             <a href="#inicio" aria-label="{{ $marca }}, ir al inicio">
                 @include('landing.logo', ['tamano' => 'size-10', 'texto' => 'text-[1.6rem]'])
@@ -494,11 +496,11 @@
                         <p class="mt-4 text-base leading-relaxed text-tinta/70">Todos los planes empiezan con {{ $diasPrueba }} días gratis y todas las funciones. Cambia de plan cuando tu negocio crezca.</p>
                     </div>
 
-                    <div @class(['mx-auto mt-12 grid max-w-md gap-6', 'lg:max-w-6xl lg:grid-cols-3' => $planes->count() >= 3, 'lg:max-w-3xl lg:grid-cols-2' => $planes->count() === 2])>
+                    <div @class(['mx-auto mt-12 grid max-w-md gap-6', 'md:max-w-3xl md:grid-cols-2 xl:max-w-none xl:grid-cols-4 xl:gap-5' => $planes->count() >= 4, 'lg:max-w-6xl lg:grid-cols-3' => $planes->count() === 3, 'lg:max-w-3xl lg:grid-cols-2' => $planes->count() === 2])>
                         @foreach ($planes as $plan)
                             <article @class([
-                                'relative flex flex-col rounded-3xl p-7',
-                                'bg-linear-to-br from-marca to-tinta text-white shadow-2xl shadow-marca/30 lg:-my-3 lg:py-10' => $destacado($plan),
+                                'relative flex flex-col rounded-3xl p-7 xl:p-6',
+                                'bg-linear-to-br from-marca to-tinta text-white shadow-2xl shadow-marca/30 xl:-my-3 xl:py-9' => $destacado($plan),
                                 'bg-nube text-tinta' => ! $destacado($plan),
                             ])>
                                 @if ($destacado($plan))
@@ -509,8 +511,8 @@
                                     <p @class(['mt-1.5 text-sm leading-relaxed', 'text-white/75' => $destacado($plan), 'text-tinta/70' => ! $destacado($plan)])>{{ $plan->descripcion }}</p>
                                 @endif
                                 <p class="mt-6 flex items-baseline gap-1.5">
-                                    <span class="font-display text-4xl font-extrabold tracking-tight tabular-nums">S/ {{ $precio($plan) }}</span>
-                                    <span @class(['text-sm', 'text-white/75' => $destacado($plan), 'text-tinta/60' => ! $destacado($plan)])>al mes</span>
+                                    <span class="font-display text-4xl font-extrabold tracking-tight tabular-nums">{{ $gratis($plan) ? 'Gratis' : 'S/ '.$precio($plan) }}</span>
+                                    <span @class(['text-sm', 'text-white/75' => $destacado($plan), 'text-tinta/60' => ! $destacado($plan)])>{{ $gratis($plan) ? "por {$diasPrueba} días" : 'al mes' }}</span>
                                 </p>
                                 <ul class="mt-6 flex-1 space-y-3 text-sm">
                                     @foreach ([
@@ -530,7 +532,7 @@
                                     'mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold transition-opacity hover:opacity-90',
                                     'bg-linear-to-r from-cian to-verde text-white' => $destacado($plan),
                                     'bg-marca text-white' => ! $destacado($plan),
-                                ])>Probar gratis {{ $diasPrueba }} días @include('landing.icono', ['n' => 'flecha', 'clase' => 'size-4'])</a>
+                                ])>{{ $gratis($plan) ? 'Empezar gratis' : "Probar gratis {$diasPrueba} días" }} @include('landing.icono', ['n' => 'flecha', 'clase' => 'size-4'])</a>
                             </article>
                         @endforeach
                     </div>

@@ -1597,7 +1597,7 @@ const claseInput =
                         class="shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-medium transition-colors"
                         :class="categoriaActiva === null
                             ? 'bg-[#4F46E5] text-white dark:bg-emerald-500'
-                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                         @click="categoriaActiva = null"
                     >
                         Todos
@@ -1608,7 +1608,7 @@ const claseInput =
                         class="shrink-0 rounded-xl px-3.5 py-1.5 text-sm font-medium transition-colors"
                         :class="categoriaActiva === c.id
                             ? 'bg-[#4F46E5] text-white dark:bg-emerald-500'
-                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                            : 'border border-[#E2E8F0] bg-white text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                         @click="categoriaActiva = categoriaActiva === c.id ? null : c.id"
                     >
                         {{ c.nombre }}
@@ -2115,7 +2115,7 @@ const claseInput =
                                     class="rounded-md px-2 py-0.5 font-medium transition-colors"
                                     :class="modoImpresion === op.v
                                         ? 'bg-emerald-600 text-white'
-                                        : 'text-neutral-600 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                        : 'text-neutral-600 hover:bg-stone-100 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                                     @click="modoImpresion = op.v"
                                 >
                                     {{ op.t }}
@@ -2790,7 +2790,7 @@ const claseInput =
                                     class="flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-xs font-medium transition-colors"
                                     :class="abono.medio_pago_codigo === m.codigo
                                         ? 'border-amber-500 bg-amber-100 text-amber-900 ring-1 ring-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                                        : 'border-stone-300 bg-white text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                        : 'border-stone-300 bg-white text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                                     :data-abono-medio="m.codigo"
                                     @click="elegirMedioAbono(m.codigo)"
                                 >
@@ -2843,7 +2843,7 @@ const claseInput =
                                 class="flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-medium transition-colors"
                                 :class="medioUnico === m.codigo
                                     ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                                 :data-medio="m.codigo"
                                 @click="elegirMedio(m.codigo)"
                             >
@@ -2855,7 +2855,7 @@ const claseInput =
                                 class="flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-medium transition-colors"
                                 :class="modoMixto
                                     ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'"
+                                    : 'border-stone-300 text-neutral-600 hover:bg-stone-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'"
                                 data-medio="mixto"
                                 @click="activarMixto"
                             >

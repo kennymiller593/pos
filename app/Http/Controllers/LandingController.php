@@ -25,7 +25,6 @@ class LandingController extends Controller
             'planes' => Plan::query()
                 ->where('activo', true)
                 ->where('publico', true)
-                ->where('codigo', '!=', 'prueba')
                 ->orderBy('orden')
                 ->get(['codigo', 'nombre', 'descripcion', 'precio_mensual', 'max_sucursales', 'max_usuarios', 'max_comprobantes_mes']),
             'diasPrueba' => SuscripcionService::DIAS_PRUEBA,

@@ -21,10 +21,8 @@ class LandingTest extends TestCase
         $respuesta = $this->get('/')->assertOk()
             ->assertViewIs('landing')
             ->assertViewHas('diasPrueba', SuscripcionService::DIAS_PRUEBA)
-            ->assertViewHas('planes', fn ($planes) => $planes->count() === 3
-                && $planes->first()->codigo === 'emprendedor'
-                // el plan de prueba no se ofrece y no se filtran ids internos
-                && ! $planes->contains('codigo', 'prueba')
+            // todos los planes públicos y activos, en su orden: primero la prueba gratuita; sin ids internos
+            ->assertViewHas('planes', fn ($planes) => $planes->pluck('codigo')->all() === ['prueba', 'emprendedor', 'negocio', 'empresa']
                 && $planes->first()->id === null);
 
         // Blade puro: el contenido llega en el HTML, sin la aplicación de Inertia
@@ -33,6 +31,10 @@ class LandingTest extends TestCase
         $this->assertSame(1, substr_count($html, '<h1'));
         $respuesta->assertSee('Sistema POS y facturación electrónica', false)
             ->assertSee('Empieza gratis '.SuscripcionService::DIAS_PRUEBA.' días')
+            // la prueba gratuita se muestra como plan, sin precio en soles
+            ->assertSee('Prueba gratuita')
+            ->assertSee('Empezar gratis')
+            ->assertDontSee('S/ 0')
             ->assertSee('href="/registro"', false)
             ->assertSee('href="/login"', false);
     }

@@ -499,12 +499,12 @@ watch(
             ]">
             <!-- Logo y nombre de la empresa -->
             <div class="flex h-16 shrink-0 items-center gap-3 px-4">
-                <div class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl" :class="empresa?.logo_url && !esPlataforma
-                    ? 'border border-[#E2E8F0] bg-white dark:border-neutral-700'
+                <div class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full" :class="empresa?.logo_url && !esPlataforma
+                    ? 'border-2 border-[#00B1C3] bg-white p-0.5'
                     : 'bg-[#4F46E5] font-bold text-white dark:bg-emerald-500 dark:text-white'"
                     :title="colapsado && !abiertoMovil ? nombreEmpresa : undefined">
                     <img v-if="empresa?.logo_url && !esPlataforma" :src="empresa.logo_url" :alt="nombreEmpresa"
-                        class="size-full object-contain" />
+                        class="size-full rounded-full object-contain" />
                     <template v-else>{{ inicialEmpresa }}</template>
                 </div>
                 <div v-if="!colapsado || abiertoMovil" class="min-w-0">
