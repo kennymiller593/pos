@@ -135,7 +135,7 @@ class SuperadminTest extends TestCase
 
         // privado: no aparece en la landing ni en Suscripción, pero sí se puede asignar desde el panel
         $this->app['auth']->guard()->logout();
-        $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 3));
+        $this->get('/')->assertOk()->assertViewHas('planes', fn ($planes) => $planes->count() === 3 && ! $planes->contains('codigo', 'corporativo'));
         // (el superadmin ya no entra a Suscripción: lo consulta un admin normal de la empresa)
         $this->actingAs($this->crearUsuario('admin', 'normal'.random_int(10000, 99999).'@test.local'))->get('/suscripcion')
             ->assertInertia(fn ($p) => $p->where('planes', fn ($planes) => collect($planes)->doesntContain('codigo', 'corporativo')));
@@ -145,7 +145,7 @@ class SuperadminTest extends TestCase
         // al hacerlo público sale en la landing
         $super->put("/admin/planes/{$creado->id}", ['publico' => true] + $plan)->assertSessionHas('success');
         $this->app['auth']->guard()->logout();
-        $this->get('/')->assertInertia(fn ($p) => $p->has('planes', 4)->where('planes.3.codigo', 'corporativo'));
+        $this->get('/')->assertOk()->assertViewHas('planes', fn ($planes) => $planes->count() === 4 && $planes[3]->codigo === 'corporativo');
     }
 
     public function test_el_superadmin_solo_ve_la_plataforma(): void

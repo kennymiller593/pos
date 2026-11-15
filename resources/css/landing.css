@@ -1,0 +1,110 @@
+/*
+ * Estilos SOLO de la página de aterrizaje pública (resources/views/landing.blade.php).
+ * Hoja aparte a propósito: sus colores y tipografías de marca no deben llegar al panel ni a las tiendas.
+ * source(none) + @source: Tailwind genera únicamente las clases que usa esa vista (CSS pequeño = carga rápida).
+ */
+@import 'tailwindcss' source(none);
+
+@source '../views/landing.blade.php';
+@source '../views/landing';
+
+/* Tipografías servidas desde el propio sitio (sin pedir nada a terceros): Montserrat para títulos, Poppins para textos */
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('../fonts/landing/montserrat-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('../fonts/landing/montserrat-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('../fonts/landing/montserrat-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/landing/poppins-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../fonts/landing/poppins-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('../fonts/landing/poppins-latin-600-normal.woff2') format('woff2');
+}
+
+@theme {
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Montserrat', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+    /* paleta de marca */
+    --color-marca: #053c8f; /* principal */
+    --color-marca-fuerte: #042e6e; /* principal al pasar el cursor */
+    --color-cian: #00b1c3;
+    --color-verde: #08aa81;
+    --color-nube: #f2f6f9;
+    --color-tinta: #122430;
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+    }
+    body {
+        font-family: var(--font-sans);
+        color: var(--color-tinta);
+        background: #fff;
+        -webkit-font-smoothing: antialiased;
+    }
+    h1,
+    h2,
+    h3 {
+        font-family: var(--font-display);
+        text-wrap: balance;
+    }
+    /* el menú fijo no debe tapar el título al saltar a una sección */
+    section[id] {
+        scroll-margin-top: 5rem;
+    }
+    summary {
+        cursor: pointer;
+        list-style: none;
+    }
+    summary::-webkit-details-marker {
+        display: none;
+    }
+    :focus-visible {
+        outline: 3px solid var(--color-cian);
+        outline-offset: 3px;
+        border-radius: 0.5rem;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+        * {
+            animation: none !important;
+            transition: none !important;
+        }
+    }
+}
