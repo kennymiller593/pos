@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Concerns\CreaEscenarioPos;
 use Tests\TestCase;
@@ -58,5 +60,30 @@ class EmpresaPantallasTest extends TestCase
         $cajero = $this->crearUsuario('cajero', 'caja'.random_int(1000, 9999).'@test.local');
         $this->actingAs($cajero)->get('/empresa/facturacion-electronica')->assertForbidden();
         $this->actingAs($cajero)->put('/empresa/facturacion-electronica', ['usuario_sol' => 'X'])->assertForbidden();
+    }
+
+    /** La cámara del menú lateral cambia solo el logo, sin tocar los demás datos. */
+    public function test_cambiar_logo_desde_el_menu(): void
+    {
+        Storage::fake('public');
+        $antes = $this->empresa->fresh()->only(['razon_social', 'nombre_comercial', 'rubro_codigo', 'variantes_activo']);
+
+        $this->actingAs($this->admin)->post('/empresa/logo', ['logo' => UploadedFile::fake()->image('logo.png', 200, 200)])
+            ->assertSessionHas('success');
+        $empresa = $this->empresa->fresh();
+        $this->assertStringStartsWith('/storage/logos/', $empresa->logo_url);
+        Storage::disk('public')->assertExists(substr($empresa->logo_url, strlen('/storage/')));
+        $this->assertSame($antes, $empresa->only(array_keys($antes)));
+
+        // reemplazar borra el archivo anterior
+        $anterior = substr($empresa->logo_url, strlen('/storage/'));
+        $this->actingAs($this->admin)->post('/empresa/logo', ['logo' => UploadedFile::fake()->image('otro.jpg', 100, 100)])->assertSessionHas('success');
+        Storage::disk('public')->assertMissing($anterior);
+
+        // solo imágenes y solo quien gestiona la empresa
+        $this->actingAs($this->admin)->post('/empresa/logo', ['logo' => UploadedFile::fake()->create('virus.pdf', 10, 'application/pdf')])->assertSessionHasErrors('logo');
+        $this->actingAs($this->admin)->post('/empresa/logo', [])->assertSessionHasErrors('logo');
+        $cajero = $this->crearUsuario('cajero', 'caja'.random_int(1000, 9999).'@test.local');
+        $this->actingAs($cajero)->post('/empresa/logo', ['logo' => UploadedFile::fake()->image('logo.png')])->assertForbidden();
     }
 }

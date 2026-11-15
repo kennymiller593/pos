@@ -235,6 +235,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/tienda-en-linea/dominio', [TiendaDominioController::class, 'quitar'])->name('tienda-dominio.quitar');
         Route::get('/empresa', [EmpresaController::class, 'edit'])->name('empresa.edit');
         Route::put('/empresa', [EmpresaController::class, 'update'])->name('empresa.update');
+        Route::post('/empresa/logo', [EmpresaController::class, 'logo'])->middleware('throttle:10,1')->name('empresa.logo');
         // facturación electrónica: credenciales SUNAT y el interruptor, en su propia pantalla
         Route::get('/empresa/facturacion-electronica', [EmpresaController::class, 'facturacion'])->name('empresa.facturacion.edit');
         Route::put('/empresa/facturacion-electronica', [EmpresaController::class, 'guardarFacturacion'])->name('empresa.facturacion.update');

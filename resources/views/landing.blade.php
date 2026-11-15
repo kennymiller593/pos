@@ -266,36 +266,12 @@
                     </ul>
                 </div>
 
-                {{-- Ilustración del producto, hecha en HTML (sin imágenes que descargar). Decorativa. --}}
+                {{-- Captura real del POS en una laptop, con la boleta y el celular flotando encima --}}
                 <div class="relative mx-auto w-full max-w-lg pb-16 lg:max-w-none lg:pr-6" aria-hidden="true">
                     {{-- laptop --}}
-                    <div class="rounded-t-2xl border-[10px] border-b-0 border-tinta bg-white shadow-2xl shadow-black/40">
-                        <div class="flex items-center gap-1.5 border-b border-tinta/10 px-3 py-2">
-                            <span class="size-2 rounded-full bg-tinta/20"></span><span class="size-2 rounded-full bg-tinta/20"></span><span class="size-2 rounded-full bg-tinta/20"></span>
-                            <span class="ml-2 text-[10px] font-semibold text-tinta/60">Punto de venta</span>
-                            <span class="ml-auto rounded-full bg-verde/15 px-2 py-0.5 text-[9px] font-semibold text-verde">Caja abierta</span>
-                        </div>
-                        <div class="grid grid-cols-[1.5fr_1fr] gap-3 p-3 pb-12 text-tinta sm:pb-14">
-                            <div class="grid grid-cols-3 gap-2">
-                                @foreach ([['Arroz 5 kg', '24.90'], ['Aceite 1 L', '10.50'], ['Leche x 6', '27.00'], ['Azúcar 1 kg', '4.80'], ['Fideos 500 g', '3.20'], ['Atún', '6.50']] as [$producto, $importe])
-                                    <div class="rounded-lg border border-tinta/10 p-1.5">
-                                        <div class="grid aspect-[4/3] place-items-center rounded-md bg-nube text-marca/35">@include('landing.icono', ['n' => 'paquete', 'clase' => 'size-5', 'grosor' => 1.5])</div>
-                                        <p class="mt-1 truncate text-[9px] text-tinta/70">{{ $producto }}</p>
-                                        <p class="text-[10px] font-bold">S/ {{ $importe }}</p>
-                                    </div>
-                                @endforeach
-                            </div>
-                            <div class="flex flex-col rounded-lg bg-nube p-2.5">
-                                <p class="text-[9px] font-semibold tracking-wide text-tinta/60 uppercase">Carrito</p>
-                                <div class="mt-1.5 space-y-1.5 text-[10px]">
-                                    <p class="flex justify-between"><span>2× Arroz 5 kg</span><span class="font-semibold">49.80</span></p>
-                                    <p class="flex justify-between"><span>1× Aceite 1 L</span><span class="font-semibold">10.50</span></p>
-                                    <p class="flex justify-between"><span>1× Leche x 6</span><span class="font-semibold">27.00</span></p>
-                                </div>
-                                <p class="mt-auto flex items-end justify-between border-t border-dashed border-tinta/20 pt-2"><span class="text-[9px] text-tinta/60">TOTAL</span><span class="font-display text-base font-extrabold">S/ 87.30</span></p>
-                                <span class="mt-2 rounded-md bg-marca py-1.5 text-center text-[10px] font-semibold text-white">Cobrar</span>
-                            </div>
-                        </div>
+                    <div class="overflow-hidden rounded-t-2xl border-[10px] border-b-0 border-tinta bg-tinta shadow-2xl shadow-black/40">
+                        <img src="/images/landing-pos.webp?v=1" width="1400" height="617" alt="Pantalla de punto de venta de {{ $marca }} con productos y carrito"
+                            class="block h-auto w-full" fetchpriority="high" decoding="async">
                     </div>
                     <div class="mx-[-4%] h-3 rounded-b-2xl bg-linear-to-b from-[#c9d3dc] to-[#9aa8b5]"></div>
 
@@ -459,28 +435,11 @@
                     </ul>
                 </div>
 
-                {{-- Ilustración de la tienda, decorativa --}}
+                {{-- Captura real de una tienda en línea, en el celular --}}
                 <div class="mx-auto w-full max-w-sm" aria-hidden="true">
                     <div class="rounded-[2rem] border border-white/15 bg-white/5 p-3">
-                        <div class="rounded-[1.5rem] bg-white p-4 text-tinta">
-                            <div class="flex items-center justify-between">
-                                <span class="font-display text-sm font-extrabold">Mi Tienda</span>
-                                <span class="grid size-8 place-items-center rounded-full bg-nube text-tinta/70">@include('landing.icono', ['n' => 'carrito', 'clase' => 'size-4'])</span>
-                            </div>
-                            <div class="mt-4 grid grid-cols-2 gap-3">
-                                @foreach ([['Fertilizante 1 kg', 'S/ 24.00'], ['Semillas x 100 g', 'S/ 12.50'], ['Guantes de trabajo', 'S/ 9.90'], ['Regadera 10 L', 'S/ 35.00']] as [$producto, $importe])
-                                    <div class="rounded-xl border border-tinta/10 p-2.5">
-                                        <div class="grid aspect-square place-items-center rounded-lg bg-nube text-marca/40">@include('landing.icono', ['n' => 'paquete', 'clase' => 'size-8', 'grosor' => 1.5])</div>
-                                        <p class="mt-2 truncate text-[11px] text-tinta/75">{{ $producto }}</p>
-                                        <p class="text-xs font-bold">{{ $importe }}</p>
-                                    </div>
-                                @endforeach
-                            </div>
-                            <div class="mt-4 flex items-center justify-center gap-2 rounded-full bg-verde py-3 text-xs font-semibold text-white">
-                                @include('landing.icono', ['n' => 'whatsapp', 'clase' => 'size-4'])
-                                Enviar pedido por WhatsApp
-                            </div>
-                        </div>
+                        <img src="/images/landing-tienda.webp?v=1" width="422" height="837" alt="Tienda en línea de {{ $marca }} vista desde el celular"
+                            class="block h-auto w-full rounded-[1.5rem] bg-white" loading="lazy" decoding="async">
                     </div>
                 </div>
             </div>

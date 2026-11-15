@@ -177,6 +177,29 @@ class EmpresaController extends Controller
         return back()->with('success', 'Datos de la empresa actualizados.');
     }
 
+    /** Cambia solo el logo, desde la cámara que está sobre el logo en el menú lateral. */
+    public function logo(Request $request): RedirectResponse
+    {
+        $this->autorizarAdmin($request);
+
+        $request->validate([
+            'logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+        ], [
+            'logo.required' => 'Elige una imagen para el logo.',
+            'logo.image' => 'El logo debe ser una imagen.',
+            'logo.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
+            'logo.max' => 'El logo no debe pesar más de 2 MB.',
+            'logo.uploaded' => 'No se pudo subir la imagen. Prueba con una que pese menos de 2 MB.',
+        ]);
+
+        $empresa = $request->user()->empresa;
+        $ruta = $request->file('logo')->store('logos', 'public');
+        $this->eliminarLogoLocal($empresa->logo_url);
+        $empresa->update(['logo_url' => Storage::url($ruta)]);
+
+        return back()->with('success', 'Logo actualizado.');
+    }
+
     /** Guarda las credenciales de SUNAT (solo lo que se escribe: lo vacío conserva lo guardado). */
     public function guardarFacturacion(Request $request): RedirectResponse
     {

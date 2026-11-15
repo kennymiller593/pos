@@ -13,6 +13,8 @@ import {
     Boxes,
     Building2,
     CalendarClock,
+    Camera,
+    LoaderCircle,
     ChartColumnBig,
     CheckCircle2,
     ChevronDown,
@@ -482,6 +484,32 @@ watch(
     },
     { immediate: true },
 )
+
+function avisar(mensaje, tipo = 'error') {
+    toast.value = { mensaje, tipo }
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => (toast.value = null), 4000)
+}
+
+// cámara sobre el logo: cambia el logo de la empresa sin entrar a Configuración
+const puedeCambiarLogo = computed(() => !esPlataforma.value && !!empresa.value && puede('empresa.gestionar'))
+const inputLogo = ref(null)
+const subiendoLogo = ref(false)
+function cambiarLogo(evento) {
+    const archivo = evento.target.files?.[0]
+    evento.target.value = ''
+    if (!archivo) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(archivo.type)) return avisar('Formatos permitidos: JPG, PNG o WEBP.')
+    if (archivo.size > 2 * 1024 * 1024) return avisar('El logo no debe pesar más de 2 MB.')
+    subiendoLogo.value = true
+    router.post('/empresa/logo', { logo: archivo }, {
+        forceFormData: true,
+        preserveScroll: true,
+        preserveState: true,
+        onError: (e) => avisar(e.logo || 'No se pudo cambiar el logo.'),
+        onFinish: () => (subiendoLogo.value = false),
+    })
+}
 </script>
 
 <template>
@@ -499,13 +527,26 @@ watch(
             ]">
             <!-- Logo y nombre de la empresa -->
             <div class="flex h-16 shrink-0 items-center gap-3 px-4">
-                <div class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full" :class="empresa?.logo_url && !esPlataforma
-                    ? 'border-2 border-[#00B1C3] bg-white p-0.5'
-                    : 'bg-[#4F46E5] font-bold text-white dark:bg-emerald-500 dark:text-white'"
-                    :title="colapsado && !abiertoMovil ? nombreEmpresa : undefined">
-                    <img v-if="empresa?.logo_url && !esPlataforma" :src="empresa.logo_url" :alt="nombreEmpresa"
-                        class="size-full rounded-full object-contain" />
-                    <template v-else>{{ inicialEmpresa }}</template>
+                <div class="relative shrink-0">
+                    <div class="grid size-10 place-items-center overflow-hidden rounded-full" :class="empresa?.logo_url && !esPlataforma
+                        ? 'border-2 border-[#00B1C3] bg-white p-0.5'
+                        : 'bg-[#4F46E5] font-bold text-white dark:bg-emerald-500 dark:text-white'"
+                        :title="colapsado && !abiertoMovil ? nombreEmpresa : undefined">
+                        <img v-if="empresa?.logo_url && !esPlataforma" :src="empresa.logo_url" :alt="nombreEmpresa"
+                            class="size-full rounded-full object-contain" />
+                        <template v-else>{{ inicialEmpresa }}</template>
+                    </div>
+                    <template v-if="puedeCambiarLogo">
+                        <button type="button" :disabled="subiendoLogo"
+                            class="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full bg-[#00B1C3] text-white shadow ring-2 ring-white transition hover:scale-110 hover:bg-[#0099a8] disabled:cursor-wait dark:ring-[#171717]"
+                            :title="empresa?.logo_url ? 'Cambiar logo' : 'Subir logo'"
+                            :aria-label="empresa?.logo_url ? 'Cambiar logo de la empresa' : 'Subir logo de la empresa'"
+                            @click="inputLogo?.click()">
+                            <LoaderCircle v-if="subiendoLogo" class="size-3 animate-spin" />
+                            <Camera v-else class="size-3" />
+                        </button>
+                        <input ref="inputLogo" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="cambiarLogo" />
+                    </template>
                 </div>
                 <div v-if="!colapsado || abiertoMovil" class="min-w-0">
                     <span class="block truncate text-lg leading-tight font-semibold tracking-tight">
