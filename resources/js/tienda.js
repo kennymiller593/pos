@@ -908,3 +908,56 @@ if (avisoBot) {
         try { localStorage.setItem('bot-aviso-visto', '1') } catch {}
     })
 }
+
+// ---------------------------------------------------------------- promociones
+// La ventana de promociones se levanta sola al entrar, una vez al día por visitante (lo recuerda este navegador).
+// Si el navegador no deja guardar (modo privado estricto), no se abre: mejor eso que repetirla en cada página.
+const promociones = document.getElementById('promociones')
+if (promociones && !promociones.hasAttribute('data-promociones-nunca')) {
+    const CLAVE = 'promociones-vistas'
+    const hoy = new Date().toLocaleDateString('en-CA') // 2026-11-15, en la hora del visitante
+    const siempre = promociones.hasAttribute('data-promociones-siempre') // vista previa del dueño
+    const yaVista = () => { try { return localStorage.getItem(CLAVE) === hoy } catch { return true } }
+    const pista = promociones.querySelector('[data-promociones-pista]')
+    const puntos = [...promociones.querySelectorAll('[data-promociones-punto]')]
+    const total = pista.children.length
+    let antes = null
+
+    const tecla = (e) => {
+        if (e.key === 'Escape') cerrar()
+        else if (e.key === 'ArrowRight') ir(1)
+        else if (e.key === 'ArrowLeft') ir(-1)
+    }
+    function cerrar() {
+        promociones.classList.add('hidden')
+        document.removeEventListener('keydown', tecla)
+        antes?.focus?.()
+    }
+    function abrir() {
+        // si el visitante ya abrió su carrito o el chat, no se le pone nada encima
+        if (document.querySelector('#pedido:not(.hidden)') || document.querySelector('[data-bot-panel]:not(.hidden)')) return
+        try { localStorage.setItem(CLAVE, hoy) } catch {}
+        antes = document.activeElement
+        promociones.classList.remove('hidden')
+        document.addEventListener('keydown', tecla)
+        promociones.querySelector('[data-promociones-cerrar-boton]')?.focus({ preventScroll: true })
+    }
+    function ir(pasos) {
+        if (total < 2) return
+        const actual = Math.round(pista.scrollLeft / pista.clientWidth)
+        pista.scrollTo({ left: ((actual + pasos + total) % total) * pista.clientWidth, behavior: sinMovimiento ? 'auto' : 'smooth' })
+    }
+
+    promociones.addEventListener('click', (e) => {
+        if (e.target.closest('[data-promociones-cerrar]')) cerrar()
+        else if (e.target.closest('[data-promociones-anterior]')) ir(-1)
+        else if (e.target.closest('[data-promociones-siguiente]')) ir(1)
+    })
+    pista.addEventListener('scroll', () => {
+        const actual = Math.round(pista.scrollLeft / pista.clientWidth)
+        puntos.forEach((p, i) => (i === actual ? p.setAttribute('data-activo', '') : p.removeAttribute('data-activo')))
+    }, { passive: true })
+
+    // un momento después de cargar: primero se ve la tienda
+    if (siempre || !yaVista()) setTimeout(abrir, 1200)
+}

@@ -1589,6 +1589,42 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/')->assertOk()->assertDontSee('id="pedido"', false)->assertDontSee('data-whatsapp-flotante', false)->assertSee('Todo el catálogo en línea');
     }
 
+    public function test_las_promociones_se_abren_en_una_ventana_en_las_tres_plantillas(): void
+    {
+        $promos = [
+            ['imagen' => '/storage/tienda/promo1.jpg', 'titulo' => 'Oferta de siembra', 'destino' => 'catalogo', 'valor' => null],
+            ['imagen' => '/storage/tienda/promo2.jpg', 'titulo' => null, 'destino' => null, 'valor' => null],
+        ];
+
+        foreach (['clasica', 'mercado', 'plaza'] as $plantilla) {
+            // dos promociones: la ventana trae las dos, con flechas para pasar; la que tiene destino lleva su botón
+            $this->publicar(['plantilla' => $plantilla, 'banners' => $promos]);
+            $portada = $this->tienda('/')->assertOk()
+                ->assertSee('id="promociones"', false)
+                ->assertSee('Oferta de siembra')
+                ->assertSee('Ver promoción')
+                ->assertSee('data-promociones-siguiente', false)
+                ->getContent();
+            $this->assertSame(2, substr_count($portada, 'data-promocion>'));
+            // la ventana nace cerrada (la abre tienda.js) y sus fotos no se descargan hasta entonces
+            $this->assertStringContainsString('id="promociones" class="fixed inset-0 z-[60] hidden ', $portada);
+            $this->assertStringContainsString('src="/storage/tienda/promo2.jpg" alt="" loading="lazy"', $portada);
+            // también está lista si el cliente entra por el catálogo o por un producto
+            $this->tienda('/catalogo')->assertOk()->assertSee('id="promociones"', false);
+            $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('id="promociones"', false);
+
+            // una sola promoción: sin flechas; ninguna: sin ventana
+            $this->publicar(['plantilla' => $plantilla, 'banners' => [$promos[1]]]);
+            $this->tienda('/')->assertOk()->assertSee('id="promociones"', false)->assertDontSee('data-promociones-siguiente', false)->assertDontSee('Ver promoción');
+            $this->publicar(['plantilla' => $plantilla]);
+            $this->tienda('/')->assertOk()->assertDontSee('id="promociones"', false);
+        }
+
+        // las promociones siguen saliendo también dentro de la portada
+        $this->publicar(['plantilla' => 'plaza', 'banners' => $promos]);
+        $this->tienda('/')->assertSee('data-banners', false)->assertDontSee('data-promos', false);
+    }
+
     public function test_las_categorias_se_ordenan_y_tienen_su_propia_foto(): void
     {
         Storage::fake('public');

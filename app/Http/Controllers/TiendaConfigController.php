@@ -289,11 +289,11 @@ class TiendaConfigController extends Controller
             'seo_titulo.max' => 'El título para Google no puede pasar de 70 caracteres.',
             'seo_descripcion.max' => 'La descripción para Google no puede pasar de 170 caracteres.',
             'categorias_texto.*.max' => 'El texto de una categoría no puede pasar de 400 caracteres.',
-            'banners.max' => 'Puedes tener hasta '.Tienda::MAX_BANNERS.' banners.',
-            'banners.*.archivo.image' => 'El banner debe ser una imagen.',
+            'banners.max' => 'Puedes tener hasta '.Tienda::MAX_BANNERS.' promociones.',
+            'banners.*.archivo.image' => 'La promoción debe ser una imagen.',
             'banners.*.archivo.mimes' => 'Formatos permitidos: JPG, PNG o WEBP.',
-            'banners.*.archivo.max' => 'El banner no debe pesar más de 6 MB.',
-            'banners.*.titulo.max' => 'El texto del banner no puede pasar de 80 caracteres.',
+            'banners.*.archivo.max' => 'La imagen de la promoción no debe pesar más de 6 MB.',
+            'banners.*.titulo.max' => 'El texto de la promoción no puede pasar de 80 caracteres.',
             'banners.*.url.url' => 'El enlace debe empezar con https://',
             'banners.*.url.max' => 'El enlace es demasiado largo.',
             'nosotros.max' => 'Este texto no puede pasar de 3000 caracteres.',
@@ -349,13 +349,13 @@ class TiendaConfigController extends Controller
 
         foreach ($datos['banners'] ?? [] as $i => $banner) {
             if (! ($banner['archivo'] ?? null) && ! in_array($banner['imagen'] ?? null, $guardadas, true)) {
-                $errores["banners.{$i}.archivo"] = 'Sube la imagen de este banner.';
+                $errores["banners.{$i}.archivo"] = 'Sube la imagen de esta promoción.';
             }
             if (($banner['destino'] ?? null) === 'url' && blank($banner['url'] ?? null)) {
-                $errores["banners.{$i}.url"] = 'Pega el enlace al que lleva el banner.';
+                $errores["banners.{$i}.url"] = 'Pega el enlace al que lleva la promoción.';
             }
             if (($banner['destino'] ?? null) === 'categoria' && blank($banner['categoria'] ?? null)) {
-                $errores["banners.{$i}.categoria"] = 'Elige la categoría a la que lleva el banner.';
+                $errores["banners.{$i}.categoria"] = 'Elige la categoría a la que lleva la promoción.';
             }
         }
 

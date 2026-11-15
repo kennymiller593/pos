@@ -418,5 +418,8 @@
             </aside>
         </div>
     @endif
+
+    {{-- Promociones del dueño: ventana que se abre al entrar, una vez al día por visitante --}}
+    @include('tienda.promociones')
 </body>
 </html>

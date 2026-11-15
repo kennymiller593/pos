@@ -47,7 +47,7 @@ const SECCIONES = [
     { valor: 'general', nombre: 'General', campos: ['slug', 'descripcion', 'whatsapp', 'telefono', 'email', 'direccion', 'mapa_url', 'horario', 'facebook', 'instagram', 'tiktok'] },
     { valor: 'apariencia', nombre: 'Apariencia', campos: ['color', 'color_propio', 'color_texto', 'color_secundario', 'mostrar_precios', 'mostrar_stock', 'nombres_bonitos', 'favicon'] },
     { valor: 'portada', nombre: 'Portada', campos: ['plantilla', 'portada_estilo', 'portada_imagen', 'portada_solo_foto', 'portada_fotos', 'portada_titulo', 'portada_boton', 'anuncio'] },
-    { valor: 'banners', nombre: 'Banners', campos: ['banners'] },
+    { valor: 'promociones', nombre: 'Promociones', campos: ['banners'] },
     { valor: 'contenido', nombre: 'Contenido', campos: ['nosotros', 'envios', 'devoluciones', 'pagos', 'preguntas', 'seo_titulo', 'seo_descripcion', 'categorias_texto'] },
     { valor: 'medicion', nombre: 'Medición', campos: ['medicion_ga4', 'medicion_meta', 'medicion_tiktok', 'medicion_clarity', 'medicion_google_verificacion'] },
     { valor: 'productos', nombre: 'Productos', campos: [] },
@@ -63,7 +63,8 @@ function irA(valor) {
 }
 
 function leerSeccion() {
-    const pedida = location.hash.slice(1)
+    // la pestaña se llamaba "banners": los enlaces guardados con ese nombre siguen funcionando
+    const pedida = location.hash.slice(1) === 'banners' ? 'promociones' : location.hash.slice(1)
     if (SECCIONES.some((s) => s.valor === pedida)) seccion.value = pedida
 }
 
@@ -210,7 +211,7 @@ function mostrarErrores() {
 const PLANTILLAS = [
     { valor: 'clasica', nombre: 'Clásica', detalle: 'Portada con tu estilo elegido, destacados y categorías con foto.' },
     { valor: 'mercado', nombre: 'Mercado', detalle: 'Estilo marketplace: campaña arriba y filtros por categoría, marca y precio al costado.' },
-    { valor: 'plaza', nombre: 'Plaza', detalle: 'Estilo gran almacén: cabecera en tu color con buscador grande y secciones en paneles.' },
+    { valor: 'plaza', nombre: 'Plaza', detalle: 'Estilo gran almacén: buscador grande sobre tu color, menú blanco y secciones en paneles.' },
 ]
 
 // ---- apariencia de la portada ----
@@ -902,9 +903,10 @@ function guardarDescripcion() {
                                 </template>
                                 <template v-else-if="plantilla.valor === 'plaza'">
                                     <span class="absolute inset-0 bg-slate-100 dark:bg-neutral-800" />
-                                    <span class="absolute inset-x-0 top-0 h-[22%] bg-emerald-700" />
-                                    <span class="absolute top-[5%] left-[22%] h-[8%] w-[48%] rounded-sm bg-white" />
-                                    <span class="absolute top-[5%] left-[63%] h-[8%] w-[7%] rounded-r-sm bg-lime-400" />
+                                    <span class="absolute inset-x-0 top-0 h-[15%] bg-emerald-700" />
+                                    <span class="absolute inset-x-0 top-[15%] h-[8%] bg-white shadow-sm dark:bg-neutral-600" />
+                                    <span class="absolute top-[4%] left-[22%] h-[7%] w-[48%] rounded-sm bg-white" />
+                                    <span class="absolute top-[4%] left-[63%] h-[7%] w-[7%] rounded-r-sm bg-lime-400" />
                                     <span class="absolute top-[28%] right-[6%] left-[6%] h-[30%] overflow-hidden rounded-md bg-emerald-700">
                                         <span class="absolute -top-[40%] -right-[6%] aspect-square h-[190%] rounded-full bg-lime-400" />
                                         <span class="absolute top-[30%] left-[7%] h-[18%] w-[34%] rounded bg-white" />
@@ -1074,8 +1076,8 @@ function guardarDescripcion() {
                 </div>
             </section>
 
-            <!-- Banners -->
-            <BannersTienda v-show="seccion === 'banners'" class="xl:col-span-2" :form="form" :categorias="tienda.categorias" :max="tienda.limites.banners" />
+            <!-- Promociones (en la configuración se guardan como "banners") -->
+            <BannersTienda v-show="seccion === 'promociones'" class="xl:col-span-2" :form="form" :categorias="tienda.categorias" :max="tienda.limites.banners" />
 
             <!-- Contenido: páginas de texto -->
             <ContenidoTienda

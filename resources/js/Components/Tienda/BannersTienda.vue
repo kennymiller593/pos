@@ -107,9 +107,9 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
     <section :class="[claseTarjeta, 'p-5']" aria-labelledby="titulo-banners">
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0">
-                <h2 id="titulo-banners" class="font-semibold tracking-tight">Banners</h2>
+                <h2 id="titulo-banners" class="font-semibold tracking-tight">Promociones</h2>
                 <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                    Imágenes de tus promociones, campañas o novedades. Salen en la portada, debajo de la presentación, y se deslizan si hay más de una.
+                    Imágenes de tus promociones, campañas o novedades. Al entrar a tu tienda se abren en una ventana, una vez al día por cliente, y también salen en la portada.
                 </p>
             </div>
             <button
@@ -121,11 +121,11 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
             >
                 <LoaderCircle v-if="preparando" class="size-4 animate-spin" />
                 <ImagePlus v-else class="size-4" />
-                Agregar banner
+                Agregar promoción
             </button>
         </div>
 
-        <input ref="selector" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Imagen del banner" @change="elegir" />
+        <input ref="selector" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Imagen de la promoción" @change="elegir" />
         <p v-if="aviso || form.errors.banners" :class="[claseError, 'mt-3']">{{ aviso || form.errors.banners }}</p>
 
         <!-- Sin banners -->
@@ -139,8 +139,8 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
         >
             <LoaderCircle v-if="preparando" class="size-7 animate-spin" />
             <ImagePlus v-else class="size-7" />
-            <span class="font-semibold">Subir tu primer banner</span>
-            <span class="text-xs">Horizontal, idealmente de 1600 × 600 px. Hasta {{ max }} banners.</span>
+            <span class="font-semibold">Subir tu primera promoción</span>
+            <span class="text-xs">Horizontal, idealmente de 1600 × 600 px. Hasta {{ max }} promociones.</span>
         </button>
 
         <ul v-else class="mt-4 space-y-4">
@@ -153,7 +153,7 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
                 <!-- Imagen -->
                 <div>
                     <div class="relative overflow-hidden rounded-xl border border-stone-200 bg-stone-100 dark:border-neutral-700 dark:bg-neutral-800">
-                        <img :src="banner.vista ?? banner.imagen" :alt="banner.titulo || `Banner ${i + 1}`" class="aspect-[8/3] w-full object-cover" />
+                        <img :src="banner.vista ?? banner.imagen" :alt="banner.titulo || `Promoción ${i + 1}`" class="aspect-[8/3] w-full object-cover" />
                         <div v-if="banner.titulo" class="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-neutral-950/80 to-transparent px-3 pt-8 pb-2">
                             <p class="truncate text-sm font-semibold text-white">{{ banner.titulo }}</p>
                         </div>
@@ -175,7 +175,7 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
                             type="button"
                             :disabled="i === 0"
                             class="grid size-9 place-items-center rounded-lg border border-stone-300 hover:bg-stone-50 disabled:opacity-35 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                            :aria-label="`Subir el banner ${i + 1}`"
+                            :aria-label="`Subir la promoción ${i + 1}`"
                             title="Mostrar antes"
                             @click="mover(i, -1)"
                         >
@@ -185,7 +185,7 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
                             type="button"
                             :disabled="i === form.banners.length - 1"
                             class="grid size-9 place-items-center rounded-lg border border-stone-300 hover:bg-stone-50 disabled:opacity-35 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                            :aria-label="`Bajar el banner ${i + 1}`"
+                            :aria-label="`Bajar la promoción ${i + 1}`"
                             title="Mostrar después"
                             @click="mover(i, 1)"
                         >
@@ -194,7 +194,7 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
                         <button
                             type="button"
                             class="grid size-9 place-items-center rounded-lg border border-stone-300 text-red-600 hover:bg-red-50 dark:border-neutral-700 dark:text-red-400 dark:hover:bg-red-500/10"
-                            :aria-label="`Quitar el banner ${i + 1}`"
+                            :aria-label="`Quitar la promoción ${i + 1}`"
                             title="Quitar"
                             @click="quitar(i)"
                         >
@@ -212,7 +212,7 @@ const error = (indice, campo) => props.form.errors[`banners.${indice}.${campo}`]
                         <p v-else :class="claseAyuda">Déjalo vacío si tu imagen ya trae el texto.</p>
                     </div>
                     <div>
-                        <label :class="claseLabel" :for="`banner_destino_${banner.clave}`">Al tocarlo lleva</label>
+                        <label :class="claseLabel" :for="`banner_destino_${banner.clave}`">Al tocarla lleva</label>
                         <select :id="`banner_destino_${banner.clave}`" v-model="banner.destino" :class="claseInput">
                             <option v-for="d in DESTINOS" :key="d.valor" :value="d.valor" :disabled="d.valor === 'categoria' && !categorias.length">{{ d.nombre }}</option>
                         </select>

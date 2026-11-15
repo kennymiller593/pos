@@ -1,6 +1,6 @@
 {{--
-    Plantilla "Plaza": tienda en línea estilo gran almacén. Cabecera entera en el color de la tienda (marca, buscador
-    grande y menú en dos filas), secciones en paneles blancos sobre fondo gris y pie oscuro en columnas.
+    Plantilla "Plaza": tienda en línea estilo gran almacén. Cabecera en el color de la tienda (marca, buscador
+    grande) y debajo el menú, siempre sobre blanco, secciones en paneles blancos sobre fondo gris y pie oscuro en columnas.
     El color secundario del dueño es el acento (botón de buscar, carrito, botón de la portada).
     Comparte con las otras plantillas el pedido (carrito), el buscador con sugerencias y el chatbot (tienda.js).
 --}}
@@ -105,11 +105,11 @@
         </div>
     @endif
 
-    {{-- Cabecera en el color de la tienda: marca, buscador grande y atención; debajo, el menú --}}
+    {{-- Cabecera en el color de la tienda: marca, buscador grande y atención; debajo, el menú sobre blanco --}}
     {{-- en celular la cabecera se "disuelve" (contents) para que solo el menú quede fijo al bajar --}}
     <header class="z-30 bg-(--marca) text-(--sobre-marca) max-lg:contents lg:shadow-md lg:shadow-slate-900/10 {{ $previa ? '' : 'lg:sticky lg:top-0' }}">
         <div class="mx-auto w-full max-w-7xl bg-(--marca) px-3 text-(--sobre-marca) sm:px-6 lg:bg-transparent lg:px-8">
-            <div class="flex items-center gap-3 pt-3 pb-2.5 lg:gap-8 lg:pt-4 lg:pb-2">
+            <div class="flex items-center gap-3 pt-3 pb-2.5 lg:gap-8 lg:py-3.5">
                 <a href="/" class="flex min-w-0 items-center gap-2.5" aria-label="{{ $tienda['nombre'] }}: inicio">
                     @if ($tienda['logo'])
                         <img src="{{ $tienda['logo_ligero'] }}" alt="" class="size-11 shrink-0 rounded-lg bg-white object-contain p-0.5 lg:size-12">
@@ -164,19 +164,19 @@
             </form>
         </div>
 
-        {{-- Menú: categorías, atajos, marcas, páginas y carrito --}}
-        <nav class="bg-(--marca) text-(--sobre-marca) {{ $previa ? '' : 'max-lg:sticky max-lg:top-0 max-lg:z-30 max-lg:shadow-md max-lg:shadow-slate-900/15' }}" aria-label="Menú de la tienda" data-menu-fijo>
-            <div class="mx-auto flex max-w-7xl items-center gap-1 border-t border-white/10 px-1.5 text-sm sm:px-4 lg:border-t-0 lg:px-6 lg:pb-2">
+        {{-- Menú: categorías, atajos, marcas, páginas y carrito. Siempre sobre blanco, con cualquier color de tienda --}}
+        <nav class="border-b border-slate-200 bg-white text-slate-700 {{ $previa ? '' : 'max-lg:sticky max-lg:top-0 max-lg:z-30 max-lg:shadow-md max-lg:shadow-slate-900/10' }}" aria-label="Menú de la tienda" data-menu-fijo>
+            <div class="mx-auto flex max-w-7xl items-center gap-1 px-1.5 py-0.5 text-sm sm:px-4 lg:px-6 lg:py-1">
                 <span class="mr-3 hidden shrink-0 items-center gap-2 pl-2 leading-tight xl:flex" data-envios-a>
-                    @include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-5 opacity-90'])
-                    <span><span class="block text-[11px] opacity-80">Envíos a</span><span class="block text-[13px] font-semibold">todo el Perú</span></span>
+                    @include('tienda.icono', ['n' => 'lugar', 'clase' => 'size-5 text-(--marca-texto)'])
+                    <span><span class="block text-[11px] text-slate-500">Envíos a</span><span class="block text-[13px] font-semibold text-slate-900">todo el Perú</span></span>
                 </span>
 
                 @if ($categorias->isNotEmpty())
                     <details class="group relative shrink-0">
-                        <summary class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 font-semibold whitespace-nowrap transition-colors select-none hover:bg-black/10 group-open:bg-black/15 group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden" data-menu-categorias>
+                        <summary class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 font-semibold whitespace-nowrap text-slate-900 transition-colors select-none hover:bg-slate-100 group-open:bg-slate-100 group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden" data-menu-categorias>
                             @include('tienda.plaza.icono', ['n' => 'menu', 'clase' => 'size-4.5 lg:hidden'])Categorías
-                            @include('tienda.plaza.icono', ['n' => 'abajo', 'clase' => 'size-3.5 opacity-80 transition-transform group-open:rotate-180'])
+                            @include('tienda.plaza.icono', ['n' => 'abajo', 'clase' => 'size-3.5 text-slate-400 transition-transform group-open:rotate-180'])
                         </summary>
                         <div class="absolute top-full left-0 z-40 mt-1 scroll-fino max-h-[calc(100dvh-5rem)] w-[min(92vw,40rem)] overflow-y-auto rounded-xl bg-white p-3 text-slate-900 shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
                             <a href="/catalogo" class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 font-bold hover:bg-(--marca-suave) hover:text-(--marca-texto)">
@@ -200,17 +200,17 @@
 
                 {{-- los atajos que no entran se deslizan; se desvanecen al borde para que no se vean cortados --}}
                 <div class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] pr-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <a href="/catalogo" class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-black/10 {{ $enCatalogo && ! $categoriaActiva ? 'bg-black/15 font-semibold' : '' }}">Tienda</a>
+                    <a href="/catalogo" class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $enCatalogo && ! $categoriaActiva ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">Tienda</a>
                     @foreach ($atajos as $cat)
-                        <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-black/10 {{ $categoriaActiva === $cat->id ? 'bg-black/15 font-semibold' : '' }}">{{ $cat->nombre }}</a>
+                        <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $categoriaActiva === $cat->id ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">{{ $cat->nombre }}</a>
                     @endforeach
                 </div>
 
                 @if ($marcasTienda->isNotEmpty())
                     <details class="group relative hidden shrink-0 md:block">
-                        <summary class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 whitespace-nowrap transition-colors select-none hover:bg-black/10 group-open:bg-black/15 group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden" data-menu-marcas>
+                        <summary class="flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 whitespace-nowrap transition-colors select-none hover:bg-slate-100 hover:text-slate-950 group-open:bg-slate-100 group-open:before:fixed group-open:before:inset-0 group-open:before:z-30 group-open:before:cursor-default group-open:before:content-[''] [&::-webkit-details-marker]:hidden" data-menu-marcas>
                             Marcas
-                            @include('tienda.plaza.icono', ['n' => 'abajo', 'clase' => 'size-3.5 opacity-80 transition-transform group-open:rotate-180'])
+                            @include('tienda.plaza.icono', ['n' => 'abajo', 'clase' => 'size-3.5 text-slate-400 transition-transform group-open:rotate-180'])
                         </summary>
                         <ul class="absolute top-full right-0 z-40 mt-1 max-h-[60vh] w-64 overflow-y-auto rounded-xl bg-white p-2 text-slate-900 shadow-2xl shadow-slate-900/20 ring-1 ring-slate-200">
                             @foreach ($marcasTienda as $m)
@@ -222,9 +222,9 @@
 
                 <div class="hidden shrink-0 items-center gap-0.5 lg:flex">
                     @foreach ($paginasMenu as $enlacePagina)
-                        <a href="{{ $enlacePagina['url'] }}" class="hidden h-10 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-black/10 xl:flex">{{ $enlacePagina['titulo'] }}</a>
+                        <a href="{{ $enlacePagina['url'] }}" class="hidden h-10 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 xl:flex">{{ $enlacePagina['titulo'] }}</a>
                     @endforeach
-                    <a href="{{ $enlaceContacto }}" class="flex h-10 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-black/10">Contacto</a>
+                    <a href="{{ $enlaceContacto }}" class="flex h-10 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950">Contacto</a>
                     @if ($whatsapp)
                         <button type="button" data-pedido-abrir data-necesita-js aria-label="Ver mi carrito"
                             class="ml-2 inline-flex h-9 cursor-pointer items-center gap-2 rounded-full bg-(--plaza-acento) px-4 text-sm font-bold text-(--sobre-acento) shadow-sm transition hover:brightness-110">
@@ -414,5 +414,8 @@
             </aside>
         </div>
     @endif
+
+    {{-- Promociones del dueño: ventana que se abre al entrar, una vez al día por visitante --}}
+    @include('tienda.promociones')
 </body>
 </html>
