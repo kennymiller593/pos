@@ -115,10 +115,10 @@ class TiendaController extends Controller
         $empresa = $this->empresa($request);
         $buscar = $portada ? '' : trim(mb_substr((string) $request->query('q'), 0, 80));
         $orden = $config['mostrar_precios'] && in_array($request->query('orden'), ['menor', 'mayor'], true) ? $request->query('orden') : 'nombre';
-        // filtros del panel lateral de la plantilla Mercado: una marca y un precio tope (?marca=Bayer&hasta=50)
-        $mercado = $config['plantilla'] === 'mercado';
-        $marca = $mercado && ! $portada ? trim(mb_substr((string) $request->query('marca'), 0, 60)) : '';
-        $hasta = $mercado && ! $portada && $config['mostrar_precios'] && is_numeric($request->query('hasta')) && (float) $request->query('hasta') > 0
+        // filtros del panel lateral de las plantillas Mercado y Plaza: una marca y un precio tope (?marca=Bayer&hasta=50)
+        $conFiltros = in_array($config['plantilla'], Tienda::PLANTILLAS_CON_FILTROS, true);
+        $marca = $conFiltros && ! $portada ? trim(mb_substr((string) $request->query('marca'), 0, 60)) : '';
+        $hasta = $conFiltros && ! $portada && $config['mostrar_precios'] && is_numeric($request->query('hasta')) && (float) $request->query('hasta') > 0
             ? round((float) $request->query('hasta'), 2)
             : null;
 
@@ -147,7 +147,11 @@ class TiendaController extends Controller
         $filtrando = $buscar !== '' || $categoria !== null || $marca !== '' || $hasta !== null;
         $destacados = $portada ? $this->catalogo->destacados($empresa, $config['destacados_origen']) : null;
 
-        return view($mercado ? 'tienda.mercado.inicio' : 'tienda.inicio', [
+        return view(match ($config['plantilla']) {
+            'mercado' => 'tienda.mercado.inicio',
+            'plaza' => 'tienda.plaza.inicio',
+            default => 'tienda.inicio',
+        }, [
             ...$contexto,
             'portada' => $portada,
             'buscar' => $buscar,
@@ -160,8 +164,8 @@ class TiendaController extends Controller
             // solo la plantilla Mercado: marcas para filtrar y tope del filtro de precio
             'marca' => $marca,
             'hasta' => $hasta,
-            'marcas' => $mercado && ! $portada ? $this->catalogo->marcas($empresa, $categoria?->id) : collect(),
-            'precioMaximo' => $mercado && ! $portada && $config['mostrar_precios'] ? ceil($this->catalogo->precioMaximo($empresa)) : 0,
+            'marcas' => $conFiltros && ! $portada ? $this->catalogo->marcas($empresa, $categoria?->id) : collect(),
+            'precioMaximo' => $conFiltros && ! $portada && $config['mostrar_precios'] ? ceil($this->catalogo->precioMaximo($empresa)) : 0,
             'destacados' => $destacados ? [
                 'origen' => $destacados['origen'],
                 // título que puso el dueño; sin él, cada plantilla pone el suyo según el origen
@@ -433,6 +437,11 @@ class TiendaController extends Controller
                 // [color, más oscuro, texto encima]; true si lo eligió el dueño (la plantilla Mercado lo usa tal cual)
                 'secundario' => Tienda::secundario($config),
                 'secundario_propio' => Tienda::esColor((string) $config['color_secundario']),
+                // el secundario tal como lo eligió el dueño, con el texto que se lee encima: el acento de la plantilla Plaza
+                'acento' => Tienda::esColor((string) $config['color_secundario']) ? [
+                    strtoupper($config['color_secundario']),
+                    Tienda::contraste($config['color_secundario'], Tienda::SOBRE['claro']) >= 2.4 ? Tienda::SOBRE['claro'] : Tienda::SOBRE['oscuro'],
+                ] : null,
                 'mostrar_precios' => (bool) $config['mostrar_precios'],
                 'productos' => $this->catalogo->total($empresa),
                 'anuncio' => $config['anuncio'],
@@ -459,7 +468,11 @@ class TiendaController extends Controller
             // herramientas de medición conectadas por el dueño (en la vista previa no se cargan)
             'medicion' => $request->attributes->get('tienda_previa') ? [] : Medicion::activas($config),
             // la plantilla elegida decide con qué cabecera y pie se arman las páginas
-            'layoutTienda' => $config['plantilla'] === 'mercado' ? 'tienda.mercado.layout' : 'tienda.layout',
+            'layoutTienda' => match ($config['plantilla']) {
+                'mercado' => 'tienda.mercado.layout',
+                'plaza' => 'tienda.plaza.layout',
+                default => 'tienda.layout',
+            },
             'contactos' => $this->catalogo->contactos($empresa, $config),
             // la barra de categorías y el pie van en todas las páginas
             'categorias' => $categorias,
@@ -469,7 +482,7 @@ class TiendaController extends Controller
             'paginas' => array_values(array_map(fn ($p) => ['url' => $p['url'], 'titulo' => $p['titulo']], $this->paginas($config))),
             'nosotros' => $config['nosotros'],
             // marcas con productos en la tienda: el menú "Marcas" de la plantilla Mercado
-            'marcasTienda' => $config['plantilla'] === 'mercado' ? $this->catalogo->marcas($empresa) : collect(),
+            'marcasTienda' => in_array($config['plantilla'], Tienda::PLANTILLAS_CON_FILTROS, true) ? $this->catalogo->marcas($empresa) : collect(),
             // lo primero que el dueño escribió sobre envíos y pagos, para los sellos de la plantilla Mercado
             'entrega' => [
                 'envios' => Str::limit(Str::squish((string) (Tienda::lineas($config['envios'])[0] ?? '')), 110, '…', preserveWords: true) ?: null,

@@ -210,6 +210,7 @@ function mostrarErrores() {
 const PLANTILLAS = [
     { valor: 'clasica', nombre: 'Clásica', detalle: 'Portada con tu estilo elegido, destacados y categorías con foto.' },
     { valor: 'mercado', nombre: 'Mercado', detalle: 'Estilo marketplace: campaña arriba y filtros por categoría, marca y precio al costado.' },
+    { valor: 'plaza', nombre: 'Plaza', detalle: 'Estilo gran almacén: cabecera en tu color con buscador grande y secciones en paneles.' },
 ]
 
 // ---- apariencia de la portada ----
@@ -880,7 +881,7 @@ function guardarDescripcion() {
 
                 <fieldset class="mt-4" data-plantillas>
                     <legend :class="claseLabel">Plantilla</legend>
-                    <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="grid gap-3 sm:grid-cols-3">
                         <label
                             v-for="plantilla in PLANTILLAS"
                             :key="plantilla.valor"
@@ -898,6 +899,20 @@ function guardarDescripcion() {
                                     <span class="absolute top-[30%] left-[11%] h-[7%] w-[28%] rounded bg-neutral-800 dark:bg-neutral-200" />
                                     <span class="absolute top-[41%] left-[11%] h-[8%] w-[12%] rounded bg-emerald-600" />
                                     <span v-for="i in 4" :key="i" class="absolute bottom-[8%] h-[30%] w-[19%] rounded-md bg-stone-100 ring-1 ring-stone-200 dark:bg-neutral-700 dark:ring-neutral-600" :style="{ left: `${6 + (i - 1) * 22.5}%` }" />
+                                </template>
+                                <template v-else-if="plantilla.valor === 'plaza'">
+                                    <span class="absolute inset-0 bg-slate-100 dark:bg-neutral-800" />
+                                    <span class="absolute inset-x-0 top-0 h-[22%] bg-emerald-700" />
+                                    <span class="absolute top-[5%] left-[22%] h-[8%] w-[48%] rounded-sm bg-white" />
+                                    <span class="absolute top-[5%] left-[63%] h-[8%] w-[7%] rounded-r-sm bg-lime-400" />
+                                    <span class="absolute top-[28%] right-[6%] left-[6%] h-[30%] overflow-hidden rounded-md bg-emerald-700">
+                                        <span class="absolute -top-[40%] -right-[6%] aspect-square h-[190%] rounded-full bg-lime-400" />
+                                        <span class="absolute top-[30%] left-[7%] h-[18%] w-[34%] rounded bg-white" />
+                                        <span class="absolute top-[60%] left-[7%] h-[18%] w-[14%] rounded bg-lime-400" />
+                                    </span>
+                                    <span v-for="i in 3" :key="i" class="absolute top-[52%] h-[13%] w-[27%] rounded bg-white shadow-sm ring-1 ring-stone-200 dark:bg-neutral-600 dark:ring-neutral-500" :style="{ left: `${8 + (i - 1) * 28.5}%` }" />
+                                    <span class="absolute right-[6%] bottom-[5%] left-[6%] h-[24%] rounded-md bg-white ring-1 ring-stone-200 dark:bg-neutral-700 dark:ring-neutral-600" />
+                                    <span v-for="i in 5" :key="`p${i}`" class="absolute bottom-[8%] h-[14%] w-[14%] rounded-sm bg-stone-100 ring-1 ring-stone-200 dark:bg-neutral-600 dark:ring-neutral-500" :style="{ left: `${9 + (i - 1) * 16.6}%` }" />
                                 </template>
                                 <template v-else>
                                     <span class="absolute inset-x-0 top-0 h-[14%] bg-emerald-800" />
@@ -965,7 +980,7 @@ function guardarDescripcion() {
                 <div class="mt-5 grid gap-5 lg:grid-cols-2">
                     <!-- Foto de portada -->
                     <div>
-                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(de fondo en la campaña de la portada, detrás del título y los destacados)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
+                        <p :class="claseLabel">Foto de portada <span class="font-normal text-neutral-400">{{ form.plantilla === 'mercado' ? '(de fondo en la campaña de la portada, detrás del título y los destacados)' : form.plantilla === 'plaza' ? '(de fondo en la campaña de la portada, detrás del título)' : (form.portada_estilo === 'foto' ? '' : '(para el estilo "Foto grande")') }}</span></p>
                         <div v-if="fotoPortada" class="relative overflow-hidden rounded-2xl border border-stone-200 bg-stone-100 dark:border-neutral-800 dark:bg-neutral-800">
                             <!-- entera si la foto ya trae su texto; si no, recortada y con el velo que lleva en la tienda, para ver cómo se leerá el título -->
                             <img :src="fotoPortada" alt="Foto de portada" :class="form.portada_solo_foto ? 'h-auto w-full' : 'aspect-[16/7] w-full object-cover'" />

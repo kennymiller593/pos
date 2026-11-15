@@ -191,7 +191,7 @@ class TiendaEnLineaTest extends TestCase
         $foto = $this->empresa->fresh()->tienda_config['portada_imagen'];
         $this->assertTrue($this->empresa->fresh()->tienda_config['portada_solo_foto']);
 
-        foreach (['clasica', 'mercado'] as $plantilla) {
+        foreach (['clasica', 'mercado', 'plaza'] as $plantilla) {
             $this->publicar(['plantilla' => $plantilla, 'portada_estilo' => 'foto', 'portada_imagen' => $foto, 'portada_solo_foto' => true, 'portada_titulo' => 'Compra y gana']);
 
             $this->tienda('/')
@@ -226,7 +226,7 @@ class TiendaEnLineaTest extends TestCase
 
         // publicar() reemplaza toda la configuración: se conserva también la versión para el celular de la principal
         $principal = ['portada_imagen' => $config()['portada_imagen'], 'portada_imagen_movil' => $config()['portada_imagen_movil']];
-        foreach (['clasica', 'mercado'] as $plantilla) {
+        foreach (['clasica', 'mercado', 'plaza'] as $plantilla) {
             $this->publicar(['plantilla' => $plantilla, 'portada_estilo' => 'foto', ...$principal, 'portada_fotos' => $fotos]);
             $this->tienda('/')->assertOk()
                 ->assertSee('data-portada-fondo', false)
@@ -316,7 +316,7 @@ class TiendaEnLineaTest extends TestCase
     {
         $this->crearProducto(precio: 30, atributos: ['nombre' => 'Aspersor 1" plast. & riego', 'codigo_interno' => 'P0009']);
 
-        foreach (['clasica', 'mercado'] as $plantilla) {
+        foreach (['clasica', 'mercado', 'plaza'] as $plantilla) {
             $this->publicar(['plantilla' => $plantilla]);
 
             $this->tienda('/catalogo/aspersor-1-plast-riego')
@@ -1538,6 +1538,55 @@ class TiendaEnLineaTest extends TestCase
         // sin precios publicados no hay filtro de precio ni tope que aplicar
         $this->publicar(['plantilla' => 'mercado', 'mostrar_precios' => false]);
         $this->tienda('/catalogo?hasta=30')->assertOk()->assertSee('Urea 46% x 50 kg')->assertSee('Glifosato 480 SL')->assertDontSee('data-filtro-precio', false);
+    }
+
+    // ---------------- plantilla "Plaza" ----------------
+
+    public function test_la_plantilla_plaza_tiene_su_portada_sus_filtros_y_el_mismo_pedido(): void
+    {
+        $this->actingAs($this->admin)->put('/tienda-en-linea', $this->datosDeTienda(['slug' => 'agro', 'plantilla' => 'plaza']))->assertSessionHasNoErrors();
+        $this->assertSame('plaza', $this->empresa->fresh()->tienda_config['plantilla']);
+
+        // la portada: campaña, beneficios, paneles de promoción (no hay banners) y el mismo pedido por WhatsApp
+        $portada = $this->tienda('/')->assertOk()
+            ->assertSee('data-plantilla="plaza"', false)
+            ->assertSee('data-portada="plaza"', false)
+            ->assertDontSee('data-plantilla="mercado"', false)
+            ->assertSee('data-beneficios', false)
+            ->assertSee('data-promos', false)
+            ->assertSee('Envíos a todo el Perú')
+            ->assertSee('Urea 46% x 50 kg')
+            ->assertSee('data-tarjeta-plaza', false)
+            ->assertSee('data-whatsapp-flotante', false)
+            ->assertSee('data-whatsapp-aviso', false)
+            ->assertSee('id="pedido"', false)
+            ->assertSee('Enviar pedido por WhatsApp');
+        $this->assertStringContainsString('data-anadir=', $portada->getContent());
+        // los beneficios van una sola vez en la portada (bajo la campaña, no otra vez antes del pie)
+        $this->assertSame(1, substr_count($portada->getContent(), 'data-beneficios'));
+
+        // el catálogo filtra por marca y por precio tope, igual que Mercado
+        $this->tienda('/catalogo')->assertOk()->assertSee('data-filtro-marcas', false)->assertSee('Farmex')->assertSee('data-filtro-precio', false)->assertSee('data-beneficios', false);
+        $this->tienda('/catalogo?marca=Farmex')->assertOk()->assertSee('Urea 46% x 50 kg')->assertDontSee('Glifosato 480 SL');
+        $this->tienda('/catalogo?hasta=30')->assertOk()->assertSee('Glifosato 480 SL')->assertDontSee('Urea 46% x 50 kg');
+        $this->tienda('/catalogo?marca=Otra')->assertOk()->assertSee('No encontramos productos con esos filtros');
+
+        // la página del producto y las de texto usan la misma cabecera y pie
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertOk()->assertSee('data-plantilla="plaza"', false)->assertSee('data-cantidad-elegida', false);
+        $this->tienda('/libro-de-reclamaciones')->assertOk()->assertSee('data-plantilla="plaza"', false);
+
+        // colores del dueño: el principal pinta la cabecera y el secundario es el acento, tal como lo eligió
+        $this->publicar(['plantilla' => 'plaza', 'color' => 'propio', 'color_propio' => '#053C8F', 'color_secundario' => '#00B1C3']);
+        $this->tienda('/')->assertSee('--marca: #053C8F;', false)->assertSee('--plaza-acento: #00B1C3;', false)->assertSee('--sobre-acento: #FFFFFF;', false);
+        // un secundario muy claro lleva texto oscuro encima; sin secundario, el acento sale del color principal
+        $this->publicar(['plantilla' => 'plaza', 'color_secundario' => '#FFE600']);
+        $this->tienda('/')->assertSee('--plaza-acento: #FFE600;', false)->assertSee('--sobre-acento: #0F172A;', false);
+        $this->publicar(['plantilla' => 'plaza']);
+        $this->tienda('/')->assertSee('--plaza-acento: var(--marca-oscuro);', false);
+
+        // sin WhatsApp no hay carrito ni botones de pedido, y la tienda sigue cargando
+        $this->publicar(['plantilla' => 'plaza', 'whatsapp' => null]);
+        $this->tienda('/')->assertOk()->assertDontSee('id="pedido"', false)->assertDontSee('data-whatsapp-flotante', false)->assertSee('Todo el catálogo en línea');
     }
 
     public function test_las_categorias_se_ordenan_y_tienen_su_propia_foto(): void

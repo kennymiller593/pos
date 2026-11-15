@@ -32,7 +32,8 @@ class Tienda
         'facebook' => null,
         'instagram' => null,
         'tiktok' => null,
-        // diseño completo de la tienda: "clasica" (la de siempre) o "mercado" (filtros al costado, estilo marketplace)
+        // diseño completo de la tienda: "clasica" (la de siempre), "mercado" (filtros al costado, estilo marketplace)
+        // o "plaza" (cabecera entera en el color de la tienda y secciones en paneles, estilo gran almacén)
         'plantilla' => 'clasica',
         // apariencia de la portada (plantilla clásica)
         'portada_estilo' => 'vitrina',
@@ -90,7 +91,10 @@ class Tienda
     public const ESTILOS = ['vitrina', 'foto', 'texto'];
 
     /** Plantillas (diseño completo) que puede elegir la tienda. */
-    public const PLANTILLAS = ['clasica', 'mercado'];
+    public const PLANTILLAS = ['clasica', 'mercado', 'plaza'];
+
+    /** Plantillas con filtros al costado en el catálogo (marca y precio tope) y menú de marcas. */
+    public const PLANTILLAS_CON_FILTROS = ['mercado', 'plaza'];
 
     /** De dónde salen los productos de la sección destacada de la portada. */
     public const ORIGENES = ['auto', 'elegidos', 'vendidos', 'nuevos'];
