@@ -2256,7 +2256,7 @@ const claseInput =
 
                     <div class="scroll-fino min-h-0 flex-1 overflow-y-auto">
                         <!-- Cabecera -->
-                        <div class="grid gap-4 border-b border-[#E2E8F0] px-5 py-4 pr-12 sm:px-6 md:grid-cols-2 dark:border-neutral-800">
+                        <div class="grid gap-4 border-b border-[#E2E8F0] px-5 py-4 pr-12 sm:pr-14 sm:pl-6 md:grid-cols-2 dark:border-neutral-800">
                             <div class="flex items-start gap-3">
                                 <div class="grid size-11 shrink-0 place-items-center rounded-full bg-[#10B981]/10 text-[#10B981] dark:bg-emerald-950/60 dark:text-emerald-400">
                                     <CheckCircle2 class="size-6" />
