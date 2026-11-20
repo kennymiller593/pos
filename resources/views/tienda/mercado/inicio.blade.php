@@ -237,7 +237,6 @@
                             @endforeach
                         </div>
                     @endif
-                    </div>
                 </section>
             @endif
 
