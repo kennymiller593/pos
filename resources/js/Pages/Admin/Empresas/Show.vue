@@ -283,85 +283,50 @@ const claseBoton =
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <!-- Suscripción -->
-                <section :class="claseTarjeta">
-                    <div class="flex items-start gap-3">
-                        <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-                            <CreditCard class="size-5" />
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-xs font-semibold tracking-wider text-neutral-400 uppercase dark:text-neutral-500">Suscripción</p>
-                            <p class="truncate text-xl font-semibold tracking-tight">{{ nombrePlan }}</p>
-                        </div>
-                    </div>
-                    <dl class="mt-5 space-y-2.5 text-sm">
-                        <div class="flex justify-between gap-3">
-                            <dt class="text-neutral-500 dark:text-neutral-400">Estado</dt>
-                            <dd>
-                                <span class="rounded-lg px-2 py-0.5 text-xs font-semibold" :class="estadoSus.clase">{{ estadoSus.texto }}</span>
-                            </dd>
-                        </div>
-                        <div class="flex justify-between gap-3">
-                            <dt class="text-neutral-500 dark:text-neutral-400">
-                                {{ (suscripcion?.dias_restantes ?? 0) < 0 ? 'Venció el' : 'Vence el' }}
-                            </dt>
-                            <dd class="font-medium">{{ fechaLarga(suscripcion?.fecha_fin) }}</dd>
-                        </div>
-                        <div v-if="textoDias" class="flex justify-between gap-3">
-                            <dt class="text-neutral-500 dark:text-neutral-400">Tiempo</dt>
-                            <dd
-                                class="font-medium"
-                                :class="(suscripcion?.dias_restantes ?? 0) <= 3 ? 'text-amber-600 dark:text-amber-400' : ''"
-                            >
-                                {{ textoDias }}
-                            </dd>
-                        </div>
-                        <div v-if="empresa.certificado_vence_en" class="flex justify-between gap-3">
-                            <dt class="text-neutral-500 dark:text-neutral-400">Certificado vence</dt>
-                            <dd class="font-medium">{{ fechaLarga(empresa.certificado_vence_en) }}</dd>
-                        </div>
-                    </dl>
-                </section>
-
-                <!-- Activar / renovar plan -->
-                <form :class="claseTarjeta" @submit.prevent="activarPlan">
-                    <h3 class="flex items-center gap-2 font-semibold tracking-tight">
-                        <CalendarClock class="size-4 text-emerald-600 dark:text-emerald-400" />
-                        Activar / renovar plan
-                    </h3>
-                    <div class="mt-4 space-y-3">
-                        <div>
-                            <label :class="claseLabel" for="a_plan">Plan</label>
-                            <select id="a_plan" v-model="formPlan.plan" :class="claseInput">
-                                <option v-for="p in planes" :key="p.codigo" :value="p.codigo">
-                                    {{ p.nombre }} — {{ soles(p.precio_mensual) }}/mes
-                                </option>
-                            </select>
-                            <p v-if="formPlan.errors.plan" :class="claseError">{{ formPlan.errors.plan }}</p>
-                        </div>
-                        <div>
-                            <label :class="claseLabel" for="a_meses">Meses</label>
-                            <input id="a_meses" v-model.number="formPlan.meses" type="number" min="1" max="36" :class="claseInput" />
-                            <p v-if="formPlan.errors.meses" :class="claseError">{{ formPlan.errors.meses }}</p>
-                        </div>
-                        <div>
-                            <label :class="claseLabel" for="a_nota">Nota <span class="font-normal text-neutral-400">(opcional)</span></label>
-                            <input id="a_nota" v-model="formPlan.nota" type="text" maxlength="255" placeholder="Ej. Yape 24/09, op. 123456" :class="claseInput" />
-                            <p v-if="formPlan.errors.nota" :class="claseError">{{ formPlan.errors.nota }}</p>
-                        </div>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between gap-3">
-                        <p v-if="planElegido" class="text-sm text-neutral-500 dark:text-neutral-400">
-                            Total: <span class="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">{{ soles(totalPlan) }}</span>
-                        </p>
-                        <button type="submit" :disabled="formPlan.processing || !formPlan.plan" :class="[claseBoton, 'ml-auto']">
-                            {{ formPlan.processing ? 'Guardando...' : 'Activar plan' }}
-                        </button>
-                    </div>
-                </form>
-
+            <!-- tres columnas que crecen por separado: la larga (agentes de IA) ya no estira a las otras -->
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+                <!-- Plan y acceso -->
                 <div class="space-y-6">
+                    <!-- Suscripción -->
+                    <section :class="claseTarjeta">
+                        <div class="flex items-start gap-3">
+                            <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                                <CreditCard class="size-5" />
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs font-semibold tracking-wider text-neutral-400 uppercase dark:text-neutral-500">Suscripción</p>
+                                <p class="truncate text-xl font-semibold tracking-tight">{{ nombrePlan }}</p>
+                            </div>
+                        </div>
+                        <dl class="mt-5 space-y-2.5 text-sm">
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Estado</dt>
+                                <dd>
+                                    <span class="rounded-lg px-2 py-0.5 text-xs font-semibold" :class="estadoSus.clase">{{ estadoSus.texto }}</span>
+                                </dd>
+                            </div>
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-neutral-500 dark:text-neutral-400">
+                                    {{ (suscripcion?.dias_restantes ?? 0) < 0 ? 'Venció el' : 'Vence el' }}
+                                </dt>
+                                <dd class="font-medium">{{ fechaLarga(suscripcion?.fecha_fin) }}</dd>
+                            </div>
+                            <div v-if="textoDias" class="flex justify-between gap-3">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Tiempo</dt>
+                                <dd
+                                    class="font-medium"
+                                    :class="(suscripcion?.dias_restantes ?? 0) <= 3 ? 'text-amber-600 dark:text-amber-400' : ''"
+                                >
+                                    {{ textoDias }}
+                                </dd>
+                            </div>
+                            <div v-if="empresa.certificado_vence_en" class="flex justify-between gap-3">
+                                <dt class="text-neutral-500 dark:text-neutral-400">Certificado vence</dt>
+                                <dd class="font-medium">{{ fechaLarga(empresa.certificado_vence_en) }}</dd>
+                            </div>
+                        </dl>
+                    </section>
+
                     <!-- Extender -->
                     <form :class="claseTarjeta" @submit.prevent="extender">
                         <h3 class="flex items-center gap-2 font-semibold tracking-tight">
@@ -377,6 +342,68 @@ const claseBoton =
                             </div>
                             <button type="submit" :disabled="formExtender.processing" :class="claseBoton">
                                 {{ formExtender.processing ? 'Extendiendo...' : 'Extender' }}
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Activar / desactivar -->
+                    <section :class="claseTarjeta">
+                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
+                            <Power class="size-4" :class="empresa.activo ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'" />
+                            Acceso de la empresa
+                        </h3>
+                        <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                            {{ empresa.activo ? 'Desactivarla bloquea el ingreso de todos sus usuarios.' : 'La empresa está desactivada; sus usuarios no pueden ingresar.' }}
+                        </p>
+                        <button
+                            type="button"
+                            :disabled="formActivo.processing"
+                            class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            :class="empresa.activo
+                                ? 'border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-950/40'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                            @click="alternarActivo"
+                        >
+                            {{ formActivo.processing ? 'Procesando...' : (empresa.activo ? 'Desactivar empresa' : 'Reactivar') }}
+                        </button>
+                    </section>
+                </div>
+
+                <!-- Cobro y adicionales de la tienda -->
+                <div class="space-y-6">
+                    <!-- Activar / renovar plan -->
+                    <form :class="claseTarjeta" @submit.prevent="activarPlan">
+                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
+                            <CalendarClock class="size-4 text-emerald-600 dark:text-emerald-400" />
+                            Activar / renovar plan
+                        </h3>
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <label :class="claseLabel" for="a_plan">Plan</label>
+                                <select id="a_plan" v-model="formPlan.plan" :class="claseInput">
+                                    <option v-for="p in planes" :key="p.codigo" :value="p.codigo">
+                                        {{ p.nombre }} — {{ soles(p.precio_mensual) }}/mes
+                                    </option>
+                                </select>
+                                <p v-if="formPlan.errors.plan" :class="claseError">{{ formPlan.errors.plan }}</p>
+                            </div>
+                            <div>
+                                <label :class="claseLabel" for="a_meses">Meses</label>
+                                <input id="a_meses" v-model.number="formPlan.meses" type="number" min="1" max="36" :class="claseInput" />
+                                <p v-if="formPlan.errors.meses" :class="claseError">{{ formPlan.errors.meses }}</p>
+                            </div>
+                            <div>
+                                <label :class="claseLabel" for="a_nota">Nota <span class="font-normal text-neutral-400">(opcional)</span></label>
+                                <input id="a_nota" v-model="formPlan.nota" type="text" maxlength="255" placeholder="Ej. Yape 24/09, op. 123456" :class="claseInput" />
+                                <p v-if="formPlan.errors.nota" :class="claseError">{{ formPlan.errors.nota }}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between gap-3">
+                            <p v-if="planElegido" class="text-sm text-neutral-500 dark:text-neutral-400">
+                                Total: <span class="font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">{{ soles(totalPlan) }}</span>
+                            </p>
+                            <button type="submit" :disabled="formPlan.processing || !formPlan.plan" :class="[claseBoton, 'ml-auto']">
+                                {{ formPlan.processing ? 'Guardando...' : 'Activar plan' }}
                             </button>
                         </div>
                     </form>
@@ -445,7 +472,10 @@ const claseBoton =
                             {{ formDominio.processing ? 'Procesando...' : (empresa.dominio.habilitado ? 'Quitar el adicional' : 'Activar dominio propio') }}
                         </button>
                     </section>
+                </div>
 
+                <!-- Inteligencia artificial -->
+                <div class="space-y-6">
                     <!-- Adicional: agentes de IA -->
                     <section :class="claseTarjeta" data-adicional-agentes>
                         <h3 class="flex items-center gap-2 font-semibold tracking-tight">
@@ -487,28 +517,6 @@ const claseBoton =
                                 </button>
                             </li>
                         </ul>
-                    </section>
-
-                    <!-- Activar / desactivar -->
-                    <section :class="claseTarjeta">
-                        <h3 class="flex items-center gap-2 font-semibold tracking-tight">
-                            <Power class="size-4" :class="empresa.activo ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'" />
-                            Acceso de la empresa
-                        </h3>
-                        <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                            {{ empresa.activo ? 'Desactivarla bloquea el ingreso de todos sus usuarios.' : 'La empresa está desactivada; sus usuarios no pueden ingresar.' }}
-                        </p>
-                        <button
-                            type="button"
-                            :disabled="formActivo.processing"
-                            class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                            :class="empresa.activo
-                                ? 'border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-950/40'
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700'"
-                            @click="alternarActivo"
-                        >
-                            {{ formActivo.processing ? 'Procesando...' : (empresa.activo ? 'Desactivar empresa' : 'Reactivar') }}
-                        </button>
                     </section>
                 </div>
             </div>

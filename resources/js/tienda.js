@@ -29,10 +29,10 @@ document.querySelectorAll('[data-filtro-auto]').forEach((campo) => {
 })
 
 // ---------------------------------------------------------------- buscador
-const buscador = document.getElementById('buscador')
-const sugerencias = document.getElementById('sugerencias')
-
-if (buscador && sugerencias) {
+// Sugerencias mientras se escribe. Las plantillas Mercado y Plaza tienen un buscador para la PC y otro para el
+// celular (#buscador-movil, debajo del logo): cada uno lleva su propia lista.
+function conectarBuscador(buscador, sugerencias) {
+    if (!buscador || !sugerencias) return
     let espera = null
     let pedido = null // la consulta en curso: si se sigue escribiendo, se cancela
     let ultimo = ''
@@ -115,9 +115,11 @@ if (buscador && sugerencias) {
         ;(destino ?? buscador).focus()
     })
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('[role="search"]')) cerrar()
+        if (e.target.closest('[role="search"]') !== buscador.closest('[role="search"]')) cerrar()
     })
 }
+conectarBuscador(document.getElementById('buscador'), document.getElementById('sugerencias'))
+conectarBuscador(document.getElementById('buscador-movil'), document.getElementById('sugerencias-movil'))
 
 // ---------------------------------------------------------------- variantes (talla, color...)
 // En la página de un modelo cada opción es un enlace a su variante. Aquí, en vez de abrir otra página, se
@@ -896,19 +898,6 @@ document.querySelectorAll('[data-portada-slider]').forEach((slider) => {
     )
 })
 
-// ---------------------------------------------------------------- aviso del chatbot
-// El puntito rojo del botón del asistente invita a abrirlo; una vez abierto en este navegador, ya no hace falta.
-const avisoBot = document.querySelector('[data-bot-aviso]')
-if (avisoBot) {
-    const visto = () => { try { return localStorage.getItem('bot-aviso-visto') === '1' } catch { return false } }
-    if (visto()) avisoBot.classList.add('hidden')
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('[data-bot-abrir]')) return
-        avisoBot.classList.add('hidden')
-        try { localStorage.setItem('bot-aviso-visto', '1') } catch {}
-    })
-}
-
 // ---------------------------------------------------------------- promociones
 // La ventana de promociones se levanta sola al entrar, una vez al día por visitante (lo recuerda este navegador).
 // Si el navegador no deja guardar (modo privado estricto), no se abre: mejor eso que repetirla en cada página.
@@ -971,7 +960,7 @@ if (formDiagnostico) {
     const campoFoto = formDiagnostico.querySelector('[data-diagnostico-foto]')
     const vista = formDiagnostico.querySelector('[data-diagnostico-vista]')
     const indicacion = formDiagnostico.querySelector('[data-diagnostico-indicacion]')
-    const cambiar = formDiagnostico.querySelector('[data-diagnostico-cambiar]')
+    const campoCamara = formDiagnostico.querySelector('[data-diagnostico-camara]')
     const aviso = formDiagnostico.querySelector('[data-diagnostico-aviso]')
     const boton = formDiagnostico.querySelector('[data-diagnostico-enviar]')
     const LADO_MAXIMO = 1600
@@ -1000,26 +989,36 @@ if (formDiagnostico) {
         boton.querySelector('[data-diagnostico-cargando]').classList.toggle('inline-flex', si)
     }
 
+    // la foto elegida, venga de la galería o de la cámara (el campo de la cámara no tiene nombre: se envía la de aquí)
+    let elegida = null
     let urlVista = null
-    campoFoto.addEventListener('change', () => {
-        const archivo = campoFoto.files?.[0]
+    const elegir = (archivo) => {
+        if (!archivo) return
+        elegida = archivo
         mostrarAviso(null)
         if (urlVista) URL.revokeObjectURL(urlVista)
-        urlVista = archivo ? URL.createObjectURL(archivo) : null
-        vista.src = urlVista ?? ''
-        vista.classList.toggle('hidden', !archivo)
-        indicacion.classList.toggle('invisible', !!archivo)
-        cambiar.classList.toggle('hidden', !archivo)
-        cambiar.classList.toggle('inline-flex', !!archivo)
+        urlVista = URL.createObjectURL(archivo)
+        vista.src = urlVista
+        vista.classList.remove('hidden')
+        indicacion.classList.add('invisible')
+    }
+    campoFoto.addEventListener('change', () => elegir(campoFoto.files?.[0]))
+    campoCamara?.addEventListener('change', () => {
+        elegir(campoCamara.files?.[0])
+        // que el formulario también la lleve sin JavaScript de envío (donde se puede pasar un archivo a otro campo)
+        try {
+            const t = new DataTransfer()
+            t.items.add(campoCamara.files[0])
+            campoFoto.files = t.files
+        } catch { /* basta con "elegida" */ }
     })
-    cambiar.addEventListener('click', () => campoFoto.click())
 
     // la foto en JPEG de 1600 px como máximo; si el navegador no puede, se sube la original
     async function achicar(archivo) {
         try {
             const imagen = await createImageBitmap(archivo, { imageOrientation: 'from-image' })
             const escala = Math.min(1, LADO_MAXIMO / Math.max(imagen.width, imagen.height))
-            if (escala === 1 && archivo.size < 2_000_000) return archivo
+            if (escala === 1 && archivo.size < 2_000_000 && /^image\/(jpeg|png|webp)$/.test(archivo.type)) return archivo
             const lienzo = document.createElement('canvas')
             lienzo.width = Math.round(imagen.width * escala)
             lienzo.height = Math.round(imagen.height * escala)
@@ -1033,15 +1032,18 @@ if (formDiagnostico) {
 
     formDiagnostico.addEventListener('submit', async (e) => {
         e.preventDefault()
-        const archivo = campoFoto.files?.[0]
-        if (!archivo) return mostrarAviso('Elige o toma una foto de tu cultivo.')
-        if (!/^image\/(jpeg|png|webp)$/.test(archivo.type) && !/\.(jpe?g|png|webp)$/i.test(archivo.name)) return mostrarAviso('La foto debe ser JPG, PNG o WEBP.')
+        const archivo = elegida ?? campoFoto.files?.[0]
+        if (!archivo) return mostrarAviso('Toma o elige una foto de tu cultivo.')
+        if (archivo.type && !archivo.type.startsWith('image/')) return mostrarAviso('El archivo debe ser una foto.')
 
         mostrarAviso(null)
         cargando(true)
         try {
             const datosForm = new FormData(formDiagnostico)
-            datosForm.set('foto', await achicar(archivo))
+            // se envía en JPEG (achicar la convierte); si el celular no pudo (p. ej. HEIC sin soporte) va la original
+            const lista = await achicar(archivo)
+            if (!/^image\/(jpeg|png|webp)$/.test(lista.type) && !/\.(jpe?g|png|webp)$/i.test(lista.name)) return mostrarAviso('Este formato de foto no se puede leer. Toma la foto de nuevo o elige una en JPG.')
+            datosForm.set('foto', lista)
             const r = await fetch('/diagnostico', { method: 'POST', body: datosForm, headers: { Accept: 'text/html' } })
             const pagina = new DOMParser().parseFromString(await r.text().catch(() => ''), 'text/html')
             const error = pagina.querySelector('[data-diagnostico-error]')?.textContent?.trim()

@@ -171,6 +171,7 @@
                 <button type="submit" aria-label="Buscar" class="absolute top-1/2 right-0 grid size-11 -translate-y-[calc(50%+0.375rem)] cursor-pointer place-items-center">
                     <span class="grid size-8 place-items-center rounded-full bg-(--marca) text-(--sobre-marca)">@include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-4'])</span>
                 </button>
+                <div id="sugerencias-movil" class="absolute inset-x-0 top-full z-50 -mt-1 hidden overflow-hidden rounded-2xl bg-white text-left text-slate-900 shadow-2xl ring-1 shadow-slate-900/15 ring-slate-200" aria-live="polite"></div>
             </form>
         </div>
 
@@ -204,9 +205,6 @@
                 @endif
                 <div class="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <a href="/catalogo" class="flex h-11 shrink-0 items-center gap-1.5 px-3 whitespace-nowrap transition-colors hover:bg-black/10 {{ $enCatalogo && ! $categoriaActiva ? 'bg-black/15' : '' }}">@include('tienda.icono', ['n' => 'cuadricula', 'clase' => 'size-4'])Tienda</a>
-                    @if ($conDiagnostico ?? false)
-                        <a href="/diagnostico" class="flex h-11 shrink-0 items-center gap-1.5 px-3 font-bold whitespace-nowrap transition-colors hover:bg-black/10 {{ request()->is('diagnostico') ? 'bg-black/15' : '' }}" data-menu-diagnostico>@include('tienda.icono', ['n' => 'camara', 'clase' => 'size-4'])Diagnóstico IA</a>
-                    @endif
                     @foreach ($atajos as $cat)
                         <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-11 shrink-0 items-center px-3 whitespace-nowrap transition-colors hover:bg-black/10 {{ $categoriaActiva === $cat->id ? 'bg-black/15' : '' }}">{{ $cat->nombre }}</a>
                     @endforeach

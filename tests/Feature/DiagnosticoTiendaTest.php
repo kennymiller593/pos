@@ -95,7 +95,7 @@ class DiagnosticoTiendaTest extends TestCase
     public function test_solo_existe_si_la_plataforma_lo_activo_para_la_empresa(): void
     {
         $this->tienda('/diagnostico')->assertRedirect('http://agro.tienda.test');
-        $this->tienda('/')->assertOk()->assertDontSee('data-menu-diagnostico', false)->assertDontSee('data-diagnostico-promo', false);
+        $this->tienda('/')->assertOk()->assertDontSee('data-diagnostico-promo', false);
         $this->tienda('/sitemap.xml')->assertDontSee('/diagnostico');
 
         $this->activar();
@@ -103,13 +103,13 @@ class DiagnosticoTiendaTest extends TestCase
             ->assertSee('Diagnóstico de cultivos por foto')
             ->assertSee('data-diagnostico-form', false)
             ->assertSee('<link rel="canonical" href="http://agro.tienda.test/diagnostico">', false);
-        $this->tienda('/')->assertOk()->assertSee('data-menu-diagnostico', false)->assertSee('data-diagnostico-promo', false);
+        $this->tienda('/')->assertOk()->assertDontSee('data-menu-diagnostico', false)->assertSee('data-diagnostico-promo', false)->assertSee('Diagnóstico de cultivos con IA');
         $this->tienda('/sitemap.xml')->assertSee('http://agro.tienda.test/diagnostico');
 
         // en las otras plantillas también
         foreach (['mercado', 'plaza'] as $plantilla) {
             $this->empresa->update(['tienda_config' => [...$this->empresa->tienda_config, 'plantilla' => $plantilla]]);
-            $this->tienda('/')->assertOk()->assertSee('data-menu-diagnostico', false)->assertSee('data-diagnostico-promo', false);
+            $this->tienda('/')->assertOk()->assertDontSee('data-menu-diagnostico', false)->assertSee('data-diagnostico-promo', false)->assertSee('Diagnóstico de cultivos con IA');
             $this->tienda('/diagnostico')->assertOk()->assertSee('data-diagnostico-form', false);
         }
     }

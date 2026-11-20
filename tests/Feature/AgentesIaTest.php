@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\IA\AgenteDeRubro;
+use App\IA\SondaIa;
 use App\IA\Herramientas\BuscarProductos;
 use App\IA\Herramientas\DetalleProducto;
 use App\IA\Herramientas\ListarCategorias;
@@ -17,6 +18,7 @@ use App\Models\ProveedorIa;
 use App\Services\IA\ProveedorIaService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Tools\Request as ToolRequest;
@@ -391,5 +393,28 @@ class AgentesIaTest extends TestCase
         // sin proveedor con clave, responde el motivo
         ProveedorIa::query()->update(['api_key' => null]);
         $this->superadmin()->postJson("/admin/ia/agentes/{$agente->id}/probar", ['empresa_id' => $this->empresa->id, 'texto' => 'hola'])->assertStatus(422)->assertJsonPath('ok', false);
+    }
+
+    public function test_a_los_modelos_que_razonan_no_se_les_manda_temperatura(): void
+    {
+        // gpt-6-luna respondía 400 "Unsupported parameter: 'temperature' is not supported with this model"
+        $openai = ProveedorIa::findOrFail('openai');
+        $openai->forceFill(['api_key' => 'sk-prueba', 'activo' => true])->save();
+        Http::fake(['*' => Http::response(['error' => ['message' => 'solo se revisa lo enviado']], 500)]);
+        $servicio = app(ProveedorIaService::class);
+
+        $servicio->probar($openai, 'gpt-6-luna');
+        Http::assertSent(fn ($r) => ($r['model'] ?? null) === 'gpt-6-luna'
+            && ! array_key_exists('temperature', $r->data())
+            && ($r['reasoning']['effort'] ?? null) === 'low');
+
+        // un modelo que no razona sigue recibiendo su temperatura y nada de "reasoning"
+        $servicio->probar($openai, 'gpt-4.1-mini');
+        Http::assertSent(fn ($r) => ($r['model'] ?? null) === 'gpt-4.1-mini'
+            && array_key_exists('temperature', $r->data())
+            && ! array_key_exists('reasoning', $r->data()));
+
+        $this->assertFalse(SondaIa::admiteTemperatura('o3'));
+        $this->assertTrue(SondaIa::admiteTemperatura('gemini-3.8-flash'));
     }
 }

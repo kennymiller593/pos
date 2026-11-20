@@ -2,11 +2,11 @@
 @php
     $colorBot = $asistente['color'] ?: 'var(--marca)';
     $sobreBot = $asistente['sobre'] ?? 'var(--sobre-marca)';
-    // flotanteCompacto: en el celular el botón va de 44 px pegado a la esquina (lo pide la plantilla mercado,
-    // donde a 56 px tapaba el botón "Agregar" de la tarjeta de la derecha)
+    // flotanteCompacto: en el celular el botón va de 52 px pegado a la esquina (lo pide la plantilla mercado,
+    // donde a 56 px tapaba el botón "Agregar" de la tarjeta de la derecha; a 44 px se veía muy chico)
     $compacto = $flotanteCompacto ?? false;
-    $claseBoton = $compacto ? 'right-3 bottom-3 h-11 ring-2 sm:right-6 sm:bottom-6 sm:h-14 sm:ring-4' : 'right-4 bottom-4 h-14 ring-4 sm:right-6 sm:bottom-6';
-    $claseAvatar = $compacto ? 'size-11 sm:size-14' : 'size-14';
+    $claseBoton = $compacto ? 'right-3 bottom-3 h-13 ring-2 sm:right-6 sm:bottom-6 sm:h-14 sm:ring-4' : 'right-4 bottom-4 h-14 ring-4 sm:right-6 sm:bottom-6';
+    $claseAvatar = $compacto ? 'size-13 sm:size-14' : 'size-14';
 @endphp
 <div id="asistente" data-asistente style="--bot: {{ $colorBot }}; --sobre-bot: {{ $sobreBot }};">
     {{-- en celular va encima del botón de WhatsApp; en PC, encima de WhatsApp y del pedido --}}
@@ -20,7 +20,7 @@
             @endif
         </span>
         <span class="hidden max-w-0 overflow-hidden text-sm font-semibold whitespace-nowrap transition-[max-width,padding] duration-300 group-hover:max-w-56 group-hover:pr-5 group-focus-visible:max-w-56 group-focus-visible:pr-5 lg:block">Pregúntale a {{ $asistente['nombre'] }}</span>
-        {{-- puntito rojo, como un mensaje sin leer: invita a tocar (se oculta si hay respuestas por leer, que traen su propio globo) --}}
+        {{-- puntito rojo, como un mensaje sin leer: invita a tocar, siempre (como el de WhatsApp); se oculta solo si hay respuestas por leer, que traen su propio globo --}}
         <span data-bot-aviso class="absolute top-0 right-0 size-3.5 rounded-full bg-red-500 ring-2 ring-white group-has-[[data-bot-globo]:not(.hidden)]:hidden" aria-hidden="true"><span class="absolute inset-0 animate-ping rounded-full bg-red-500 opacity-75 motion-reduce:animate-none"></span></span>
         {{-- respuestas de una persona del negocio que llegaron con el chat cerrado --}}
         <span data-bot-globo class="absolute -top-1 -right-1 hidden min-w-6 rounded-full bg-red-500 px-1.5 text-center text-xs leading-6 font-bold text-white ring-2 ring-white"></span>

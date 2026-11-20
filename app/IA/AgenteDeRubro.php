@@ -27,6 +27,7 @@ use Laravel\Ai\Promptable;
 class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
 {
     use Promptable;
+    use TemperaturaSegunModelo;
 
     /** Línea final con los códigos recomendados; la app la convierte en tarjetas y no la muestra. */
     public const MARCA_PRODUCTOS = 'PRODUCTOS:';
@@ -161,9 +162,9 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
         return $this->modo === 'tienda' ? min($pasos, 4) : $pasos;
     }
 
-    public function temperature(): float
+    public function temperature(): ?float
     {
-        return 0.3;
+        return $this->temperaturaPermitida(0.3);
     }
 
     /**
@@ -191,7 +192,7 @@ class AgenteDeRubro implements Agent, HasProviderOptions, HasTools
         return match ($provider instanceof Lab ? $provider : Lab::tryFrom($provider)) {
             Lab::OpenRouter => ['reasoning' => ['enabled' => false]],
             Lab::DeepSeek => ['thinking' => ['type' => 'disabled']],
-            default => [],
+            default => $this->razonamientoBajo($provider),
         };
     }
 

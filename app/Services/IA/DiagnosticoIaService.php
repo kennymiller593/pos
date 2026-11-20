@@ -182,7 +182,7 @@ class DiagnosticoIaService
 
             $inicio = hrtime(true);
             try {
-                $respuesta = (new DiagnosticoDeCultivo($agente))->prompt(
+                $respuesta = (new DiagnosticoDeCultivo($agente))->paraModelo($eslabon['modelo'])->prompt(
                     $pedido,
                     attachments: [$imagen],
                     provider: $this->proveedores->construir($proveedor),

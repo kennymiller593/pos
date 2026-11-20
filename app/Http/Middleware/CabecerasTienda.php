@@ -31,7 +31,8 @@ class CabecerasTienda
             "default-src 'self'",
             trim("script-src 'self' https://static.cloudflareinsights.com ".implode(' ', $medicion['script'])),
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
+            // blob: la vista previa de la foto que el cliente elige en /diagnostico (no sale del navegador)
+            "img-src 'self' data: blob: https:",
             "font-src 'self'",
             trim("connect-src 'self' https://cloudflareinsights.com ".implode(' ', $medicion['conexion'])),
             // el mapa de la página de contacto; en las demás páginas no se permite ningún marco

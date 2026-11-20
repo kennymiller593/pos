@@ -209,11 +209,6 @@
                                 @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
                             </a>
                         @endunless
-                        @if ($conDiagnostico ?? false)
-                            <a href="/diagnostico" class="flex shrink-0 items-center gap-1.5 border-b-2 px-3 font-semibold whitespace-nowrap {{ request()->is('diagnostico') ? 'border-(--marca) text-(--marca-texto)' : 'border-transparent text-(--marca-texto) hover:text-slate-900' }}" data-menu-diagnostico>
-                                @include('tienda.icono', ['n' => 'camara'])Diagnóstico con IA
-                            </a>
-                        @endif
                         @foreach ($enFila as $cat)
                             <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
                                 class="flex h-11 shrink-0 items-center border-b-2 px-3 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca-texto)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">

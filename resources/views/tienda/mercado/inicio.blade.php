@@ -213,20 +213,30 @@
                         </div>
                         <a href="/catalogo" class="inline-flex items-center gap-1.5 text-sm font-bold text-(--marca-texto) hover:underline">Ver toda la tienda @include('tienda.icono', ['n' => 'flecha'])</a>
                     </div>
-                    <div class="-mx-3 mt-3 flex snap-x gap-3 overflow-x-auto px-3 pt-2 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-6 lg:px-0 xl:grid-cols-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        @foreach ($categorias->take(8) as $cat)
-                            <a href="{{ $cat->url }}" class="group w-24 shrink-0 snap-start text-center sm:w-28 lg:w-auto">
-                                <span class="mx-auto grid size-20 place-items-center overflow-hidden rounded-full bg-(--marca-suave) text-2xl font-extrabold text-(--marca-texto) ring-4 ring-white shadow-sm transition duration-300 group-hover:scale-105 group-hover:ring-(--marca) sm:size-24">
-                                    @if ($cat->imagen)
-                                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="160" height="160" class="size-full object-contain p-3 mix-blend-multiply">
-                                    @else
-                                        {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($cat->nombre, 0, 1)) }}
-                                    @endif
-                                </span>
-                                <span class="mt-2.5 line-clamp-2 text-[13px] leading-tight font-bold group-hover:text-(--marca-texto)">{{ $cat->nombre }}</span>
-                                <span class="block text-[11px] text-slate-500">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
-                            </a>
-                        @endforeach
+                    @php
+                        // con pocas categorías la fila entra entera; con más, avanza sola (unos 4,5 s por categoría: lento)
+                        $enMovimiento = $categorias->count() >= 6;
+                        $circulo = fn ($cat, bool $copia = false) => view('tienda.mercado.categoria-circulo', ['cat' => $cat, 'copia' => $copia]);
+                    @endphp
+                    @if ($enMovimiento)
+                        <div class="carrusel-zona -mx-3 mt-3 overflow-hidden px-3 pt-2 pb-2 [mask-image:linear-gradient(to_right,transparent,black_2.5rem,black_calc(100%-2.5rem),transparent)] sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0" data-categorias-carrusel>
+                            <div class="carrusel-pista flex w-max" style="--carrusel-duracion: {{ max(40, $categorias->count() * 4.5) }}s">
+                                @foreach ([false, true] as $copia)
+                                    <div class="flex shrink-0 gap-3 pr-3 sm:gap-5 sm:pr-5 {{ $copia ? 'carrusel-copia' : '' }}" @if ($copia) aria-hidden="true" @endif>
+                                        @foreach ($categorias as $cat)
+                                            {!! $circulo($cat, $copia) !!}
+                                        @endforeach
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
+                        <div class="-mx-3 mt-3 flex snap-x gap-3 overflow-x-auto px-3 pt-2 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                            @foreach ($categorias as $cat)
+                                {!! $circulo($cat) !!}
+                            @endforeach
+                        </div>
+                    @endif
                     </div>
                 </section>
             @endif
@@ -372,22 +382,6 @@
                 @endif
             </div>
         </section>
-
-        {{-- Mosaico de categorías con foto --}}
-        @php $mosaico = $portada ? $categorias->filter(fn ($c) => $c->imagen)->take(3)->values() : collect(); @endphp
-        @if ($mosaico->count() >= 2)
-            <section class="mt-12 grid gap-4 sm:grid-cols-2 {{ $mosaico->count() === 3 ? 'lg:grid-cols-3' : '' }}" aria-label="Categorías destacadas" data-mosaico>
-                @foreach ($mosaico as $cat)
-                    <a href="{{ $cat->url }}" class="group relative flex min-h-56 flex-col justify-end overflow-hidden rounded-3xl bg-(--mercado-fondo) p-6 text-(--sobre-fondo) ring-1 ring-black/5 sm:min-h-64">
-                        <img src="{{ $cat->imagen }}" alt="" loading="lazy" width="600" height="600" class="absolute -top-6 -right-6 size-44 rotate-6 object-contain opacity-90 drop-shadow-2xl transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3 sm:size-52">
-                        <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" aria-hidden="true"></div>
-                        <span class="relative inline-flex w-fit rounded-full bg-(--marca) px-2.5 py-1 text-[10px] font-bold tracking-wider text-(--sobre-marca) uppercase">{{ $cat->productos }} producto{{ $cat->productos === 1 ? '' : 's' }}</span>
-                        <span class="relative mt-2 text-2xl font-extrabold tracking-tight">{{ $cat->nombre }}</span>
-                        <span class="relative mt-1 line-clamp-2 text-sm opacity-80">{{ ($cat->texto ?? null) ? \Illuminate\Support\Str::limit(\Illuminate\Support\Str::squish($cat->texto), 90) : 'Ver la categoría completa' }}</span>
-                    </a>
-                @endforeach
-            </section>
-        @endif
 
         {{-- Sobre nosotros --}}
         @if ($portada && filled($nosotros))

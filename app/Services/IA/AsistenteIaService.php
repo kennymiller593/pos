@@ -191,6 +191,7 @@ class AsistenteIaService
             $inicio = hrtime(true);
             try {
                 $respuesta = (new AgenteDeRubro($agente, $empresa, $sucursal, $modo, $persona))
+                    ->paraModelo($eslabon['modelo'])
                     ->withMessages($historial)
                     ->prompt($texto, provider: $this->proveedores->construir($proveedor), model: $eslabon['modelo'], timeout: self::TIMEOUT_POR_PROVEEDOR);
             } catch (Throwable $e) {

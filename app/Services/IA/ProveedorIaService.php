@@ -39,7 +39,7 @@ class ProveedorIaService
     {
         $inicio = hrtime(true);
         try {
-            $respuesta = (new SondaIa)->prompt('Di OK', provider: $this->construir($proveedor), model: $modelo, timeout: self::TIMEOUT_PRUEBA);
+            $respuesta = (new SondaIa)->paraModelo($modelo)->prompt('Di OK', provider: $this->construir($proveedor), model: $modelo, timeout: self::TIMEOUT_PRUEBA);
             $ms = (int) ((hrtime(true) - $inicio) / 1_000_000);
             $this->registrarExito($proveedor);
 

@@ -161,6 +161,7 @@
                 <button type="submit" aria-label="Buscar" class="absolute top-0 right-0 grid h-11 w-12 cursor-pointer place-items-center rounded-r-lg bg-(--plaza-acento) text-(--sobre-acento)">
                     @include('tienda.icono', ['n' => 'buscar', 'clase' => 'size-5'])
                 </button>
+                <div id="sugerencias-movil" class="absolute inset-x-0 top-full z-50 -mt-1 hidden overflow-hidden rounded-2xl bg-white text-left text-slate-900 shadow-2xl ring-1 shadow-slate-900/15 ring-slate-200" aria-live="polite"></div>
             </form>
         </div>
 
@@ -201,9 +202,6 @@
                 {{-- los atajos que no entran se deslizan; se desvanecen al borde para que no se vean cortados --}}
                 <div class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] pr-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <a href="/catalogo" class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $enCatalogo && ! $categoriaActiva ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">Tienda</a>
-                    @if ($conDiagnostico ?? false)
-                        <a href="/diagnostico" class="flex h-10 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-semibold whitespace-nowrap text-(--marca-texto) transition-colors hover:bg-slate-100 {{ request()->is('diagnostico') ? 'bg-(--marca-suave)' : '' }}" data-menu-diagnostico>@include('tienda.icono', ['n' => 'camara', 'clase' => 'size-4'])Diagnóstico IA</a>
-                    @endif
                     @foreach ($atajos as $cat)
                         <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $categoriaActiva === $cat->id ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">{{ $cat->nombre }}</a>
                     @endforeach

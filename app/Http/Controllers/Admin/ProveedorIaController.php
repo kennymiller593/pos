@@ -59,8 +59,8 @@ class ProveedorIaController extends Controller
         'deepseek' => ['consola' => 'https://platform.deepseek.com/api_keys', 'modelos' => 'deepseek-v4-pro, deepseek-flash'],
         'openrouter' => ['consola' => 'https://openrouter.ai/settings/keys', 'modelos' => 'deepseek/deepseek-v4-pro, anthropic/claude-haiku-5.5 (formato proveedor/modelo)'],
         'anthropic' => ['consola' => 'https://console.anthropic.com/settings/keys', 'modelos' => 'claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5'],
-        'openai' => ['consola' => 'https://platform.openai.com/api-keys', 'modelos' => 'gpt-4.1-mini, gpt-4o (con visión, para el diagnóstico por foto)'],
-        'gemini' => ['consola' => 'https://aistudio.google.com/apikey', 'modelos' => 'gemini-2.5-flash (con visión, para el diagnóstico por foto)'],
+        'openai' => ['consola' => 'https://platform.openai.com/api-keys', 'modelos' => 'gpt-6-luna (barato), gpt-6.1-terra (más preciso); todos ven imágenes'],
+        'gemini' => ['consola' => 'https://aistudio.google.com/apikey', 'modelos' => 'gemini-3.8-flash (recomendado), gemini-3.5-flash-lite (más barato); todos ven imágenes'],
     ];
 
     public function update(Request $request, ProveedorIa $proveedor): RedirectResponse

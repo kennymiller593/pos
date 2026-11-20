@@ -58,3 +58,35 @@
         margin: 0;
     }
 }
+
+/* Tienda (plantilla Mercado): las categorías en círculos avanzan solas de derecha a izquierda, en bucle.
+   La pista lleva la lista dos veces: al llegar a la mitad vuelve al inicio sin que se note. Se detiene al pasar
+   el mouse o tocarla; con "reducir movimiento" no se mueve y la fila se desliza a mano. */
+@keyframes carrusel-izquierda {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+.carrusel-pista {
+    animation: carrusel-izquierda var(--carrusel-duracion, 60s) linear infinite;
+}
+.carrusel-zona:hover .carrusel-pista,
+.carrusel-zona:focus-within .carrusel-pista,
+.carrusel-zona:active .carrusel-pista {
+    animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+    .carrusel-zona {
+        overflow-x: auto;
+        mask-image: none;
+    }
+    .carrusel-pista {
+        animation: none;
+    }
+    .carrusel-copia {
+        display: none;
+    }
+}

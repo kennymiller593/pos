@@ -57,14 +57,22 @@
                         <span class="grid size-14 place-items-center rounded-2xl bg-white text-(--marca-texto) shadow-sm ring-1 ring-slate-200 transition-transform group-hover:scale-105">
                             @include('tienda.icono', ['n' => 'camara', 'clase' => 'size-7'])
                         </span>
-                        <span class="mt-3 text-base font-semibold text-slate-900">Toma o elige una foto</span>
+                        <span class="mt-3 text-base font-semibold text-slate-900"><span class="lg:hidden">Toca para elegir una foto</span><span class="hidden lg:inline">Haz clic para elegir una foto</span></span>
                         <span class="mt-1 text-sm text-slate-500">JPG, PNG o WEBP, hasta 10 MB</span>
                     </span>
-                    <input id="diagnostico-foto" type="file" name="foto" accept="image/jpeg,image/png,image/webp" required class="sr-only" data-diagnostico-foto>
+                    {{-- "image/*": con tipos sueltos Android abre solo los archivos y no ofrece la cámara --}}
+                    <input id="diagnostico-foto" type="file" name="foto" accept="image/*" class="sr-only" data-diagnostico-foto>
                 </label>
-                <button type="button" class="mt-2 hidden h-9 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-(--marca-texto) hover:bg-(--marca-suave)" data-diagnostico-cambiar>
-                    @include('tienda.icono', ['n' => 'imagen', 'clase' => 'size-4'])Cambiar foto
-                </button>
+                {{-- en el celular, la cámara trasera directo (capture) o la galería; en la PC basta la zona de arriba --}}
+                <div class="mt-3 grid grid-cols-2 gap-2 lg:hidden">
+                    <label for="diagnostico-camara" class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-(--marca-suave) text-sm font-semibold text-(--marca-texto) ring-1 ring-(--marca)/20 transition active:scale-[.98] has-[:focus-visible]:ring-2">
+                        @include('tienda.icono', ['n' => 'camara', 'clase' => 'size-5'])Tomar foto
+                        <input id="diagnostico-camara" type="file" accept="image/*" capture="environment" class="sr-only" data-diagnostico-camara>
+                    </label>
+                    <label for="diagnostico-foto" class="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-slate-700 ring-1 ring-slate-300 transition active:scale-[.98]">
+                        @include('tienda.icono', ['n' => 'imagen', 'clase' => 'size-5'])Galería
+                    </label>
+                </div>
 
                 <label for="diagnostico-nota" class="mt-4 block text-sm font-medium text-slate-800">¿Algo más que debamos saber? <span class="font-normal text-slate-400">(opcional)</span></label>
                 <textarea id="diagnostico-nota" name="nota" rows="2" maxlength="300" placeholder="Ej.: papa de 2 meses, las manchas aparecieron después de la lluvia" class="mt-1.5 block w-full resize-none rounded-xl border-0 bg-white px-3.5 py-2.5 text-[15px] text-slate-900 ring-1 ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-(--marca) focus:outline-none">{{ $nota ?? '' }}</textarea>

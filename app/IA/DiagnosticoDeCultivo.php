@@ -4,6 +4,8 @@ namespace App\IA;
 
 use App\Models\AgenteIa;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 
 /**
@@ -15,9 +17,10 @@ use Laravel\Ai\Promptable;
  * es fijo porque la tienda lo lee. Se pide JSON en texto (no "salida estructurada") para que Gemini
  * y OpenAI respondan igual; si llega mal formado se pasa al siguiente modelo de la cadena.
  */
-class DiagnosticoDeCultivo implements Agent
+class DiagnosticoDeCultivo implements Agent, HasProviderOptions
 {
     use Promptable;
+    use TemperaturaSegunModelo;
 
     public const TIPOS = ['plaga', 'enfermedad', 'deficiencia', 'estres', 'maleza', 'sano', 'indeterminado'];
 
@@ -42,9 +45,14 @@ class DiagnosticoDeCultivo implements Agent
         TXT;
     }
 
-    public function temperature(): float
+    public function temperature(): ?float
     {
-        return 0.2;
+        return $this->temperaturaPermitida(0.2);
+    }
+
+    public function providerOptions(Lab|string $provider): array
+    {
+        return $this->razonamientoBajo($provider);
     }
 
     /** Holgado: en Gemini 2.5 el razonamiento interno también gasta de este tope. */
