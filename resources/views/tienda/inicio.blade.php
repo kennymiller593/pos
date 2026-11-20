@@ -99,7 +99,7 @@
 @section('titulo', $buscar !== '' ? "“{$buscar}” en {$tienda['nombre']}" : ($categoria ? "{$categoria->nombre}".($pagina > 1 ? " · página {$pagina}" : '')." · {$tienda['nombre']}" : ($portada ? '' : "Catálogo de {$tienda['nombre']}".($pagina > 1 ? " · página {$pagina}" : ''))))
 @section('canonica', $canonica)
 {{-- los resultados de búsqueda no se indexan: son infinitas combinaciones de la misma tienda --}}
-@section('robots', $buscar !== '' || $orden !== 'nombre' ? 'noindex,follow' : 'index,follow')
+@section('robots', $pagina > 1 || $buscar !== '' || $orden !== 'nombre' ? 'noindex,follow' : 'index,follow')
 
 @if ($portada)
     @push('cabecera')

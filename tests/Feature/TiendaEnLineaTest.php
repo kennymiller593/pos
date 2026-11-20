@@ -1240,6 +1240,20 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/catalogo?q=urea&page=5')->assertNotFound();
     }
 
+    public function test_las_paginas_2_en_adelante_no_se_indexan_pero_sus_enlaces_si_se_siguen(): void
+    {
+        // 25 productos: el catálogo (24 por página) tiene página 2
+        for ($i = 1; $i <= 23; $i++) {
+            $this->crearProducto(atributos: ['nombre' => "Abono foliar {$i} x litro"]);
+        }
+        foreach (['clasica', 'mercado', 'plaza'] as $plantilla) {
+            $this->publicar(['plantilla' => $plantilla]);
+            $this->tienda('/catalogo')->assertOk()->assertSee('<meta name="robots" content="index,follow">', false);
+            // Google mostraba "Página 9" debajo del resultado: la paginación ya no compite con las categorías
+            $this->tienda('/catalogo?page=2')->assertOk()->assertSee('<meta name="robots" content="noindex,follow">', false);
+        }
+    }
+
     public function test_los_datos_estructurados_del_negocio_y_del_producto_estan_completos(): void
     {
         $this->sucursal->update(['ubigeo' => '100101', 'direccion' => 'Jr. Aguilar 347', 'telefono' => '062 512345', 'nombre' => 'Sucursal Centro']);
