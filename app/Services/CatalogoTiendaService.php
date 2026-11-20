@@ -299,6 +299,20 @@ class CatalogoTiendaService
     }
 
     /**
+     * Un producto visible por una dirección que tuvo antes: su nombre anterior o la del sistema
+     * que la empresa usaba antes de inkaPos (tabla producto_slugs_anteriores).
+     */
+    public function encontrarPorSlugAnterior(Empresa $empresa, string $slug): ?Producto
+    {
+        return $this->productos($empresa)
+            ->whereIn('productos.id', DB::table('producto_slugs_anteriores')
+                ->select('producto_id')
+                ->where('empresa_id', $empresa->id)
+                ->where('slug', strtolower($slug)))
+            ->first();
+    }
+
+    /**
      * Un producto visible por su código o su id: así eran los enlaces antes
      * (/producto/P0006/urea-46-x-50-kg) y hay que seguir encontrándolos.
      */

@@ -190,6 +190,15 @@ class TiendaController extends Controller
         return redirect($this->catalogo->url($producto), 301);
     }
 
+    /**
+     * Páginas de la web anterior de una tienda que aquí no existen (combos, blog, calculadora...):
+     * Google las tenía indexadas, así que redirigen con 301 a la más parecida en vez de dar 404.
+     */
+    public function paginaRetirada(Request $request): RedirectResponse
+    {
+        return redirect(str_starts_with($request->path(), 'combos') ? '/catalogo' : '/', 301);
+    }
+
     /** /catalogo/urea-46-x-50-kg: la página de un producto. */
     public function producto(Request $request, string $ref): View|RedirectResponse
     {
@@ -197,6 +206,13 @@ class TiendaController extends Controller
         $config = Tienda::config($empresa);
 
         $producto = $this->catalogo->encontrar($empresa, $ref);
+
+        // una dirección que tuvo antes (otro nombre, o el sistema anterior de la empresa): 301 a la actual
+        // (con mayúsculas, como /catalogo/POLISWEET-X-KILO de la web anterior, se busca en minúsculas)
+        if (! $producto && ($anterior = ($ref !== strtolower($ref) ? $this->catalogo->encontrar($empresa, strtolower($ref)) : null)
+            ?? $this->catalogo->encontrarPorSlugAnterior($empresa, $ref))) {
+            return redirect($this->catalogo->url($anterior), 301);
+        }
 
         // por su código o su id solo se abre el que aún no tiene nombre de enlace
         if (! $producto) {

@@ -588,6 +588,64 @@ class TiendaEnLineaTest extends TestCase
         $this->tienda('/catalogo/no-existe')->assertNotFound();
     }
 
+    public function test_al_renombrar_un_producto_su_direccion_vieja_redirige_a_la_nueva(): void
+    {
+        $this->publicar();
+        $this->urea->update(['nombre' => 'Urea agrícola 46% x 50 kg']);
+        $this->assertSame('urea-agricola-46-x-50-kg', $this->urea->fresh()->slug);
+        // Google ya tenía la dirección vieja: 301 a la nueva, no 404
+        $this->tienda('/catalogo/urea-46-x-50-kg')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo/urea-agricola-46-x-50-kg');
+        $this->tienda('/catalogo/urea-agricola-46-x-50-kg')->assertOk();
+
+        // si otro producto toma después esa dirección, se abre ese producto (la vigente manda) y deja de ser "anterior"
+        $nuevo = $this->crearProducto(atributos: ['nombre' => 'Urea 46% x 50 kg']);
+        $this->assertSame('urea-46-x-50-kg', $nuevo->fresh()->slug);
+        $this->assertDatabaseMissing('producto_slugs_anteriores', ['empresa_id' => $this->empresa->id, 'slug' => 'urea-46-x-50-kg']);
+
+        // un producto oculto de la tienda no se abre por su dirección vieja
+        $this->urea->update(['nombre' => 'Urea perlada x 50 kg', 'en_tienda' => false]);
+        $this->tienda('/catalogo/urea-agricola-46-x-50-kg')->assertNotFound();
+    }
+
+    public function test_las_direcciones_del_sistema_anterior_se_cargan_por_nombre_y_redirigen(): void
+    {
+        $this->publicar();
+        $archivo = tempnam(sys_get_temp_dir(), 'slugs');
+        file_put_contents($archivo, "slug,nombre\n"
+            ."urea-x-saco,UREA 46% X 50 KG\n"           // mismo nombre, otra dirección: se guarda
+            ."glifosato-480-sl-x-1-l,Glifosato 480 SL x 1 L\n" // ya es su dirección actual: no hace falta
+            ."abono-raro,Abono que ya no existe\n");      // sin pareja: se informa
+
+        $this->artisan('productos:slugs-anteriores', ['ruc' => $this->empresa->ruc, 'archivo' => $archivo])
+            ->expectsOutputToContain('SIMULACIÓN')
+            ->expectsOutputToContain('Direcciones que se guardarían: 1')
+            ->assertSuccessful();
+        $this->assertDatabaseCount('producto_slugs_anteriores', 0);
+
+        $this->artisan('productos:slugs-anteriores', ['ruc' => $this->empresa->ruc, 'archivo' => $archivo, '--ejecutar' => true])
+            ->expectsOutputToContain('Direcciones guardadas: 1')
+            ->expectsOutputToContain('Ya son la dirección actual de un producto (no hace falta): 1')
+            ->expectsOutputToContain('abono-raro (Abono que ya no existe)')
+            ->assertSuccessful();
+        unlink($archivo);
+
+        $this->tienda('/catalogo/urea-x-saco')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo/urea-46-x-50-kg');
+        $this->tienda('/catalogo/UREA-X-SACO')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo/urea-46-x-50-kg');
+        // la web anterior tenía direcciones con mayúsculas que hoy coinciden con la vigente
+        $this->tienda('/catalogo/Urea-46-X-50-KG')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo/urea-46-x-50-kg');
+        $this->tienda('/catalogo/abono-raro')->assertNotFound();
+    }
+
+    public function test_las_paginas_de_la_web_anterior_redirigen_a_la_mas_parecida(): void
+    {
+        $this->publicar();
+        $this->tienda('/combos')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo');
+        $this->tienda('/combos/promocion-todo-octubre')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo');
+        foreach (['/blog', '/diagnostico', '/calculadora', '/asistente'] as $ruta) {
+            $this->tienda($ruta)->assertStatus(301)->assertRedirect('http://agro.tienda.test');
+        }
+    }
+
     public function test_cada_producto_tiene_un_nombre_de_enlace_unico_que_sigue_a_su_nombre(): void
     {
         $this->publicar();

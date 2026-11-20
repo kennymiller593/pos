@@ -49,6 +49,17 @@ class Producto extends Model
             }
         });
 
+        // si le cambian el nombre, la dirección vieja de la tienda (que Google ya conoce) redirige a la nueva
+        static::saved(function (Producto $producto) {
+            if ($producto->wasChanged('slug') && filled($anterior = $producto->getOriginal('slug'))) {
+                static::recordarSlugAnterior((string) $producto->empresa_id, (string) $producto->id, (string) $anterior);
+            }
+            // la dirección que ahora es vigente deja de ser "anterior" de nadie
+            if (($producto->wasRecentlyCreated || $producto->wasChanged('slug')) && filled($producto->slug)) {
+                DB::table('producto_slugs_anteriores')->where('empresa_id', $producto->empresa_id)->where('slug', $producto->slug)->delete();
+            }
+        });
+
         // la miniatura de la foto (tarjetas de la tienda) se crea en la cola; la anterior se borra
         static::saved(function (Producto $producto) {
             if (! $producto->wasChanged('imagen_url') && ! $producto->wasRecentlyCreated) {
@@ -61,6 +72,19 @@ class Producto extends Model
                 GenerarMiniaturaProducto::dispatch($producto->id, $producto->imagen_url)->afterCommit();
             }
         });
+    }
+
+    /**
+     * Guarda una dirección vieja de la tienda (/catalogo/{slug}) para que redirija a este producto.
+     * Si esa dirección ya apuntaba a otro producto, pasa a apuntar a este (la más reciente manda).
+     */
+    public static function recordarSlugAnterior(string $empresaId, string $productoId, string $slug): void
+    {
+        DB::table('producto_slugs_anteriores')->upsert(
+            [['empresa_id' => $empresaId, 'producto_id' => $productoId, 'slug' => $slug]],
+            ['empresa_id', 'slug'],
+            ['producto_id'],
+        );
     }
 
     /** "Úrea 46% x 50 kg" -> "urea-46-x-50-kg"; si otro producto de la empresa ya lo usa, "-2", "-3"... */

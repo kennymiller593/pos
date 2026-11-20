@@ -77,6 +77,9 @@ if (Tienda::dominio()) {
         Route::get('/catalogo/{ref}', [TiendaController::class, 'producto'])->where('ref', '[A-Za-z0-9_-]+')->name('producto');
         // enlaces de antes (/producto/urea-46-x-50-kg y /producto/P0006/urea-46-x-50-kg): se redirigen
         Route::get('/producto/{ref}/{nombre?}', [TiendaController::class, 'productoAntiguo'])->where('ref', '[A-Za-z0-9_-]+');
+        // páginas que tenía la web anterior de una tienda y aquí no existen: 301 a la más parecida en vez de 404
+        Route::get('/{retirada}', [TiendaController::class, 'paginaRetirada'])->where('retirada', 'combos|blog|diagnostico|calculadora|asistente');
+        Route::get('/combos/{combo}', [TiendaController::class, 'paginaRetirada'])->where('combo', '[A-Za-z0-9_-]+');
         // páginas de texto que escribe el dueño (existen solo si las llenó)
         foreach (TiendaController::PAGINAS as $ruta => $pagina) {
             Route::get("/{$ruta}", [TiendaController::class, 'pagina'])->defaults('pagina', $pagina)->name("pagina.{$pagina}");
