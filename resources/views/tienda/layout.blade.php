@@ -209,6 +209,11 @@
                                 @include('tienda.icono', ['n' => 'cuadricula'])Todo el catálogo
                             </a>
                         @endunless
+                        @if ($conDiagnostico ?? false)
+                            <a href="/diagnostico" class="flex shrink-0 items-center gap-1.5 border-b-2 px-3 font-semibold whitespace-nowrap {{ request()->is('diagnostico') ? 'border-(--marca) text-(--marca-texto)' : 'border-transparent text-(--marca-texto) hover:text-slate-900' }}" data-menu-diagnostico>
+                                @include('tienda.icono', ['n' => 'camara'])Diagnóstico con IA
+                            </a>
+                        @endif
                         @foreach ($enFila as $cat)
                             <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif
                                 class="flex h-11 shrink-0 items-center border-b-2 px-3 whitespace-nowrap transition-colors {{ $categoriaActiva === $cat->id ? 'border-(--marca) font-semibold text-(--marca-texto)' : 'border-transparent text-slate-600 hover:text-slate-900' }}">
@@ -287,6 +292,9 @@
                             <li><a href="{{ $cat->url }}" class="transition-colors hover:text-white">{{ $cat->nombre }}</a></li>
                         @endforeach
                         <li><a href="/catalogo" class="font-medium text-slate-300 transition-colors hover:text-white">Ver todo el catálogo</a></li>
+                        @if ($conDiagnostico ?? false)
+                            <li><a href="/diagnostico" class="font-medium text-slate-300 transition-colors hover:text-white">Diagnóstico de cultivos con IA</a></li>
+                        @endif
                     </ul>
                     @if ($paginas)
                         <h2 class="mt-8 text-sm font-semibold text-white">Información</h2>

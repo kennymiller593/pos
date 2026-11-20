@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Mail\ReclamacionRegistrada;
 use App\Models\Empresa;
 use App\Models\Reclamacion;
 use App\Services\CatalogoTiendaService;
 use App\Services\IA\AsistenteIaService;
+use App\Services\IA\DiagnosticoIaService;
 use App\Support\Medicion;
 use App\Support\Tienda;
 use Illuminate\Contracts\View\View;
@@ -17,6 +19,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -24,6 +27,15 @@ use Illuminate\Support\Str;
 class TiendaController extends Controller
 {
     private const POR_PAGINA = 24;
+
+    /** Peso máximo de la foto del diagnóstico (KB): una foto de celular reciente pesa de 3 a 8 MB. */
+    private const FOTO_MAX_KB = 10240;
+
+    /** Foto más grande que se acepta (48 MP: las cámaras de celular de hoy). */
+    private const FOTO_MAX_PIXELES = 50_000_000;
+
+    /** Diagnósticos por día y por persona (IP) en una tienda. */
+    private const DIAGNOSTICOS_POR_DIA = 15;
 
     /** Páginas de texto de la tienda: su dirección y de qué parte del contenido salen. */
     public const PAGINAS = ['nosotros' => 'nosotros', 'politicas' => 'politicas', 'preguntas-frecuentes' => 'preguntas', 'contacto' => 'contacto'];
@@ -197,6 +209,87 @@ class TiendaController extends Controller
     public function paginaRetirada(Request $request): RedirectResponse
     {
         return redirect(str_starts_with($request->path(), 'combos') ? '/catalogo' : '/', 301);
+    }
+
+    /**
+     * /diagnostico: el cliente sube la foto de su cultivo y la IA le dice qué tiene y qué productos de la tienda
+     * lo tratan. Solo existe si la plataforma activó el agente de diagnóstico para la empresa; si no, lleva a la
+     * portada (302: puede activarse más adelante, y la web anterior de la tienda tenía esta dirección).
+     */
+    public function diagnostico(Request $request, DiagnosticoIaService $servicio): View|RedirectResponse
+    {
+        $empresa = $this->empresa($request);
+        if (! $servicio->agenteDe($empresa)) {
+            return redirect('/');
+        }
+
+        return view('tienda.diagnostico', $this->contexto($request, $empresa, Tienda::config($empresa)));
+    }
+
+    /** Analiza la foto enviada y vuelve a mostrar la página con el diagnóstico y los productos recomendados. */
+    public function diagnosticar(Request $request, DiagnosticoIaService $servicio): View|RedirectResponse|Response
+    {
+        $empresa = $this->empresa($request);
+        if (! $servicio->agenteDe($empresa)) {
+            return redirect('/');
+        }
+        // cada análisis cuesta: otra web no puede mandar fotos con el cupo de esta tienda (sin sesión no hay CSRF)
+        $origen = $request->headers->get('Origin');
+        abort_if($request->headers->get('Sec-Fetch-Site') === 'cross-site'
+            || (filled($origen) && $origen !== 'null' && parse_url($origen, PHP_URL_HOST) !== $request->getHost()), 403);
+
+        $config = Tienda::config($empresa);
+        $contexto = $this->contexto($request, $empresa, $config);
+        $responder = fn (string $error, int $estado) => response(view('tienda.diagnostico', [...$contexto, 'error' => $error, 'nota' => (string) $request->input('nota')]), $estado);
+
+        // además del límite por minuto, un tope por día y por persona: una sola IP no agota el cupo del mes de la tienda
+        // (detrás de Cloudflare la IP real del visitante viene en CF-Connecting-IP)
+        $clave = 'diagnostico:'.$empresa->id.':'.($request->headers->get('CF-Connecting-IP') ?: $request->ip());
+        if (RateLimiter::tooManyAttempts($clave, self::DIAGNOSTICOS_POR_DIA)) {
+            return $responder('Ya hiciste varios diagnósticos hoy. Vuelve mañana o envíanos la foto por WhatsApp.', 429);
+        }
+
+        // la tienda no tiene sesión: los errores se muestran en la misma respuesta
+        $validador = Validator::make($request->all(), [
+            'foto' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:'.self::FOTO_MAX_KB],
+            'nota' => ['nullable', 'string', 'max:300'],
+        ], [
+            'foto.required' => 'Elige o toma una foto de tu cultivo.',
+            'foto.uploaded' => 'La foto no se pudo subir: prueba con otra o con menos peso (hasta 10 MB).',
+            'foto.mimes' => 'La foto debe ser JPG, PNG o WEBP.',
+            'foto.max' => 'La foto pesa demasiado: el máximo es 10 MB.',
+            'nota.max' => 'El comentario puede tener hasta 300 caracteres.',
+        ]);
+        if ($validador->fails()) {
+            return $responder($validador->errors()->first(), 422);
+        }
+        // una imagen gigante (o un PNG trampa de 20000 px) no es una foto de celular
+        $medidas = @getimagesize($request->file('foto')->getRealPath());
+        if (! $medidas || $medidas[0] * $medidas[1] > self::FOTO_MAX_PIXELES) {
+            return $responder($medidas ? 'La foto es demasiado grande. Prueba con otra o tómala de nuevo.' : 'No pudimos leer la foto. Prueba con otra.', 422);
+        }
+
+        RateLimiter::hit($clave, 86400);
+        $visitante = preg_match('/^[A-Za-z0-9_-]{8,64}$/', (string) $request->input('visitante')) ? (string) $request->input('visitante') : Str::random(32);
+        try {
+            $resultado = $servicio->diagnosticar($empresa, $request->file('foto'), $visitante, (string) $request->input('nota'));
+        } catch (ErrorDeNegocio $e) {
+            return $responder($e->getMessage(), 503);
+        }
+
+        $codigos = $resultado['productos'];
+        $productos = $codigos === [] ? collect() : $this->catalogo->productos($empresa)->whereIn('productos.codigo_interno', $codigos)->get()
+            ->sortBy(fn ($p) => array_search($p->codigo_interno, $codigos, true))->values();
+        $d = $resultado['diagnostico'];
+        $consulta = 'Hola, hice el diagnóstico con IA en su tienda en línea'
+            .($d['es_cultivo'] ? ': '.trim(($d['cultivo'] ? "{$d['cultivo']}, " : '').$d['problema']) : '').'. Quisiera la asesoría de un especialista.';
+
+        return view('tienda.diagnostico', [
+            ...$contexto,
+            'diagnostico' => $d,
+            'recomendados' => $this->catalogo->tarjetas($productos, $config, $empresa),
+            'whatsappDiagnostico' => Tienda::enlaceWhatsapp($config['whatsapp'], $consulta),
+        ]);
     }
 
     /** /catalogo/urea-46-x-50-kg: la página de un producto. */
@@ -412,6 +505,7 @@ class TiendaController extends Controller
 
         $urls = collect([['loc' => $base.'/', 'lastmod' => $general], ['loc' => $base.'/catalogo', 'lastmod' => $general]])
             ->concat(collect($this->paginas(Tienda::config($empresa)))->map(fn ($p) => ['loc' => $base.$p['url'], 'lastmod' => $empresa->actualizado_en?->toDateString()])->values())
+            ->when(app(DiagnosticoIaService::class)->agenteDe($empresa), fn ($u) => $u->push(['loc' => $base.'/diagnostico', 'lastmod' => $general]))
             ->concat($this->catalogo->categorias($empresa)->map(fn ($c) => ['loc' => $base.$c->url, 'lastmod' => $porCategoria[$c->id] ?? $general]))
             ->concat($productos->map(fn ($p) => ['loc' => $base.$this->catalogo->url($p), 'lastmod' => $p->actualizado_en?->toDateString()]));
 
@@ -506,6 +600,8 @@ class TiendaController extends Controller
             ],
             // chatbot: null si el dueño no lo encendió o el agente ya no está activo
             'asistente' => $this->asistente($empresa, $config),
+            // diagnóstico de cultivos por foto (/diagnostico): lo activa la plataforma por empresa
+            'conDiagnostico' => app(DiagnosticoIaService::class)->agenteDe($empresa) !== null,
         ];
     }
 

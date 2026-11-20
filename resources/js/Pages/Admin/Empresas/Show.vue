@@ -456,7 +456,7 @@ const claseBoton =
                             </span>
                         </h3>
                         <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                            Adicional de pago. Cada agente responde con el catálogo de esta empresa; al activarlo, el dueño ve "Asistente" en su menú.
+                            Adicional de pago. Cada agente responde con el catálogo de esta empresa; al activarlo, el dueño ve "Asistente" en su menú. El de tipo <span class="font-medium">Foto</span> no conversa: agrega "Diagnóstico con IA" a su tienda en línea.
                         </p>
                         <p v-if="!agentes.length" class="mt-3 text-sm text-neutral-400 dark:text-neutral-500">
                             Aún no hay agentes creados. Créalos en <Link href="/admin/ia/agentes" class="font-medium text-emerald-700 underline underline-offset-2 dark:text-emerald-400">Agentes de IA</Link>.
@@ -466,6 +466,7 @@ const claseBoton =
                                 <div class="min-w-0 flex-1">
                                     <p class="truncate text-sm font-medium">
                                         {{ a.nombre }}
+                                        <span v-if="a.tipo === 'diagnostico'" class="ml-1 inline-flex rounded-full bg-sky-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">Foto</span>
                                         <span v-if="a.rubro" class="ml-1 text-xs font-normal text-neutral-400" :class="a.rubro_codigo && a.rubro_codigo === empresa.rubro_codigo ? 'text-emerald-600 dark:text-emerald-400' : ''">· {{ a.rubro }}</span>
                                     </p>
                                     <p class="truncate text-xs text-neutral-500 dark:text-neutral-400">

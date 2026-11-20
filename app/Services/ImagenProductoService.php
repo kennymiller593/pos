@@ -151,7 +151,7 @@ class ImagenProductoService
     /**
      * @return array{0: string, 1: string}|null  [binario, extension] o null si no se pudo procesar
      */
-    public function optimizar(string $contenido, int $anchoMaximo = self::ANCHO, int $calidad = 82): ?array
+    public function optimizar(string $contenido, int $anchoMaximo = self::ANCHO, int $calidad = 82, bool $enCaja = true): ?array
     {
         if (! function_exists('imagecreatefromstring')) {
             Log::warning('ImagenProductoService: el servidor no tiene la extension GD; se guarda la imagen original.');
@@ -169,10 +169,11 @@ class ImagenProductoService
         $h = imagesy($origen);
 
         // la caja 4:3 mas chica que contiene la foto; se reduce a 800x600 si es mas grande (nunca se agranda)
-        $cajaAncho = max($w, $h * 4 / 3);
+        // $enCaja = false (fotos para la IA): solo se achica a $anchoMaximo en el lado mayor, sin franjas
+        $cajaAncho = $enCaja ? max($w, $h * 4 / 3) : max($w, $h);
         $factor = min(1, $anchoMaximo / $cajaAncho);
-        $lienzoAncho = max(4, (int) round($cajaAncho * $factor));
-        $lienzoAlto = max(3, (int) round($lienzoAncho * 3 / 4));
+        $lienzoAncho = $enCaja ? max(4, (int) round($cajaAncho * $factor)) : max(1, (int) round($w * $factor));
+        $lienzoAlto = $enCaja ? max(3, (int) round($lienzoAncho * 3 / 4)) : max(1, (int) round($h * $factor));
         $nuevoAncho = max(1, (int) round($w * $factor));
         $nuevoAlto = max(1, (int) round($h * $factor));
 

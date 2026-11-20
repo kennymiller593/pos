@@ -199,6 +199,10 @@
                 </section>
             @endif
 
+            @if ($conDiagnostico ?? false)
+                @include('tienda.diagnostico-promo', ['clase' => 'mt-6'])
+            @endif
+
             {{-- Categorías en círculos, como en un mercado --}}
             @if ($categorias->count() >= 3)
                 <section class="mt-10" aria-labelledby="titulo-categorias" data-categorias>

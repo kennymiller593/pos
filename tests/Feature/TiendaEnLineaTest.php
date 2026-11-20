@@ -641,9 +641,11 @@ class TiendaEnLineaTest extends TestCase
         $this->publicar();
         $this->tienda('/combos')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo');
         $this->tienda('/combos/promocion-todo-octubre')->assertStatus(301)->assertRedirect('http://agro.tienda.test/catalogo');
-        foreach (['/blog', '/diagnostico', '/calculadora', '/asistente'] as $ruta) {
+        foreach (['/blog', '/calculadora', '/asistente'] as $ruta) {
             $this->tienda($ruta)->assertStatus(301)->assertRedirect('http://agro.tienda.test');
         }
+        // el diagnóstico por foto existe si la plataforma lo activa: mientras no, lleva a la portada sin fijarlo (302)
+        $this->tienda('/diagnostico')->assertStatus(302)->assertRedirect('http://agro.tienda.test');
     }
 
     public function test_cada_producto_tiene_un_nombre_de_enlace_unico_que_sigue_a_su_nombre(): void

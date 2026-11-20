@@ -40,6 +40,7 @@ class AgenteIaController extends Controller
                 ->orderByDesc('activo')->orderBy('nombre')->get()->map(fn (AgenteIa $a) => [
                     'id' => $a->id,
                     'codigo' => $a->codigo,
+                    'tipo' => $a->tipo,
                     'nombre' => $a->nombre,
                     'rubro_codigo' => $a->rubro_codigo,
                     'rubro' => $a->rubro?->nombre,
@@ -122,6 +123,9 @@ class AgenteIaController extends Controller
         ]);
 
         $empresa = Empresa::findOrFail($datos['empresa_id']);
+        if ($agente->tipo === AgenteIa::TIPO_DIAGNOSTICO) {
+            return response()->json(['ok' => false, 'mensaje' => 'Este agente analiza fotos: pruébalo en /diagnostico de una tienda que lo tenga activo.'], 422);
+        }
 
         try {
             $r = $this->asistente->consultar($agente, $empresa, $empresa->sucursales()->where('activo', true)->orderBy('nombre')->first(), $datos['texto']);

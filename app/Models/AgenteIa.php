@@ -14,6 +14,12 @@ class AgenteIa extends Model
 
     protected $table = 'ia_agentes';
 
+    /** Agente que conversa (asistente de la app y chatbot de la tienda). */
+    public const TIPO_CHAT = 'chat';
+
+    /** Agente que mira la foto de un cultivo en la tienda (/diagnostico): no conversa. */
+    public const TIPO_DIAGNOSTICO = 'diagnostico';
+
     public const CREATED_AT = 'creado_en';
 
     public const UPDATED_AT = 'actualizado_en';

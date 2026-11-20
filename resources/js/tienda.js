@@ -961,3 +961,110 @@ if (promociones && !promociones.hasAttribute('data-promociones-nunca')) {
     // un momento después de cargar: primero se ve la tienda
     if (siempre || !yaVista()) setTimeout(abrir, 1200)
 }
+
+// ---------------------------------------------------------------- diagnóstico de cultivos por foto (/diagnostico)
+// Sin JavaScript el formulario se envía normal y la página vuelve con el resultado. Con él: se ve la foto elegida,
+// se achica en el celular antes de subirla (una foto de 8 MB en el campo tarda mucho; a la IA le bastan 1600 px)
+// y el resultado reemplaza al panel sin recargar.
+const formDiagnostico = document.querySelector('[data-diagnostico-form]')
+if (formDiagnostico) {
+    const campoFoto = formDiagnostico.querySelector('[data-diagnostico-foto]')
+    const vista = formDiagnostico.querySelector('[data-diagnostico-vista]')
+    const indicacion = formDiagnostico.querySelector('[data-diagnostico-indicacion]')
+    const cambiar = formDiagnostico.querySelector('[data-diagnostico-cambiar]')
+    const aviso = formDiagnostico.querySelector('[data-diagnostico-aviso]')
+    const boton = formDiagnostico.querySelector('[data-diagnostico-enviar]')
+    const LADO_MAXIMO = 1600
+
+    // el mismo visitante en cada análisis (solo para agrupar sus consultas; no es un dato personal)
+    const campoVisitante = formDiagnostico.querySelector('[data-diagnostico-visitante]')
+    try {
+        let id = localStorage.getItem('visitante:v1')
+        if (!/^[A-Za-z0-9_-]{8,64}$/.test(id ?? '')) {
+            id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
+            localStorage.setItem('visitante:v1', id)
+        }
+        campoVisitante.value = id
+    } catch { /* sin almacenamiento: el servidor pone uno */ }
+
+    const mostrarAviso = (mensaje) => {
+        formDiagnostico.querySelector('[data-diagnostico-error]')?.remove()
+        aviso.textContent = mensaje ?? ''
+        aviso.classList.toggle('hidden', !mensaje)
+    }
+    const cargando = (si) => {
+        boton.disabled = si
+        boton.querySelector('[data-diagnostico-texto]').classList.toggle('hidden', si)
+        boton.querySelector('[data-diagnostico-texto]').classList.toggle('inline-flex', !si)
+        boton.querySelector('[data-diagnostico-cargando]').classList.toggle('hidden', !si)
+        boton.querySelector('[data-diagnostico-cargando]').classList.toggle('inline-flex', si)
+    }
+
+    let urlVista = null
+    campoFoto.addEventListener('change', () => {
+        const archivo = campoFoto.files?.[0]
+        mostrarAviso(null)
+        if (urlVista) URL.revokeObjectURL(urlVista)
+        urlVista = archivo ? URL.createObjectURL(archivo) : null
+        vista.src = urlVista ?? ''
+        vista.classList.toggle('hidden', !archivo)
+        indicacion.classList.toggle('invisible', !!archivo)
+        cambiar.classList.toggle('hidden', !archivo)
+        cambiar.classList.toggle('inline-flex', !!archivo)
+    })
+    cambiar.addEventListener('click', () => campoFoto.click())
+
+    // la foto en JPEG de 1600 px como máximo; si el navegador no puede, se sube la original
+    async function achicar(archivo) {
+        try {
+            const imagen = await createImageBitmap(archivo, { imageOrientation: 'from-image' })
+            const escala = Math.min(1, LADO_MAXIMO / Math.max(imagen.width, imagen.height))
+            if (escala === 1 && archivo.size < 2_000_000) return archivo
+            const lienzo = document.createElement('canvas')
+            lienzo.width = Math.round(imagen.width * escala)
+            lienzo.height = Math.round(imagen.height * escala)
+            lienzo.getContext('2d').drawImage(imagen, 0, 0, lienzo.width, lienzo.height)
+            const blob = await new Promise((listo) => lienzo.toBlob(listo, 'image/jpeg', 0.85))
+            return blob ? new File([blob], 'cultivo.jpg', { type: 'image/jpeg' }) : archivo
+        } catch {
+            return archivo
+        }
+    }
+
+    formDiagnostico.addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const archivo = campoFoto.files?.[0]
+        if (!archivo) return mostrarAviso('Elige o toma una foto de tu cultivo.')
+        if (!/^image\/(jpeg|png|webp)$/.test(archivo.type) && !/\.(jpe?g|png|webp)$/i.test(archivo.name)) return mostrarAviso('La foto debe ser JPG, PNG o WEBP.')
+
+        mostrarAviso(null)
+        cargando(true)
+        try {
+            const datosForm = new FormData(formDiagnostico)
+            datosForm.set('foto', await achicar(archivo))
+            const r = await fetch('/diagnostico', { method: 'POST', body: datosForm, headers: { Accept: 'text/html' } })
+            const pagina = new DOMParser().parseFromString(await r.text().catch(() => ''), 'text/html')
+            const error = pagina.querySelector('[data-diagnostico-error]')?.textContent?.trim()
+            if (r.status === 429) return mostrarAviso(error || 'Hiciste varios análisis seguidos. Espera un minuto y vuelve a intentarlo.')
+            if (r.status === 413) return mostrarAviso('La foto pesa demasiado. Prueba con otra.')
+            if (!r.ok || error) return mostrarAviso(error || 'No pudimos analizar la foto. Inténtalo de nuevo en unos minutos.')
+
+            const nuevo = pagina.querySelector('[data-diagnostico-resultado]')
+            const actual = document.querySelector('[data-diagnostico-resultado]')
+            // sin resultado (p. ej. la tienda apagó el diagnóstico y se volvió a la portada): no se queda callado
+            if (!nuevo || !nuevo.querySelector('section')) return mostrarAviso('No pudimos analizar la foto. Recarga la página e inténtalo de nuevo.')
+            if (actual) {
+                actual.innerHTML = nuevo.innerHTML
+                // en celular el resultado queda debajo del formulario: se baja hasta él
+                if (window.matchMedia('(max-width: 1023px)').matches) actual.scrollIntoView({ behavior: sinMovimientoDiagnostico() ? 'auto' : 'smooth', block: 'start' })
+            }
+        } catch {
+            mostrarAviso('Sin conexión. Revisa tu internet e inténtalo de nuevo.')
+        } finally {
+            cargando(false)
+        }
+    })
+}
+function sinMovimientoDiagnostico() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}

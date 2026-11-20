@@ -278,6 +278,10 @@
                     @endif
                 </section>
             @endif
+
+            @if ($conDiagnostico ?? false)
+                @include('tienda.diagnostico-promo', ['clase' => 'mt-6'])
+            @endif
         @else
             <nav class="mt-5 flex flex-wrap items-center gap-1 text-sm text-slate-500" aria-label="Ruta">
                 <a href="/" class="hover:text-(--marca-texto)">Inicio</a>

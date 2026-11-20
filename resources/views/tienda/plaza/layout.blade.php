@@ -201,6 +201,9 @@
                 {{-- los atajos que no entran se deslizan; se desvanecen al borde para que no se vean cortados --}}
                 <div class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] pr-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <a href="/catalogo" class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $enCatalogo && ! $categoriaActiva ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">Tienda</a>
+                    @if ($conDiagnostico ?? false)
+                        <a href="/diagnostico" class="flex h-10 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-semibold whitespace-nowrap text-(--marca-texto) transition-colors hover:bg-slate-100 {{ request()->is('diagnostico') ? 'bg-(--marca-suave)' : '' }}" data-menu-diagnostico>@include('tienda.icono', ['n' => 'camara', 'clase' => 'size-4'])Diagnóstico IA</a>
+                    @endif
                     @foreach ($atajos as $cat)
                         <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-10 shrink-0 items-center rounded-md px-2.5 whitespace-nowrap transition-colors hover:bg-slate-100 hover:text-slate-950 {{ $categoriaActiva === $cat->id ? 'bg-(--marca-suave) font-semibold text-(--marca-texto)' : '' }}">{{ $cat->nombre }}</a>
                     @endforeach
@@ -278,6 +281,9 @@
                 <h2 class="text-[15px] font-bold">Comprar</h2>
                 <ul class="mt-4 space-y-2.5 text-sm text-white/75">
                     <li><a href="/catalogo" class="hover:text-white hover:underline">Toda la tienda</a></li>
+                    @if ($conDiagnostico ?? false)
+                        <li><a href="/diagnostico" class="hover:text-white hover:underline">Diagnóstico de cultivos con IA</a></li>
+                    @endif
                     @foreach ($categorias->take(6) as $cat)
                         <li><a href="{{ $cat->url }}" class="hover:text-white hover:underline">{{ $cat->nombre }}</a></li>
                     @endforeach

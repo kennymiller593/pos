@@ -46,6 +46,7 @@ class AsistenteIaService
     {
         return AgenteIa::query()
             ->where('activo', true)
+            ->where('tipo', AgenteIa::TIPO_CHAT)
             ->whereHas('activaciones', fn ($q) => $q->where('empresa_id', $empresa->id)->where('activo', true))
             ->orderBy('nombre')
             ->get();
@@ -54,7 +55,7 @@ class AsistenteIaService
     public function tieneAgentes(Empresa $empresa): bool
     {
         return AgenteEmpresa::query()->where('empresa_id', $empresa->id)->where('activo', true)
-            ->whereHas('agente', fn ($q) => $q->where('activo', true))->exists();
+            ->whereHas('agente', fn ($q) => $q->where('activo', true)->where('tipo', AgenteIa::TIPO_CHAT))->exists();
     }
 
     /** El agente que atiende la tienda en línea, si el dueño encendió el chatbot y el agente sigue activo. */

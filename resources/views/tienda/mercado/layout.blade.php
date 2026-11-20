@@ -204,6 +204,9 @@
                 @endif
                 <div class="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <a href="/catalogo" class="flex h-11 shrink-0 items-center gap-1.5 px-3 whitespace-nowrap transition-colors hover:bg-black/10 {{ $enCatalogo && ! $categoriaActiva ? 'bg-black/15' : '' }}">@include('tienda.icono', ['n' => 'cuadricula', 'clase' => 'size-4'])Tienda</a>
+                    @if ($conDiagnostico ?? false)
+                        <a href="/diagnostico" class="flex h-11 shrink-0 items-center gap-1.5 px-3 font-bold whitespace-nowrap transition-colors hover:bg-black/10 {{ request()->is('diagnostico') ? 'bg-black/15' : '' }}" data-menu-diagnostico>@include('tienda.icono', ['n' => 'camara', 'clase' => 'size-4'])Diagnóstico IA</a>
+                    @endif
                     @foreach ($atajos as $cat)
                         <a href="{{ $cat->url }}" @if ($categoriaActiva === $cat->id) aria-current="true" @endif class="flex h-11 shrink-0 items-center px-3 whitespace-nowrap transition-colors hover:bg-black/10 {{ $categoriaActiva === $cat->id ? 'bg-black/15' : '' }}">{{ $cat->nombre }}</a>
                     @endforeach
@@ -283,6 +286,9 @@
                 <h2 class="text-xs font-bold tracking-wider uppercase">Tienda</h2>
                 <ul class="mt-4 space-y-2.5 text-sm opacity-85">
                     <li><a href="/catalogo" class="hover:underline">Toda la tienda</a></li>
+                    @if ($conDiagnostico ?? false)
+                        <li><a href="/diagnostico" class="hover:underline">Diagnóstico de cultivos con IA</a></li>
+                    @endif
                     @foreach ($categorias->take(7) as $cat)
                         <li><a href="{{ $cat->url }}" class="hover:underline">{{ $cat->nombre }}</a></li>
                     @endforeach

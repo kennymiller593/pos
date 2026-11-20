@@ -158,6 +158,7 @@ class EmpresaController extends Controller
             return [
                 'id' => $a->id,
                 'nombre' => $a->nombre,
+                'tipo' => $a->tipo,
                 'rubro' => $a->rubro?->nombre,
                 'rubro_codigo' => $a->rubro_codigo,
                 'descripcion' => $a->descripcion,
@@ -185,7 +186,7 @@ class EmpresaController extends Controller
         ]);
 
         return back()->with('success', $activar
-            ? "\"{$agente->nombre}\" activado para {$empresa->razon_social}: ya ve \"Asistente\" en su menú."
+            ? "\"{$agente->nombre}\" activado para {$empresa->razon_social}: ".($agente->tipo === AgenteIa::TIPO_DIAGNOSTICO ? 'su tienda en línea ya muestra "Diagnóstico con IA".' : 'ya ve "Asistente" en su menú.')
             : "\"{$agente->nombre}\" desactivado para {$empresa->razon_social}.");
     }
 

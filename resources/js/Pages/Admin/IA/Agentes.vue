@@ -168,6 +168,7 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                             {{ a.nombre }}
                             <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold" :class="a.activo ? VERDE : GRIS">{{ a.activo ? 'Activo' : 'Inactivo' }}</span>
                             <span v-if="a.razonar" class="inline-flex rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300" title="Razonamiento profundo encendido">Razona</span>
+                            <span v-if="a.tipo === 'diagnostico'" class="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300" title="No conversa: analiza la foto que sube el cliente en la tienda (/diagnostico)">Foto</span>
                         </h2>
                         <p class="text-sm text-neutral-500 dark:text-neutral-400">{{ a.rubro ? `Rubro ${a.rubro}` : 'Sin rubro (general)' }}<template v-if="a.descripcion"> · {{ a.descripcion }}</template></p>
                     </div>
@@ -191,7 +192,8 @@ const GRIS = 'bg-stone-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutra
                 </dl>
 
                 <div class="mt-4 flex flex-wrap gap-2">
-                    <button type="button" class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="abrirPrueba(a)">
+                    <p v-if="a.tipo === 'diagnostico'" class="w-full text-xs text-neutral-500 dark:text-neutral-400">Se prueba en la tienda de una empresa que lo tenga activo: <span class="font-medium">su-tienda/diagnostico</span>. Los modelos de la cadena deben ver imágenes.</p>
+                    <button v-else type="button" class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-stone-300 px-3 text-sm font-medium hover:bg-stone-50 dark:border-neutral-700 dark:hover:bg-neutral-800" @click="abrirPrueba(a)">
                         <Sparkles class="size-4 text-emerald-600" />
                         Probar
                     </button>
