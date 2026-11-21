@@ -11,6 +11,23 @@
     }
 }
 
+/*
+ * Panel en laptops: en una pantalla de 1366x768 (la más común en las tiendas) todo salía grande y entraba poco.
+ * Como Tailwind mide en rem, bajar la letra base de <html> achica en proporción textos, espacios, menú y tarjetas.
+ * Solo el panel (html.panel, en app.blade.php): tiendas y portada no cambian. Celular y tablet tampoco (< 1024 px),
+ * ni los monitores grandes. Los cortes responsive no se mueven: las media queries en rem usan siempre 16 px.
+ */
+@media (min-width: 64rem) and (max-width: 95.99rem) {
+    html.panel {
+        font-size: 14px;
+    }
+}
+@media (min-width: 96rem) and (max-width: 104.99rem) {
+    html.panel {
+        font-size: 15px;
+    }
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
